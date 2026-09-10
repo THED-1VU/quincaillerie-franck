@@ -1,0 +1,620 @@
+# Addendum au cahier des charges — Ets Quincaillerie Franck
+
+Ce document complète le `CAHIER DES CHARGES.docx` sur les points que la spécification
+d'origine laisse ouverts ou contradictoires. Pour chaque point :
+
+1. **Règle proposée** — ce que l'on retient par défaut, à valider.
+2. **Cas limites** — situations à couvrir explicitement.
+3. **Question(s) au propriétaire** — décision métier qui ne peut pas être devinée.
+
+> Convention : aucune règle métier n'est tranchée par l'équipe technique. Tant qu'une
+> question ci-dessous est sans réponse, le comportement correspondant reste **à l'arrêt**
+> (fonction désactivée ou valeur neutre), jamais deviné.
+
+Rappel des priorités du propriétaire, dans l'ordre : **1. rendu / ergonomie / responsivité —
+2. usage téléphone (suivi ET saisie) — 3. fiabilité métier (droits, stock, anti-vol).**
+
+---
+
+## a) Transfert de stock entre le magasin et le comptoir
+
+**Contexte.** Le modèle a deux sites (magasin de stock, comptoir de vente) et un article
+appartient à un seul site (`articles.site_id`). Le réapprovisionnement du comptoir depuis le
+magasin est une opération quotidienne, absente du cahier des charges et du schéma
+(`mouvements_stock.type` = `entree` / `sortie` seulement, commentaire : « pas de transfert
+entre sites »).
+
+**Règle proposée.**
+- Nouvelle opération **« Transfert »** : sortie du site source + entrée du site cible, en une
+  seule transaction atomique, tracée comme un couple lié (même référence de transfert).
+- Un **article « logique »** (même nom, même unité) peut exister sur les deux sites ; le
+  transfert déplace une quantité de l'instance source vers l'instance cible (création
+  automatique de l'instance cible si elle n'existe pas, avec le même prix catalogue).
+- Réservé au **responsable** et à l'**agent stock** (à confirmer : lequel initie, lequel
+  reçoit / confirme).
+- Le transfert **ne recalcule pas** le seuil d'alerte (ce n'est pas une réception
+  fournisseur) — cohérent avec la règle « seuil recalculé uniquement à une entrée ».
+- Un transfert en attente de réception apparaît comme **stock en transit** (ni au source, ni
+  disponible au cible) jusqu'à confirmation.
+
+**Cas limites.**
+- Transfert supérieur au stock du site source → refus, message près du champ.
+- Transfert reçu partiellement (5 sacs envoyés, 4 arrivés) → écart de transfert à consigner
+  comme un comptage / une casse (voir point f).
+- Article inexistant au site cible → création guidée ou refus.
+- Annulation d'un transfert déjà confirmé → contre-transfert tracé, pas de suppression.
+- Transfert « à l'aveugle » pendant qu'un comptage d'inventaire est en cours sur l'un des
+  deux sites.
+- Prix catalogue différent entre les deux instances du même article.
+
+**Questions au propriétaire.**
+1. Le comptoir est-il réapprovisionné **uniquement** depuis le magasin, ou reçoit-il aussi
+   des livraisons fournisseur en direct ?
+2. Qui **déclenche** le transfert (responsable ? agent stock du magasin ?) et qui le
+   **confirme à la réception** (agent stock du comptoir ?) ?
+3. Veut-on un état intermédiaire « en transit », ou le transfert est-il instantané
+   (départ = arrivée, même personne, même moment) ?
+4. Le même article physique doit-il porter le **même identifiant catalogue** sur les deux
+   sites (prix commun) ou rester deux fiches indépendantes ?
+5. Fréquence et volume typiques d'un transfert (nombre de lignes, par jour) ?
+
+---
+
+## b) Vente à crédit — créance client, solde, règlement
+
+**Contexte.** `mode_paiement = 'credit_client'` est autorisé. Le cahier des charges (§3.3)
+crée une **recette immédiate** à la validation de la vente. Or, en crédit, **aucun argent
+n'est entré**. Il n'existe ni table `clients`, ni créance, ni solde, ni règlement ultérieur.
+Comptabiliser une recette pour une vente à crédit fausse les recettes du jour et le
+rapprochement de caisse.
+
+**Règle proposée.**
+- Créer une entité **Client** (nom, téléphone, plafond de crédit optionnel).
+- Une vente `credit_client` :
+  - décrémente le stock comme une vente normale ;
+  - **ne crée pas** de recette ; elle crée une **créance** d'un montant égal au total TTC,
+    rattachée au client, statut `ouverte` ;
+  - le chiffre d'affaires du jour distingue **CA facturé** (inclut le crédit) et
+    **encaissements du jour** (exclut le crédit).
+- Un **règlement** (espèces, Orange Money, MTN MoMo, autre) réduit le solde de la créance et
+  crée la **recette** à la date du règlement. Règlements partiels autorisés.
+- Solde client = Σ créances ouvertes − Σ règlements. Consultable par responsable et
+  comptabilité.
+- Une créance soldée passe en statut `reglee` ; jamais supprimée.
+
+**Cas limites.**
+- Règlement partiel, puis second règlement.
+- Vente à crédit **annulée** avant tout règlement → créance annulée (tracée), stock restitué.
+- Vente à crédit annulée **après** un règlement partiel → avoir / remboursement à définir.
+- Client qui dépasse son plafond de crédit → blocage ou alerte responsable ?
+- Créance ancienne jamais réglée → relance, passage en « douteuse », abandon de créance
+  (écriture comptable dédiée) ?
+- Règlement d'un montant supérieur au solde (avance client) → refus ou avoir ?
+- Paiement mixte : une partie espèces, le reste à crédit sur la même vente.
+
+**Questions au propriétaire.**
+1. Faut-il un **fichier clients** nominatif, ou le crédit est-il réservé à quelques clients
+   connus (liste courte gérée par le responsable) ?
+2. Un **plafond de crédit** par client est-il souhaité ? Avec blocage automatique ou simple
+   alerte ?
+3. Les **paiements mixtes** (partie comptant, partie crédit) existent-ils dans la pratique ?
+4. Que devient une créance **non recouvrée** après X mois (relance, abandon, provision) ?
+5. Qui peut enregistrer un **règlement de créance** : comptabilité, responsable, les deux ?
+6. Le tableau de bord doit-il afficher l'**encours crédit total** et la liste des clients
+   débiteurs ?
+
+---
+
+## c) Numéro du facturier papier + identification du vendeur
+
+**Contexte.** La saisie des ventes est faite **a posteriori** par le comptable, d'après le
+**facturier papier** tenu par le responsable après négociation. Le schéma ne stocke ni la
+**référence de la pièce papier**, ni **qui a réellement vendu / négocié le prix**
+(`ventes.utilisateur_id` = le comptable qui saisit ; `utilisateur_caisse_id` = qui encaisse).
+Sans ces deux informations, l'objectif anti-vol est inatteignable : un écart entre prix
+catalogue et prix facturé ne peut être rattaché à personne.
+
+**Règle proposée.**
+- Ajouter à chaque vente :
+  - `numero_facturier` — **obligatoire** et **unique**, saisi par le comptable, tel qu'inscrit
+    sur le carnet papier (référence de rapprochement).
+  - `vendeur_id` (ou `vendeur_nom` si le vendeur n'a pas de compte) — **obligatoire** :
+    la personne qui a négocié le prix et rempli la ligne du facturier.
+- Contrôle de cohérence à la saisie : `numero_facturier` non déjà utilisé ; format libre
+  mais non vide ; alerte si numéro non consécutif au précédent (trou dans le carnet).
+- Rapport « **écarts de prix par vendeur** » : pour chaque vente où
+  `prix_unitaire ≠ prix catalogue`, montant et % d'écart, agrégés par vendeur et par période.
+- Le `numero_facturier` figure sur le reçu imprimé et dans tous les exports autorisés.
+
+**Cas limites.**
+- Page du carnet papier annulée / raturée → saisir le numéro avec statut `annulee` côté
+  papier, sans mouvement de stock.
+- Un même numéro de facturier couvrant plusieurs clients (erreur de tenue du carnet).
+- Vendeur = responsable lui-même (cas courant) → toujours renseigné explicitement.
+- Vendeur sans compte utilisateur (extra, apprenti) → liste de « vendeurs » distincte des
+  comptes de connexion ?
+- Carnet papier perdu / illisible pour une journée.
+- Deux carnets papier en parallèle (un par site) → numéros qui se chevauchent → préfixe par
+  site.
+
+**Questions au propriétaire.**
+1. Y a-t-il **un seul** facturier papier, ou **un par site** ? Faut-il un préfixe
+   (ex. `MAG-0842`, `CPT-0842`) ?
+2. Le numéro de facturier est-il **purement numérique et séquentiel**, ou comporte-t-il déjà
+   un format (année, série) ?
+3. Les vendeurs sont-ils **toujours** des personnes ayant un compte dans l'application, ou
+   faut-il une liste de vendeurs à part ?
+4. Veut-on **bloquer** la saisie d'une vente sans numéro de facturier, ou seulement
+   **alerter** ?
+5. L'écart prix catalogue / prix négocié doit-il déclencher une **validation du responsable**
+   au-delà d'un certain seuil (ex. remise > 15 %) ?
+
+---
+
+## d) Régime fiscal et TVA
+
+**Contexte.** Le cahier des charges calcule « la TVA » mais ne précise ni le **régime
+fiscal**, ni le **taux**, ni les **règles d'arrondi**, ni les cas d'**exonération**.
+`ventes.taux_tva` a pour défaut `0`. Au Cameroun, selon le chiffre d'affaires et le régime,
+une petite quincaillerie peut relever de l'**impôt libératoire**, du **régime simplifié**, ou
+du **régime du réel** (assujettie à la TVA, taux courant **19,25 %** = 17,5 % + 10 % de CAC).
+
+**Règle proposée.**
+- Le **taux de TVA est une valeur de configuration** (table `parametres`), pas une constante
+  de code. Une seule valeur active à la fois, historisée (date d'effet).
+- L'application doit pouvoir fonctionner **sans aucune TVA** : taux = 0 ⇒ pas de ligne TVA
+  sur les documents, `sous_total_ht = total_ttc`, mention « TVA non applicable » si le régime
+  l'exige.
+- Chaque vente **fige** le taux appliqué (`ventes.taux_tva`) — un changement de taux futur
+  ne réécrit pas l'historique.
+- Arrondi : **au franc CFA entier** (pas de centimes de franc), méthode d'arrondi à préciser
+  (arithmétique / commercial). Arrondi calculé sur le **total de la TVA de la vente**, pas
+  ligne à ligne, pour éviter les écarts d'un franc.
+- Prix catalogue et prix négociés saisis **TTC** ou **HT** : à trancher (voir questions).
+- Les documents (ticket, facture) affichent les mentions légales correspondant au régime
+  (n° de contribuable, régime, « TVA non applicable — art. … » le cas échéant).
+
+**Cas limites.**
+- Passage d'un régime à l'autre en cours d'exercice (changement de taux à une date d'effet).
+- Article ou client exonéré (revente à un organisme, export) alors que la boutique est
+  assujettie.
+- Prix « rond » négocié avec le client (ex. 11 500 FCFA) : est-ce un montant **TTC** dont il
+  faut extraire la TVA, ou un **HT** auquel on ajoute la TVA ?
+- Facture d'avoir (retour) : TVA reprise au même taux que la vente d'origine.
+- Ventes antérieures au paramétrage de la TVA.
+
+**Questions au propriétaire.**
+1. **Quel est le régime fiscal réel de la boutique** aujourd'hui : impôt libératoire, régime
+   simplifié, ou régime du réel (assujettie TVA) ?
+2. Si assujettie : le taux est-il **19,25 %** ? Faut-il faire apparaître séparément TVA et
+   CAC, ou un taux global ?
+3. Les prix affichés et négociés avec le client sont-ils compris comme **TTC** (le client
+   paie ce montant, la TVA est « dedans ») ou **HT** (TVA ajoutée au moment de la vente) ?
+4. Faut-il un **numéro de contribuable** et des mentions légales sur les tickets et factures ?
+   Lesquelles ?
+5. Y a-t-il des **ventes exonérées** (clients ou produits particuliers) ?
+6. Arrondi : au **franc entier** systématiquement ? Arrondi commercial (0,5 vers le haut) ?
+
+---
+
+## e) Contradiction : décrément atomique anti-survente vs. saisie a posteriori
+
+**Contexte.** Le cahier des charges (§3.3), le scénario de test (client n°8) et le dossier de
+recette (§6) exigent tous que l'application **refuse** une vente quand le stock est
+insuffisant, et que **deux ventes concurrentes** sur `stock = 1` n'en laissent passer
+**qu'une**. Mais le circuit réel fait **saisir la vente après l'encaissement** : le client a
+déjà payé et emporté la marchandise. **Un logiciel ne peut pas refuser une vente déjà
+encaissée.** Les deux règles ne peuvent pas coexister telles quelles.
+
+**Règle proposée — autoriser la saisie avec alerte d'écart, plutôt que blocage.**
+- La saisie d'une vente **n'est jamais bloquée** pour cause de stock insuffisant. Elle est
+  **toujours enregistrée** (la marchandise est déjà partie).
+- Si `quantité vendue > quantité en stock`, la vente est enregistrée **avec un marqueur
+  « écart de stock »**, le stock est porté à **0** (jamais négatif), et l'écart
+  (`quantité manquante`) est :
+  - inscrit dans un **journal d'écarts de stock** (article, quantité, vente, date, saisisseur) ;
+  - **poussé vers le prochain comptage d'inventaire** comme différence à expliquer ;
+  - **remonté au responsable** (alerte tableau de bord + rapport « écarts »).
+- Le stock négatif reste **interdit par la base** (`CHECK (quantite_stock >= 0)`), mais côté
+  application cela se traduit par « stock ramené à 0 + écart consigné », pas par un refus.
+- Une **régularisation d'inventaire** (entrée/sortie de correction, motivée, par le
+  responsable ou l'agent stock) solde l'écart après enquête.
+- Le **refus dur** ne subsiste que pour les opérations faites **avant** que la marchandise
+  parte : une **sortie de stock manuelle** de l'agent stock, ou un **transfert** (point a),
+  au-delà du disponible → refusés. La *saisie comptable d'une vente* n'entre pas dans ce cas.
+
+**Ce que devient le test de concurrence.** Le test « stock = 1, deux ventes simultanées sur
+deux postes » ne teste plus un **refus** mais l'**absence de corruption** :
+- les deux ventes sont enregistrées (les deux clients ont payé) ;
+- le stock final est **exactement 0**, **jamais négatif**, quel que soit l'entrelacement ;
+- **un** écart de stock de **1 unité** est consigné (et un seul), rattaché à la seconde
+  vente dans l'ordre de validation ;
+- aucune ligne de vente perdue, aucun double décrément, `quantite_stock` cohérent avec la
+  somme des mouvements.
+Le décrément reste donc **atomique et sérialisé** (verrou de ligne sur l'article, ou
+`UPDATE … SET quantite_stock = GREATEST(0, quantite_stock - :q)` en une instruction), mais
+son rôle est d'empêcher la **corruption concurrente**, pas de rejeter une vente.
+
+**Cas limites.**
+- Vente saisie en retard alors qu'une entrée de stock est passée entre-temps (le stock a été
+  reconstitué) → pas d'écart, comportement normal.
+- Deux comptables saisissant deux ventes du même article quasi simultanément.
+- Écart consigné puis **vente annulée** par le responsable → l'écart doit être **repris**
+  (annulé lui aussi), stock restitué.
+- Article dont le stock est déjà à 0 par erreur de saisie antérieure → toute vente crée un
+  écart ; il faut pouvoir distinguer « vrai manquant » de « stock jamais initialisé ».
+- Faut-il **empêcher** de saisir une quantité manifestement absurde (ex. 10 000 sacs) même
+  si on n'empêche pas l'écart ?
+
+**Questions au propriétaire.**
+1. Confirmez-vous la règle : **on n'empêche jamais** la saisie d'une vente déjà encaissée,
+   même à découvert de stock, et on **consigne un écart** que l'inventaire devra expliquer ?
+2. Au-delà de quel **écart** (en quantité ou en valeur) veut-on une **alerte immédiate** au
+   responsable, plutôt qu'un simple report au comptage ?
+3. Qui a le droit de **régulariser** un écart de stock : responsable seul, ou aussi agent
+   stock avec motif ?
+4. Veut-on un **plafond de vraisemblance** (quantité maximale par ligne) qui, lui, bloque la
+   saisie pour éviter les fautes de frappe ?
+5. La **sortie de stock manuelle** de l'agent stock et le **transfert** doivent-ils, eux,
+   rester **bloqués** au-delà du disponible ? (proposition : oui)
+
+---
+
+## f) Retours, casse, avaries, remises ; conversion d'unités
+
+**Contexte.** Aucun de ces éléments n'est modélisé. `mouvements_stock.type` ne connaît que
+`entree` / `sortie`. Les remises sont noyées dans `ventes_lignes.prix_unitaire`. `unite` est
+un texte libre sans référentiel ni règle de conversion.
+
+**Règle proposée.**
+- **Retour client** : opération dédiée générant un **avoir** (facture d'avoir numérotée),
+  qui **remet la marchandise en stock** (mouvement `retour`), **retire la recette**
+  correspondante (ou crée un remboursement selon le mode), et reste **tracée** (motif,
+  autorisée par le responsable). Un retour référence toujours la **vente d'origine**.
+- **Casse / avarie / perte** : mouvement de stock de type `casse` (ou `perte`), **motif
+  obligatoire**, **sans recette**, réservé au responsable (ou agent stock avec validation
+  responsable). Apparaît dans un rapport « pertes » distinct des ventes.
+- **Remise** : la remise reste exprimée par le `prix_unitaire` négocié (déjà le cas), mais
+  on ajoute, en option, un champ `remise_pct` ou `remise_montant` **par ligne** pour la
+  rendre explicite sur le document et dans les rapports (et pour le contrôle du point c).
+- **Unités** : référentiel d'unités fermé (`sac`, `barre`, `kg`, `m`, `L`, `pièce`, `m³`, …).
+  Conversions gérées comme des **articles distincts liés** (« Ciment 50 kg » vs « Ciment
+  vrac kg » avec un facteur), **pas** de conversion implicite à la volée dans une vente.
+  Le vrac (quantité décimale) impose de revoir `quantite INTEGER` → `NUMERIC` sur les
+  articles concernés.
+
+**Cas limites.**
+- Retour partiel d'une vente multi-lignes.
+- Retour d'une vente à crédit non encore réglée (point b).
+- Marchandise reprise **invendable** (cassée au retour) → retour **sans** remise en stock,
+  vers « pertes ».
+- Casse constatée **pendant** un comptage d'inventaire (écart = casse identifiée).
+- Article vendu à l'unité mais acheté au sac (1 sac = 50 kg) : quantité en stock décimale.
+- Remise à 100 % (article offert) : stock décrémenté, recette nulle — à distinguer d'une
+  casse.
+
+**Questions au propriétaire.**
+1. Les **retours clients** existent-ils dans la pratique ? À quelle fréquence ? Avec
+   remboursement en espèces ou avoir sur un prochain achat ?
+2. Comment sont traitées aujourd'hui la **casse** et les **avaries** (qui les constate, qui
+   les valide) ?
+3. Vend-on des articles **au détail dans une unité différente de l'achat** (sac → kg,
+   barre → mètre, vrac) ? Lesquels ? Faut-il gérer des **quantités décimales** ?
+4. Les **remises** doivent-elles apparaître explicitement (ligne « remise ») sur le ticket,
+   ou rester intégrées au prix ?
+5. Un article **offert** (remise 100 %) : cas réel ? Comment le distinguer d'un cadeau
+   commercial dans les comptes ?
+
+---
+
+## g) Clôture de caisse quotidienne et rapprochement
+
+**Contexte.** Aucune clôture de caisse n'est prévue (ni CDC, ni schéma). Le responsable
+encaisse au comptoir mais rien ne rapproche, en fin de journée, les **espèces réellement en
+caisse** des **recettes enregistrées**.
+
+**Règle proposée.**
+- Écran **« Clôture de caisse »** (responsable, une par jour et par site où il y a
+  encaissement) :
+  - le système affiche le **total attendu** par mode de paiement (espèces, Orange Money,
+    MTN MoMo, autre) pour la journée, à partir des ventes `payee` et des règlements de
+    créance ;
+  - le responsable saisit les **espèces comptées** (et, si possible, les relevés Mobile
+    Money) ;
+  - le système calcule l'**écart de caisse** (compté − attendu) par mode ;
+  - un **commentaire** est obligatoire si l'écart dépasse un seuil ;
+  - la clôture est **figée** (date, auteur, montants, écart) et non modifiable ; une
+    correction se fait par une clôture rectificative tracée.
+- Une journée non clôturée est signalée sur le tableau de bord du responsable.
+- Les ventes saisies **après** la clôture d'une journée sont rattachées à la journée en
+  cours, ou nécessitent une réouverture tracée (voir questions).
+
+**Cas limites.**
+- Saisie comptable tardive (vente d'hier saisie aujourd'hui) après clôture d'hier.
+- Fond de caisse initial (monnaie de départ) à déduire du comptage.
+- Écart de caisse récurrent → rapport de suivi des écarts par période / par personne.
+- Journée sans aucune vente (dimanche) → clôture à zéro ou pas de clôture ?
+- Encaissements Mobile Money non rapprochables faute de relevé.
+- Deux sites : une clôture par site, ou une seule pour la boutique ?
+
+**Questions au propriétaire.**
+1. Y a-t-il **une caisse physique** unique (comptoir), ou de l'encaissement des deux côtés ?
+2. Existe-t-il un **fond de caisse** de départ chaque matin ? Quel montant ?
+3. Qui fait la clôture, à quelle heure, et que fait-on des **ventes saisies en retard** après
+   clôture ?
+4. Rapproche-t-on aussi **Orange Money / MTN MoMo** (relevés disponibles ?) ou seulement les
+   **espèces** ?
+5. Quel **écart de caisse** est toléré sans justification (ex. ± 500 FCFA) ?
+6. La clôture doit-elle **empêcher** toute nouvelle saisie sur la journée clôturée, ou juste
+   la marquer ?
+
+---
+
+## h) Rôle « caissier »
+
+**Contexte.** Le cahier des charges ne prévoit **pas** de rôle caissier : c'est le
+**responsable en personne** qui encaisse au comptoir. Le dossier de recette et la checklist
+UI parlent pourtant d'un **« caissier »** sur PC (« utilisation clavier par le caissier »,
+« PC de caisse »). Le schéma a un `utilisateur_caisse_id` mais aucun rôle `caissier` dans le
+`CHECK` de `utilisateurs.role`.
+
+**Règle proposée (à valider).**
+- Introduire un **quatrième rôle `caissier`**, rattaché au **comptoir**, dont le périmètre
+  est :
+  - encaisser une vente `en_attente` (passage à `payee`, saisie du mode de paiement) ;
+  - imprimer / réimprimer le reçu ;
+  - **ne peut pas** : fixer les prix, annuler une vente, voir les marges, accéder au stock
+    détaillé, à la RH, à l'administration.
+- Le responsable **conserve** le droit d'encaisser (il reste caissier « par héritage »).
+- `utilisateur_caisse_id` pointe vers le caissier **ou** le responsable selon qui a encaissé.
+- Si le propriétaire ne veut **pas** de caissier dédié : le rôle n'est pas créé, et
+  l'encaissement reste réservé au responsable (statu quo du CDC). Aucune autre modification.
+
+**Cas limites.**
+- Caissier absent → le responsable encaisse.
+- Un caissier peut-il aussi **saisir** la vente (rôle comptabilité) sur un petit effectif ?
+- Cumul de rôles sur une même personne (caissier + agent stock) — autorisé ?
+- Le caissier voit-il le **total à encaisser** uniquement, ou aussi le détail des lignes /
+  prix ?
+
+**Questions au propriétaire.**
+1. Y a-t-il, dans les faits, une **personne dédiée à la caisse** différente du responsable ?
+2. Si oui, doit-elle **seulement encaisser**, ou aussi **saisir les ventes** (fusion avec le
+   rôle comptabilité du comptoir) ?
+3. Le caissier a-t-il le droit de voir le **détail des prix** d'une vente, ou juste le
+   **montant total** à encaisser ?
+4. Faut-il pouvoir **cumuler** plusieurs rôles sur un même compte (petit effectif) ?
+
+---
+
+## i) Exploitation : onduleur, RPO / RTO, mise à jour des postes
+
+**Contexte.** Coupures de courant fréquentes à Batouri, PostgreSQL sur un poste serveur non
+protégé = risque de corruption. Le CDC exige une sauvegarde quotidienne (rétention 30 jours,
+copie hors serveur) et une procédure de restauration, mais **aucun script ni procédure n'est
+détectable** dans le livré. Rien n'est dit sur la **perte de données acceptable**, le **délai
+de reprise**, ni la **mise à jour des 5 postes**.
+
+**Règle proposée.**
+- **Onduleur (ASI) obligatoire** sur le poste serveur, dimensionné pour tenir au moins le
+  temps d'un **arrêt propre de PostgreSQL** (≈ 10–15 min) ; arrêt automatique déclenché par
+  l'onduleur (USB + logiciel) quand la batterie est basse. Onduleur recommandé aussi sur le
+  poste de caisse (ne pas perdre une vente en cours).
+- **Sauvegardes** :
+  - `pg_dump` complet **toutes les heures** pendant les heures d'ouverture + un dump **de
+    fin de journée** ;
+  - rétention **30 jours** glissants sur le serveur ;
+  - **copie automatique** après chaque dump vers un support **hors serveur** (clé USB
+    dédiée, second poste, ou stockage distant chiffré si Internet disponible) ;
+  - **chiffrement** des sauvegardes qui quittent le serveur ;
+  - **notification** (message WhatsApp / e-mail au responsable) en cas d'échec de sauvegarde.
+- **RPO proposé : 1 heure** (au pire, on reperd la dernière heure de saisie, rattrapable via
+  le facturier papier). **RTO proposé : 2 heures** (temps de remonter une base sur un poste
+  de secours).
+- **Restauration** : toujours d'abord sur une **base séparée** (`quincaillerie_restore`),
+  vérification (10 dernières ventes, soldes, comptes) **avant** toute bascule réelle.
+  Procédure écrite, testée **une fois par trimestre**, preuve conservée.
+- **Mise à jour des postes** : nouvel exécutable déposé sur un **partage réseau** ; script de
+  mise à jour qui vérifie la version, sauvegarde l'ancienne, remplace, journalise ; **schéma
+  de base versionné** (migrations numérotées, appliquées par le serveur, jamais à la main) ;
+  procédure de **retour arrière** (exécutable précédent + migration inverse ou restauration).
+- **Poste serveur** : IP locale fixe, pare-feu ouvert seulement sur le port PostgreSQL et
+  seulement pour le sous-réseau de la boutique, démarrage automatique de PostgreSQL au boot,
+  reste allumé pendant les heures d'ouverture.
+
+**Cas limites.**
+- Coupure pendant un `pg_dump` → le dump partiel doit être écarté, pas écraser le bon.
+- Coupure pendant une validation de vente → transaction non committée perdue, stock cohérent
+  (atomicité), reprise sans double vente.
+- Support de copie (clé USB) plein ou absent.
+- Poste serveur physiquement hors service → délai pour redémarrer sur un autre poste.
+- Migration de schéma échouée en cours de déploiement.
+- Sauvegarde jamais restaurée = sauvegarde non fiable (à tester réellement).
+
+**Questions au propriétaire.**
+1. Quelle **perte de données maximale** est acceptable en cas de sinistre : 1 heure de
+   saisie ? une demi-journée ? une journée ?
+2. Quel **délai de reprise** est acceptable : reprise le jour même ? sous 2 heures ? le
+   lendemain ?
+3. Y a-t-il **un budget onduleur** et **un poste de secours** identifié pouvant devenir
+   serveur ?
+4. Une **connexion Internet** est-elle disponible sur le poste serveur pour une copie de
+   sauvegarde distante (même lente, une fois par jour) ?
+5. Qui, sur place, est capable de **lancer une restauration** en cas d'absence du prestataire ?
+   Faut-il une procédure « pas à pas » pour non-technicien ?
+6. À quelle **fréquence** accepte-t-on d'interrompre l'activité pour **mettre à jour** les
+   postes (soir ? dimanche ?) ?
+
+---
+
+## j) Reprise de l'existant : stock initial, volumétrie, formation
+
+**Contexte.** La gestion était manuelle (cahier, facturier papier). Il faut **charger le
+stock de départ**, connaître les **volumes réels**, et **former** des utilisateurs sans
+culture informatique.
+
+**Règle proposée.**
+- **Chargement du stock initial** :
+  - inventaire physique complet, contradictoire (agent stock + responsable), un site après
+    l'autre, boutique fermée ou hors affluence ;
+  - saisie via un **import** (fichier Excel : nom, catégorie, unité, quantité, site,
+    fournisseur, prix achat, prix vente) fourni par le prestataire, contrôlé puis injecté ;
+    à défaut, double saisie manuelle vérifiée ;
+  - le chargement initial est un **mouvement `inventaire_initial`** daté, tracé, non
+    confondu avec des entrées fournisseur (n'active pas la règle des 20 % — le seuil initial
+    est saisi une fois, ou fixé à 20 % de la quantité initiale par convention à valider) ;
+  - **gel** des opérations pendant le chargement, puis **rapprochement** avec le dernier état
+    du cahier papier.
+- **Volumétrie à établir** (par le propriétaire) : nombre d'articles par site, nombre de
+  ventes par jour (moyenne / pointe), nombre de lignes par vente, nombre de fournisseurs,
+  d'employés. Sert à dimensionner l'ergonomie (recherche, pagination) et le matériel.
+- **Formation** :
+  - support court **par rôle** (1 à 2 pages, captures, en français simple) ;
+  - session pratique **par rôle** sur la base de test, avec le scénario des 10 clients ;
+  - période de **double tenue** (papier **et** application) sur 1 à 2 semaines, puis bascule ;
+  - un **référent** par site pour les questions du quotidien ;
+  - critère de fin de formation : chaque utilisateur réalise seul son parcours type (vente,
+    comptage, saisie compta) dans les temps cibles du point k.
+
+**Cas limites.**
+- Écart entre stock physique et cahier papier au moment de la reprise (à figer comme point
+  de départ, pas à « corriger » a posteriori).
+- Articles sans prix connu au moment de la reprise.
+- Fournisseurs mal identifiés dans le cahier papier.
+- Utilisateur en difficulté persistante avec l'outil après formation.
+- Bascule un site à la fois vs. les deux en même temps.
+
+**Questions au propriétaire.**
+1. Combien d'**articles** environ par site ? Combien de **ventes par jour** en moyenne et un
+   jour de pointe ? Combien d'**employés**, de **fournisseurs** ?
+2. Le stock initial peut-il être fourni sous forme de **fichier Excel** exploitable, ou
+   faudra-t-il tout **ressaisir** depuis le cahier ?
+3. Accepte-t-on une période de **double tenue** (papier + application) avant de basculer ?
+   Combien de temps ?
+4. Bascule **des deux sites en même temps** ou **l'un après l'autre** ?
+5. Qui sont les **référents** pressentis sur chaque site ?
+6. Quel est le **niveau de confort informatique** réel de chaque futur utilisateur (pour
+   calibrer la formation) ?
+
+---
+
+## k) Critères ergonomiques mesurables
+
+**Contexte.** Le CDC demande une interface « simple », « rapide », « en français », mais sans
+**seuils vérifiables**. Le dossier de recette et le propriétaire placent l'ergonomie en
+**priorité n°1**.
+
+**Règle proposée — critères de recette, mesurés chronomètre en main et à des résolutions
+imposées :**
+
+| # | Critère | Cible | Méthode de mesure |
+|---|---------|-------|-------------------|
+| k1 | Connexion (saisie identifiant/mot de passe → tableau de bord affiché) | **< 30 s** | Chronomètre, utilisateur non entraîné, 3 essais, on garde le pire |
+| k2 | Vente standard (1 article déjà identifié → reçu imprimé) | **< 60 s** | Chronomètre, à partir de l'écran de vente |
+| k3 | Ajout d'un article au panier | **1 à 2 actions** (recherche + Entrée) | Comptage des clics/touches |
+| k4 | Modifier quantité ou prix d'une ligne | **sans changer d'écran** | Observation |
+| k5 | Impression du ticket | **≤ 1 confirmation** | Observation |
+| k6 | Message d'erreur | **en français, à côté du champ concerné, dit quoi corriger** | Provoquer 5 erreurs types |
+| k7 | Bouton retour / annulation | **toujours visible et identifiable** sur chaque écran | Revue écran par écran |
+| k8 | Confirmation avant opération irréversible (annulation de vente, clôture, désactivation de compte) | **systématique et explicite** | Revue |
+| k9 | Affichage sans débordement (aucun texte, bouton ou tableau essentiel coupé) | **1366 × 768** (PC) | Redimensionnement + capture |
+| k10 | Lisibilité mobile (suivi + saisie) sans zoom, zones tactiles utilisables | **360, 390 et 768 px** de large | Émulateur + appareil réel |
+| k11 | Recherche d'un article dans le catalogue complet | **< 3 s** pour afficher le résultat | Chronomètre, catalogue à volumétrie réelle |
+| k12 | Navigation entièrement au **clavier** pour la vente (caissier) | **possible de bout en bout** | Test sans souris |
+| k13 | Aucune fenêtre modale inutile dans le parcours de vente | **0** | Comptage |
+
+Un critère non mesuré = non acquis. Les mesures sont refaites à chaque cycle de finalisation
+touchant C9 ou C10.
+
+**Cas limites.**
+- Poste lent / réseau chargé : les cibles s'entendent sur le matériel réel de la boutique,
+  pas sur une machine de développement.
+- Catalogue qui grossit : k11 doit tenir à 2× la volumétrie annoncée.
+- Écran de caisse tactile éventuel (sans clavier) : k12 devient « au clavier **ou** au
+  tactile ».
+
+**Questions au propriétaire.**
+1. Ces **cibles chiffrées** sont-elles acceptées comme **critères de recette** (une version
+   qui ne les atteint pas est refusée) ?
+2. Quel est le **matériel réel** des postes (processeur, RAM, taille et résolution d'écran)
+   sur lequel mesurer ?
+3. Le poste de caisse a-t-il un **clavier**, un **écran tactile**, ou les deux ?
+4. Quels **modèles de téléphone** les responsables utilisent (pour fixer les largeurs de
+   test) ?
+5. Y a-t-il des **contraintes visuelles** (grands caractères, fort contraste) pour certains
+   utilisateurs ?
+
+---
+
+## l) Propriété du code source et obligation de livraison du dépôt
+
+**Contexte.** L'application a été livrée **uniquement en exécutables**. Aucun code source,
+aucun script de fabrication (`.spec` PyInstaller), aucun script de sauvegarde n'existe sur la
+machine du propriétaire. Le CDC §7 liste pourtant le code source (dépôt Git) et les scripts
+de build parmi les livrables. La situation actuelle rend le propriétaire **captif** du
+prestataire et **incapable de reconstruire, corriger ou reprendre** l'outil.
+
+**Règle proposée — à intégrer explicitement au cahier des charges :**
+- Le **code source complet** de l'application, de l'API, du schéma de base et des scripts
+  (build, sauvegarde, restauration, migrations, tests) est la **propriété des Ets
+  Quincaillerie Franck**.
+- Le code est livré **en continu** dans un **dépôt Git** dont le propriétaire est
+  **titulaire du compte** (organisation / compte GitHub appartenant à la quincaillerie), le
+  prestataire étant simple contributeur. Le propriétaire a un **accès administrateur permanent**.
+- **Aucune livraison de version** (exécutable) n'est acceptée sans que le **commit
+  correspondant** soit présent sur la branche `main` du dépôt, **étiqueté** (tag de version),
+  avec les **scripts de fabrication** permettant de régénérer l'exécutable à l'identique.
+- Le dépôt contient : code, schéma + migrations, scripts de build PyInstaller, scripts et
+  guide de sauvegarde/restauration, jeux de tests, documentation d'installation et
+  d'exploitation, `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, le présent addendum.
+- Le dépôt **ne contient jamais** : `config.ini` réel, mots de passe, clés secrètes,
+  sauvegardes de données réelles, exécutables compilés.
+- **Réversibilité** : à la fin de la relation contractuelle, le prestataire remet tout accès
+  et toute clé ; le propriétaire doit pouvoir **reconstruire et déployer sans lui**. Une
+  clause de **dépôt fiduciaire (escrow)** des secrets de signature/déploiement peut être
+  ajoutée.
+- Le non-respect de la livraison du dépôt est un **manquement contractuel** conditionnant le
+  paiement du solde.
+
+**Cas limites.**
+- Bibliothèques tierces sous licence : vérifier la compatibilité (PyQt6 en GPL/commercial),
+  documenter les licences.
+- Secrets nécessaires au build (certificat de signature Windows) : gérés en escrow, hors dépôt.
+- Prestataire qui livre un exécutable « en urgence » sans commit : non conforme, à régulariser
+  immédiatement.
+- Historique Git réécrit / forcé : interdit sur `main`.
+
+**Questions au propriétaire.**
+1. Le dépôt doit-il être hébergé sous un **compte / une organisation appartenant à la
+   quincaillerie** (recommandé), plutôt que sous le compte du prestataire ?
+2. Souhaitez-vous une **clause explicite** liant le **paiement du solde** à la livraison
+   conforme du dépôt et des scripts de build ?
+3. Faut-il un **dépôt fiduciaire (escrow)** pour le certificat de signature et les secrets de
+   déploiement ?
+4. Qui, côté quincaillerie, détient les **accès administrateur** du dépôt et des comptes
+   d'hébergement ?
+5. Acceptez-vous que ce document (l'addendum) soit **annexé au cahier des charges** et
+   **signé** au même titre ?
+
+---
+
+## Récapitulatif des décisions attendues
+
+| Point | Décision structurante | Bloque quoi si non tranché |
+|---|---|---|
+| a | Modèle de transfert inter-sites | C4, réappro quotidien |
+| b | Créance client / vente à crédit | C5, C6, exactitude des recettes |
+| c | Numéro facturier + vendeur obligatoires | C5, objectif anti-vol |
+| d | **Régime fiscal / taux de TVA** | C5, tous les documents et rapports |
+| e | **Saisie a posteriori vs blocage anti-survente** | C5, C7, sens du test de concurrence |
+| f | Retours / casse / remises / unités | C4, C5, suivi des pertes |
+| g | Clôture de caisse | C6, rapprochement espèces |
+| h | Rôle caissier oui/non | C3, C5, poste de caisse |
+| i | RPO / RTO / onduleur / mises à jour | C12, continuité |
+| j | Volumétrie + reprise du stock + formation | C4, dimensionnement, bascule |
+| k | Cibles ergonomiques comme critères de recette | C9, C10, définition de « fini » |
+| l | **Propriété du code + livraison du dépôt** | tout le projet, réversibilité |
+
+Les trois décisions à trancher **en premier** (elles conditionnent le reste) : **d (fiscalité),
+e (modèle de vente a posteriori) et l'architecture cible** (voir `RAPPORT AVANCEMENT` /
+comparaison d'architecture).

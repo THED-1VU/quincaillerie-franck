@@ -1,0 +1,239 @@
+pasted_content_2.txt
+Texte · 5.67 KB
+faut il autre chose à diagnostiquer?
+Lite
+Oui. Le diagnostic actuel est utile, mais il est encore principalement statique. Il montre la présence de fichiers et de mots-clés, mais il ne prouve pas que l’application fonctionne réellement.
+Point important sur les scores actuels
+Certains résultats sont artificiellement élevés.
+Par exemple :
+text
+Securite : 100 %
+Ce résultat n’est pas encore fiable, car le script a trouvé les mots bcrypt, role, audit, backup, etc. dans :
+text
+diagnostic_quincaillerie_franck.ps1
+Le script s’est donc en partie détecté lui-même. De même, la preuve de sauvegarde trouvée dans le script ne prouve pas qu’une sauvegarde fonctionnelle existe dans l’application.
+Les résultats réellement confirmés à ce stade sont surtout :
+Élément
+État
+Exécutables Windows
+Présents
+Script SQL
+Présent
+Guides
+Présents
+Fichier de configuration
+Présent
+Interface web/mobile
+Non détectée
+Procédure de sauvegarde
+Non détectée
+Script d’installation/fabrication
+Non détecté
+Ergonomie PC
+Non évaluée
+Ergonomie téléphone
+Non évaluée
+Le score Ergonomie PC : 0 % ne signifie pas que l’interface est mauvaise. Il signifie simplement que le script ne peut pas l’évaluer automatiquement.
+Diagnostics complémentaires indispensables
+1. Diagnostic fonctionnel réel
+Il faut lancer QuincaillerieFranck.exe et tester les parcours suivants :
+Responsable
+connexion ;
+changement du mot de passe ;
+création d’un article ;
+modification du prix ;
+création d’un fournisseur ;
+création d’un employé ;
+création et désactivation d’un compte ;
+validation d’une vente ;
+annulation d’une vente ;
+consultation du tableau de bord ;
+export Excel/PDF.
+Agent stock
+connexion ;
+vérification qu’il ne voit pas les prix ;
+ajout ou modification d’un article ;
+entrée de stock ;
+sortie de stock ;
+comptage à l’aveugle ;
+visualisation des écarts ;
+vérification qu’il ne voit pas les montants en FCFA.
+Agent comptabilité
+connexion ;
+enregistrement d’une vente ;
+saisie du prix négocié ;
+saisie d’une recette ;
+saisie d’une dépense ;
+association d’une dépense à un salarié ;
+vérification qu’il ne voit pas la quantité du stock ;
+test des modes de paiement.
+2. Diagnostic ergonomique prioritaire
+Celui-ci doit être fait manuellement, avec chronomètre et captures d’écran.
+Mesurer notamment :
+Test
+Objectif recommandé
+Connexion
+moins de 30 secondes
+Enregistrement d’une vente simple
+moins de 60 secondes
+Ajout d’un article au panier
+1 à 2 actions
+Modification quantité/prix
+sans changer d’écran
+Impression ticket
+au maximum 1 confirmation
+Compréhension d’un message d’erreur
+immédiate
+Retour ou annulation
+toujours identifiable
+Utilisation clavier par le caissier
+possible
+Affichage sur écran 1366 × 768
+aucun débordement
+Il faut vérifier en particulier :
+taille des boutons ;
+lisibilité des textes ;
+contraste ;
+ordre logique des champs ;
+rapidité de recherche d’un article ;
+possibilité de saisir rapidement quantité et prix ;
+absence de fenêtres inutiles ;
+messages entièrement en français ;
+présence d’un bouton de retour clair ;
+confirmation avant une opération irréversible.
+3. Diagnostic téléphone
+Le résultat confirme :
+text
+Web API or mobile interface : Not found
+Mobile responsive : 10 %
+Cela signifie qu’aucune interface mobile identifiable n’a été trouvée dans les fichiers analysés.
+Il faut donc vérifier si le besoin téléphone est réellement prévu dans la version actuelle. Une application native PyQt6 ne fonctionnera pas directement sur Android ou iPhone.
+Il faut décider entre deux options :
+Option recommandée
+Créer une interface web responsive :
+text
+Téléphone → navigateur web → API sécurisée → base PostgreSQL
+Elle pourrait permettre :
+suivi des ventes ;
+suivi des recettes et dépenses ;
+alertes de stock ;
+consultation des écarts d’inventaire ;
+saisie mobile si cette fonction est confirmée.
+PostgreSQL ne doit pas être exposé directement sur Internet.
+Option minimale
+Utiliser le téléphone uniquement pour la supervision, sans saisie :
+chiffre des ventes ;
+entrées et sorties ;
+alertes de stock ;
+dépenses ;
+évolution par période ;
+comparaison des deux sites.
+4. Diagnostic de sécurité réel
+Il faut tester les droits en exécutant l’application avec les vrais comptes.
+Vérifiez notamment :
+un agent stock ne peut pas voir les prix ;
+un agent stock ne peut pas voir les montants en FCFA ;
+un agent comptabilité ne peut pas voir les quantités disponibles ;
+un agent ne peut pas accéder aux menus d’administration ;
+un agent ne peut pas modifier une URL ou une requête pour contourner son rôle ;
+un agent ne peut pas annuler une vente ;
+un compte désactivé ne peut plus se connecter ;
+plusieurs mauvais mots de passe provoquent bien un verrouillage ;
+les mots de passe ne sont pas visibles dans les fichiers de configuration ;
+les mots de passe ne sont pas stockés en clair dans la base.
+Le résultat Securite : 100 % doit donc être considéré comme non confirmé tant que ces essais ne sont pas réalisés.
+5. Diagnostic de concurrence et d’intégrité du stock
+C’est un test très important.
+Scénario
+Créer un article avec une quantité de stock égale à 1.
+Ouvrir l’application sur deux postes.
+Préparer une vente du même article sur les deux postes.
+Valider les deux ventes presque simultanément.
+Résultat attendu
+Une seule vente doit être acceptée.
+La seconde doit être refusée avec un message clair du type :
+text
+Stock insuffisant. La quantité disponible a changé.
+Le stock ne doit jamais devenir négatif.
+Il faut également tester :
+annulation d’une vente ;
+double annulation ;
+coupure réseau pendant la validation ;
+fermeture de l’application pendant une vente ;
+reprise après redémarrage ;
+deux utilisateurs modifiant le même article.
+6. Diagnostic de sauvegarde et restauration
+Le rapport confirme :
+text
+Backup and restore procedure : Not found
+Il faut donc encore vérifier :
+sauvegarde quotidienne automatique ;
+conservation de 30 jours ;
+copie hors du poste serveur ;
+protection ou chiffrement des sauvegardes ;
+notification en cas d’échec ;
+restauration sur une base séparée ;
+vérification que les ventes, stocks et comptes sont bien restaurés ;
+procédure écrite compréhensible par une personne non technique.
+Une sauvegarde qui n’a jamais été restaurée avec succès ne doit pas être considérée comme fiable.
+7. Diagnostic installation et déploiement
+Le rapport indique :
+text
+Build or installer script : Not found
+Il faut vérifier :
+installation sur un ordinateur vierge ;
+absence de Python requis sur les postes ;
+connexion au serveur PostgreSQL ;
+configuration de l’adresse IP du serveur ;
+ouverture correcte du pare-feu ;
+création du premier compte responsable ;
+désinstallation ou mise à jour ;
+fonctionnement après redémarrage de Windows ;
+emplacement des journaux d’erreur ;
+possibilité de revenir à la version précédente.
+8. Diagnostic base de données
+Le fichier suivant doit être examiné :
+text
+creation_base_donnees.sql
+Il faut vérifier la présence de :
+clés primaires ;
+clés étrangères ;
+contraintes de quantité positive ;
+contraintes sur les prix ;
+contraintes sur les rôles ;
+unicité des identifiants ;
+index pour les recherches ;
+transactions ;
+tables d’audit ;
+historique des ventes annulées ;
+protection contre les doublons ;
+séquences de numéros de facture.
+9. Diagnostic impression
+Tester avec l’imprimante réelle :
+ticket lisible ;
+bon format papier ;
+nom et coordonnées de l’entreprise ;
+numéro de vente ou facture ;
+date et heure ;
+articles ;
+quantités ;
+prix ;
+total ;
+mode de paiement ;
+code-barres ;
+réimpression ;
+absence d’imprimante ;
+papier épuisé ou imprimante hors ligne.
+Ordre recommandé
+Je recommande de poursuivre dans cet ordre :
+Tester l’interface de l’application sur PC.
+Tester les trois rôles et les droits d’accès.
+Tester une vente complète avec impression.
+Tester le stock avec deux postes simultanés.
+Tester la sauvegarde et la restauration.
+Tester l’installation sur un autre ordinateur.
+Faire le diagnostic téléphone.
+Corriger l’ergonomie avant d’ajouter de nouvelles fonctions.
+Conclusion
+Oui, il reste plusieurs diagnostics indispensables. Le diagnostic PowerShell confirme surtout la présence des livrables et l’absence apparente d’une interface mobile et d’une procédure de sauvegarde. Il ne permet pas encore de conclure sur la qualité réelle de l’application.
+La prochaine étape la plus importante est donc de réaliser un test manuel guidé de l’interface et des trois rôles, car votre priorité est l’ergonomie, la responsivité et l’expérience utilisateur.

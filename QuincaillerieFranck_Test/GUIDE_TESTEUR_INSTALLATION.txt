@@ -1,0 +1,56 @@
+INSTALLATION - Ets Quincaillerie Franck (version de test)
+============================================================
+
+1. Installer PostgreSQL
+   - Telecharger sur https://www.postgresql.org/download/windows/
+   - Pendant l'installation, on vous demande un mot de passe pour
+     l'utilisateur "postgres" : notez-le, vous en aurez besoin.
+   - Laisser le port par defaut (5432).
+
+2. Creer la base de donnees
+   - Ouvrir "SQL Shell (psql)" (installe avec PostgreSQL, cherchez-le
+     dans le menu Demarrer).
+   - Appuyez sur Entree a chaque question sauf pour le mot de passe
+     (celui note a l'etape 1).
+   - Une fois connecte (invite "postgres=#"), tapez :
+       CREATE DATABASE quincaillerie_test;
+       \c quincaillerie_test
+       \i 'CHEMIN_COMPLET_VERS\creation_base_donnees.sql'
+     (remplacez CHEMIN_COMPLET_VERS par l'endroit ou vous avez
+     dezippe le dossier recu, ex : C:\Users\VotreNom\Desktop\
+     QuincaillerieFranck_Test\creation_base_donnees.sql)
+
+3. Configurer l'application
+   - Copier "config.example.ini", renommer la copie en "config.ini"
+     (meme dossier que QuincaillerieFranck.exe).
+   - Ouvrir "config.ini" avec le Bloc-notes et renseigner :
+       host = localhost
+       port = 5432
+       dbname = quincaillerie_test
+       user = postgres
+       password = (le mot de passe note a l'etape 1)
+
+4. Creer votre premier compte (responsable)
+   - Double-cliquer sur "CreerCompteResponsable.exe".
+   - Une fenetre noire s'ouvre et pose 3 questions (nom, identifiant,
+     mot de passe) : repondez et validez avec Entree a chaque fois.
+   - Une fois "Compte responsable cree avec succes" affiche, fermez
+     la fenetre.
+
+5. Lancer l'application
+   - Double-cliquer sur "QuincaillerieFranck.exe".
+   - Se connecter avec l'identifiant et le mot de passe crees a
+     l'etape 4.
+
+Cette installation est totalement independante de la vraie base de la
+quincaillerie : vous pouvez essayer, vous tromper, tout casser, sans
+aucun risque sur les vraies donnees.
+
+------------------------------------------------------------
+VOS RETOURS - merci de repondre par ecrit (WhatsApp ou e-mail) a :
+------------------------------------------------------------
+- Qu'est-ce qui n'etait pas clair ou pas facile a trouver ?
+- Y a-t-il un ecran ou tu ne savais pas quoi faire ensuite ?
+- Un message d'erreur bizarre est-il apparu ? (une capture d'ecran aide)
+- Une fonctionnalite qui te manque, vu ton propre travail au quotidien ?
+- Est-ce que les mots utilises sont clairs, ou y a-t-il des termes a changer ?

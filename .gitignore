@@ -1,0 +1,45 @@
+# --- Configuration réelle : ne JAMAIS versionner ---
+config.ini
+*/config.ini
+**/config.ini
+
+# --- Exécutables et artefacts de compilation ---
+*.exe
+build/
+dist/
+*.spec.bak
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# --- Journaux ---
+*.log
+logs/
+
+# --- Sauvegardes / dumps de base contenant des données ---
+# (le SCHÉMA creation_base_donnees.sql, lui, est versionné)
+*dump*.sql
+*backup*.sql
+*sauvegarde*.sql
+*_data.sql
+*.dump
+*.backup
+sauvegardes/
+backups/
+
+# --- Diagnostics horodatés (sorties locales, non pertinentes pour le dépôt) ---
+QuincaillerieFranck_Test/diagnostic_*/
+
+# --- Environnements virtuels ---
+.venv/
+venv/
+env/
+
+# --- Divers OS / éditeurs ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+.idea/
+.vscode/
