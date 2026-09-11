@@ -1,0 +1,13 @@
+{
+  "name": "maquette-verification",
+  "private": true,
+  "type": "module",
+  "description": "Vérification par exécution de la maquette (cycle 1, chantier C9).",
+  "scripts": {
+    "affichage": "node verifier-affichage.mjs",
+    "flux": "node verifier-flux.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

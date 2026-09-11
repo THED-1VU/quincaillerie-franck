@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vente — Quincaillerie Franck</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Maquette — données simulées. Tapez dans la recherche, <kbd>Entrée</kbd> pour ajouter. Aucun stock retiré, aucune vente réelle.</div>
+<div class="page">
+  <header class="bandeau">
+    <span class="bandeau__marque">Quincaillerie Franck</span>
+    <h1 class="bandeau__titre">Enregistrer une vente — Comptoir</h1>
+    <span class="bandeau__role bandeau__pousse">Facturier papier n° <strong id="num-facturier">—</strong></span>
+  </header>
+
+  <main class="contenu">
+    <div class="vente">
+
+      <!-- Colonne gauche : recherche -->
+      <section class="vente__col">
+        <div class="carte recherche">
+          <h2><label for="recherche">Chercher un article</label></h2>
+          <input class="champ__saisie champ__saisie--caisse" id="recherche" type="text"
+                 placeholder="Nom de l'article…" autocomplete="off" autofocus
+                 aria-controls="suggestions" aria-expanded="false" role="combobox">
+          <p class="champ__aide">
+            Tapez, puis <kbd>Entrée</kbd> pour ajouter au panier. <kbd>↑</kbd> <kbd>↓</kbd> pour choisir, <kbd>Échap</kbd> pour effacer.
+          </p>
+          <ul class="suggestions" id="suggestions" role="listbox" hidden></ul>
+        </div>
+
+        <div class="carte">
+          <h2>Dernier ajout</h2>
+          <p id="dernier-ajout" style="color:var(--c-texte-doux);">Aucun article ajouté pour le moment.</p>
+        </div>
+      </section>
+
+      <!-- Colonne droite : panier + total + paiement -->
+      <section class="vente__col">
+        <div class="carte">
+          <div class="carte__titre">
+            <h2>Panier</h2>
+            <span class="lien-petit" id="compteur-lignes">0 ligne</span>
+          </div>
+
+          <div id="panier"></div>
+
+          <div class="total-ligne">
+            <span>Sous-total</span><span class="montant" id="sous-total">0 FCFA</span>
+          </div>
+          <div class="total-ligne">
+            <span>TVA (<span id="taux-tva">0</span> %)</span><span class="montant" id="montant-tva">0 FCFA</span>
+          </div>
+          <div class="total-ligne total-ligne--grand">
+            <span>Total à payer</span><span class="montant" id="total-ttc">0 FCFA</span>
+          </div>
+
+          <div class="champ" style="margin-top:var(--e-5);">
+            <label class="champ__label" for="paiement">Mode de paiement</label>
+            <select class="champ__select" id="paiement"></select>
+            <p class="champ__aide"><kbd>F4</kbd> pour changer de mode sans la souris.</p>
+          </div>
+
+          <div id="zone-confirmation" class="erreur-champ" hidden
+               style="background:var(--c-attention-clair); color:var(--c-attention); border-color:var(--c-attention);"></div>
+          <div id="zone-succes" class="erreur-champ" hidden
+               style="background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+
+          <button class="btn btn--primaire btn--large btn--caisse" id="btn-valider" type="button" style="margin-top:var(--e-4);">
+            Valider la vente <span class="btn__raccourci">F9</span>
+          </button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="aide-clavier">
+    <span><kbd>F2</kbd> Chercher</span>
+    <span><kbd>Entrée</kbd> Ajouter au panier</span>
+    <span><kbd>F4</kbd> Mode de paiement</span>
+    <span><kbd>Échap</kbd> Effacer la recherche</span>
+    <span><kbd>F9</kbd> Valider la vente</span>
+  </footer>
+</div>
+
+<script src="donnees-simulees.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  const TAUX_TVA = 0; // maquette : aucune TVA (cf. addendum d — doit fonctionner à 0)
+
+  const $ = (id) => document.getElementById(id);
+  const recherche   = $("recherche");
+  const suggestions = $("suggestions");
+  const panierEl    = $("panier");
+  const paiementEl  = $("paiement");
+
+  let panier = DONNEES.panierInitial.map((l) => ({ ...l }));
+  let selIndex = -1;
+  let resultats = [];
+
+  $("num-facturier").textContent = "CPT-" + (1040 + Math.floor(Math.random() * 20));
+
+  // --- Modes de paiement ---
+  DONNEES.modesPaiement.forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m.code; opt.textContent = m.libelle;
+    paiementEl.appendChild(opt);
+  });
+
+  // --- Recherche + suggestions ---
+  function filtrer(q) {
+    q = q.trim().toLowerCase();
+    if (!q) return [];
+    return DONNEES.catalogue.filter((a) => a.nom.toLowerCase().includes(q)).slice(0, 6);
+  }
+
+  function rendreSuggestions() {
+    suggestions.innerHTML = "";
+    if (resultats.length === 0) {
+      suggestions.hidden = true;
+      recherche.setAttribute("aria-expanded", "false");
+      return;
+    }
+    resultats.forEach((a, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", i === selIndex ? "true" : "false");
+      li.innerHTML = '<span>' + a.nom + '</span><span class="unite">' + a.unite + '</span>';
+      li.addEventListener("click", () => ajouter(a));
+      suggestions.appendChild(li);
+    });
+    suggestions.hidden = false;
+    recherche.setAttribute("aria-expanded", "true");
+  }
+
+  recherche.addEventListener("input", () => {
+    resultats = filtrer(recherche.value);
+    selIndex = resultats.length ? 0 : -1;
+    rendreSuggestions();
+  });
+
+  recherche.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); if (resultats.length) { selIndex = (selIndex + 1) % resultats.length; rendreSuggestions(); } }
+    else if (e.key === "ArrowUp") { e.preventDefault(); if (resultats.length) { selIndex = (selIndex - 1 + resultats.length) % resultats.length; rendreSuggestions(); } }
+    else if (e.key === "Enter") { e.preventDefault(); if (selIndex >= 0) ajouter(resultats[selIndex]); }
+    else if (e.key === "Escape") { e.preventDefault(); viderRecherche(); }
+  });
+
+  function viderRecherche() {
+    recherche.value = ""; resultats = []; selIndex = -1; rendreSuggestions();
+  }
+
+  // --- Panier ---
+  function ajouter(article) {
+    const existante = panier.find((l) => l.id === article.id);
+    if (existante) {
+      existante.quantite += 1;
+    } else {
+      panier.push({
+        id: article.id, nom: article.nom, unite: article.unite,
+        quantite: 1, prixUnitaire: article.prixCatalogue,
+      });
+    }
+    $("dernier-ajout").textContent = article.nom + " ajouté (quantité 1, prix " + fcfa(article.prixCatalogue) + " — modifiable dans le panier).";
+    viderRecherche();
+    recherche.focus();
+    rendrePanier();
+  }
+
+  function retirer(id) {
+    panier = panier.filter((l) => l.id !== id);
+    rendrePanier();
+    recherche.focus();
+  }
+
+  function rendrePanier() {
+    panierEl.innerHTML = "";
+    if (panier.length === 0) {
+      panierEl.innerHTML = '<p class="panier__vide">Panier vide. Cherchez un article à gauche.</p>';
+    } else {
+      panier.forEach((l) => {
+        const ligne = document.createElement("div");
+        ligne.className = "panier__ligne";
+        ligne.innerHTML =
+          '<div><div class="panier__nom">' + l.nom + '</div>' +
+          '<div class="unite" style="color:var(--c-texte-doux); font-size:var(--t-sm);">' + l.unite + '</div></div>' +
+          '<input class="panier__mini" type="number" min="1" step="1" value="' + l.quantite + '" aria-label="Quantité pour ' + l.nom + '">' +
+          '<input class="panier__mini" type="number" min="0" step="50" value="' + l.prixUnitaire + '" aria-label="Prix unitaire pour ' + l.nom + '">' +
+          '<button class="panier__sup" type="button" aria-label="Retirer ' + l.nom + '">&times;</button>';
+        const [qteInput, prixInput] = ligne.querySelectorAll("input");
+        qteInput.addEventListener("input", () => { l.quantite = Math.max(1, parseInt(qteInput.value || "1", 10)); majTotaux(); });
+        prixInput.addEventListener("input", () => { l.prixUnitaire = Math.max(0, parseInt(prixInput.value || "0", 10)); majTotaux(); });
+        [qteInput, prixInput].forEach((inp) => inp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); recherche.focus(); }
+          if (e.key === "Escape") { e.preventDefault(); recherche.focus(); }
+        }));
+        ligne.querySelector(".panier__sup").addEventListener("click", () => retirer(l.id));
+        panierEl.appendChild(ligne);
+      });
+    }
+    majTotaux();
+  }
+
+  function majTotaux() {
+    const sousTotal = panier.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+    const tva = Math.round(sousTotal * TAUX_TVA / 100);
+    $("sous-total").textContent  = fcfa(sousTotal);
+    $("taux-tva").textContent    = TAUX_TVA;
+    $("montant-tva").textContent = fcfa(tva);
+    $("total-ttc").textContent   = fcfa(sousTotal + tva);
+    $("compteur-lignes").textContent = panier.length + (panier.length > 1 ? " lignes" : " ligne");
+  }
+
+  // --- Validation (au plus une confirmation) ---
+  let enAttenteConfirmation = false;
+  const btnValider = $("btn-valider");
+  const zoneConfirmation = $("zone-confirmation");
+  const zoneSucces = $("zone-succes");
+
+  function valider() {
+    zoneSucces.hidden = true;
+    if (panier.length === 0) {
+      zoneConfirmation.hidden = false;
+      zoneConfirmation.textContent = "Le panier est vide : rien à valider.";
+      return;
+    }
+    if (!enAttenteConfirmation) {
+      enAttenteConfirmation = true;
+      zoneConfirmation.hidden = false;
+      zoneConfirmation.textContent = "Confirmer l'encaissement de " + $("total-ttc").textContent
+        + " (" + paiementEl.options[paiementEl.selectedIndex].text + ") ? Appuyez de nouveau sur F9 ou sur le bouton.";
+      btnValider.textContent = "Confirmer l'encaissement";
+      return;
+    }
+    // Confirmé.
+    enAttenteConfirmation = false;
+    zoneConfirmation.hidden = true;
+    zoneSucces.hidden = false;
+    zoneSucces.textContent = "Vente enregistrée (maquette). L'impression du ticket sera traitée dans un cycle ultérieur.";
+    btnValider.innerHTML = 'Valider la vente <span class="btn__raccourci">F9</span>';
+  }
+
+  btnValider.addEventListener("click", valider);
+
+  // --- Raccourcis globaux ---
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "F2")      { e.preventDefault(); recherche.focus(); recherche.select(); }
+    else if (e.key === "F4") { e.preventDefault(); paiementEl.selectedIndex = (paiementEl.selectedIndex + 1) % paiementEl.options.length; }
+    else if (e.key === "F9") { e.preventDefault(); valider(); }
+  });
+
+  // --- Init ---
+  rendrePanier();
+})();
+</script>
+</body>
+</html>

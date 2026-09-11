@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comptage d'inventaire — Quincaillerie Franck</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Maquette — données simulées. Comptage <strong>à l'aveugle</strong>&nbsp;: la quantité attendue n'existe ni à l'écran ni dans le code de la page.</div>
+<div class="page">
+  <header class="bandeau">
+    <span class="bandeau__marque">Quincaillerie Franck</span>
+    <span class="bandeau__role bandeau__pousse">Agent stock</span>
+  </header>
+
+  <main class="contenu contenu--etroit">
+    <div class="compte-entete">
+      <div>
+        <h1 style="margin-bottom:var(--e-1);">Comptage <span id="moment"></span></h1>
+        <span style="color:var(--c-texte-doux);" id="site-date"></span>
+      </div>
+      <span class="compte-progression" id="progression">1 / 5</span>
+    </div>
+
+    <div class="carte compte-carte">
+      <div class="compte-carte__nom" id="art-nom">—</div>
+      <div class="compte-carte__unite" id="art-unite">—</div>
+
+      <label class="champ__label" for="saisie" style="text-align:center;">Quantité comptée</label>
+      <input class="compte-saisie" id="saisie" type="number" inputmode="numeric" min="0" step="1"
+             autocomplete="off" autofocus aria-describedby="aide-saisie">
+      <p class="champ__aide" id="aide-saisie">Comptez ce que vous voyez réellement, sans chercher à deviner un total « attendu ».</p>
+
+      <div class="compte-nav">
+        <button class="btn btn--fantome" id="btn-prec" type="button">Précédent</button>
+        <button class="btn btn--secondaire" id="btn-passer" type="button">Passer</button>
+        <button class="btn btn--primaire" id="btn-suivant" type="button">Suivant</button>
+      </div>
+    </div>
+
+    <div id="zone-fin" class="erreur-champ" hidden
+         style="background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+
+    <p class="compte-note">
+      Vous ne verrez jamais la quantité que le système attend. Les écarts éventuels
+      seront calculés après validation et présentés au responsable.
+    </p>
+  </main>
+</div>
+
+<script src="donnees-simulees.js"></script>
+<script>
+(function () {
+  "use strict";
+  const inv = DONNEES.inventaire;
+  const $ = (id) => document.getElementById(id);
+
+  // Saisies de l'agent uniquement. Aucune donnée « attendue » n'est chargée.
+  const saisies = new Array(inv.articles.length).fill(null);
+  let i = 0;
+
+  $("moment").textContent = inv.moment;
+  $("site-date").textContent = inv.site + " · " + inv.date;
+
+  function afficher() {
+    const a = inv.articles[i];
+    $("art-nom").textContent = a.nom;
+    $("art-unite").textContent = "en " + a.unite;
+    $("progression").textContent = (i + 1) + " / " + inv.articles.length;
+    $("saisie").value = saisies[i] === null ? "" : saisies[i];
+    $("btn-prec").disabled = (i === 0);
+    $("btn-suivant").textContent = (i === inv.articles.length - 1) ? "Terminer" : "Suivant";
+    $("saisie").focus();
+    $("saisie").select();
+  }
+
+  function enregistrerSaisie() {
+    const v = $("saisie").value.trim();
+    saisies[i] = v === "" ? null : Math.max(0, parseInt(v, 10));
+  }
+
+  function suivant() {
+    enregistrerSaisie();
+    if (i < inv.articles.length - 1) { i++; afficher(); }
+    else { terminer(); }
+  }
+  function precedent() { enregistrerSaisie(); if (i > 0) { i--; afficher(); } }
+  function passer() { saisies[i] = null; if (i < inv.articles.length - 1) { i++; afficher(); } else { terminer(); } }
+
+  function terminer() {
+    const faits = saisies.filter((s) => s !== null).length;
+    $("zone-fin").hidden = false;
+    $("zone-fin").textContent = "Comptage envoyé (maquette) : " + faits + " article(s) sur "
+      + inv.articles.length + ". Les écarts seront calculés côté serveur.";
+  }
+
+  $("btn-suivant").addEventListener("click", suivant);
+  $("btn-prec").addEventListener("click", precedent);
+  $("btn-passer").addEventListener("click", passer);
+  $("saisie").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); suivant(); }
+  });
+
+  afficher();
+})();
+</script>
+</body>
+</html>
