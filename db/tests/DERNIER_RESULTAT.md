@@ -7,6 +7,54 @@ Trace rejouable : `bash db/tests/executer_tests.sh`.
 
 ---
 
+## Stabilisation de l'environnement (2026-09-12)
+
+Le serveur de développement tournait initialement dans le dossier temporaire
+de la session Windows (`%TEMP%\...`), purgeable à tout moment. Il a été
+**déplacé** vers `_pgdev\` (à la racine du dépôt, hors Git — voir
+`.gitignore`), avec deux scripts PowerShell pour le piloter sans connaître
+PostgreSQL : `db/outils/demarrer_pg.ps1` et `db/outils/arreter_pg.ps1`.
+
+Vérifications faites par exécution réelle :
+
+1. **Arrêt propre** de l'ancien serveur (`pg_ctl -m fast stop`), puis copie des
+   binaires et du répertoire de données vers `_pgdev\`.
+2. **`demarrer_pg.ps1`** exécuté depuis le nouvel emplacement : détecte les
+   binaires et les données déjà présents (pas de re-téléchargement, pas de
+   re-`initdb`), démarre le serveur, `pg_isready` confirme `127.0.0.1:5433`
+   opérationnel.
+3. **Idempotence testée** : `arreter_pg.ps1` sur un serveur déjà arrêté →
+   « rien à arrêter » (code 0) ; `demarrer_pg.ps1` sur un serveur déjà démarré →
+   « rien à faire » (code 0). Cycle arrêt → démarrage → re-démarrage rejoué en
+   direct, sans erreur.
+4. **Les 100 contrôles du cycle 2 ont été rejoués depuis `_pgdev\`** via
+   `bash db/tests/executer_tests.sh` :
+
+   ```
+   >>> création de quincaillerie_test : OK
+   >>> migrations appliquées          : OK
+   >>> jeu d'essai chargé             : OK
+   >>> protections   : OK   (44/44)
+   >>> habilitations : OK   (52/52)
+   >>> concurrence   : OK   (4/4)
+   >>> aller / retour des migrations  : OK
+   Toutes les étapes sont passées.
+   ```
+
+   **100 contrôles, 0 échec — identique au résultat du cycle 2, depuis le
+   nouvel emplacement durable.**
+5. L'ancien dossier temporaire (**1,3 Go**) a été supprimé après vérification
+   que tout fonctionnait depuis `_pgdev\`.
+
+**Piège rencontré et corrigé** : les deux scripts, écrits une première fois
+avec des caractères accentués et un tiret cadratin en UTF-8 sans BOM, ont fait
+échouer le parseur de Windows PowerShell 5.1 (guillemets courbes fabriqués par
+un mauvais décodage, parenthèse qui semblait manquante). Réécrits en **ASCII
+pur** : plus aucun risque d'encodage, quel que soit le poste. Voir la note en
+tête de `demarrer_pg.ps1`.
+
+---
+
 ## Phase 1 — Diagnostic sur le schéma d'ORIGINE (avant migrations)
 
 `db/tests/diagnostic_schema_origine.sql` — chaque ligne est une écriture

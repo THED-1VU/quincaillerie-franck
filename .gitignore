@@ -36,6 +36,11 @@ node_modules/
 package-lock.json
 .playwright-mcp/
 
+# --- Serveur PostgreSQL portable de développement (binaires + données) ---
+# Installé par db/outils/demarrer_pg.ps1 au premier lancement. Ne se
+# télécharge et ne se recrée qu'en local : ~1 Go, aucune donnée à versionner.
+_pgdev/
+
 # --- Environnements virtuels ---
 .venv/
 venv/
