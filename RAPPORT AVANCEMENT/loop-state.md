@@ -4,7 +4,7 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 1 — maquette du parcours (C9)**, 2026-09-11
+- Dernier cycle fusionné : **Cycle 2 — durcissement de la base (C1)**, 2026-09-11
 - Décision d'architecture (précisée 2026-09-11) : **un seul code applicatif web**,
   mais **livré et exécuté comme une application Windows (.exe)** sur les postes de
   la boutique — l'exécutable embarque le serveur local et ouvre l'interface web en
@@ -22,7 +22,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | Code | Chantier | Score | Base d'évaluation |
 |------|----------|:-----:|-------------------|
 | C0 | Infrastructure et dépôt | **10 %** | Dépôt Git + GitHub privé créés dans ce cycle de cadrage ; `.gitignore` en place. Pas encore de CI, **pas de script de fabrication de l'exécutable Windows** (le livrable final est un `.exe` qui embarque le serveur web + le mode kiosque), pas d'environnement reproductible, pas de migrations. |
-| C1 | Base de données et intégrité | **35 %** | Évalué sur pièces (`creation_base_donnees.sql`). Structure et types corrects (NUMERIC partout, FK présentes, 2 tables d'audit, index de filtre). Mais quasi aucune règle d'intégrité défendue par la base : pas de CHECK de domaine, pas de trigger, `ecart` non calculé, pas de verrou anti-survente, cascades destructrices sur l'audit, connexion en superutilisateur, pas de RLS, pas de table de paramètres. Voir `MODELE_DONNEES.md` §4. |
+| C1 | Base de données et intégrité | **80 %** | Cycle 2. 9 migrations numérotées (`db/migrations/`) + inverses, appliquées et annulées par exécution réelle sur PostgreSQL 17.11. Corrigés et **prouvés** : contraintes de domaine, cohérence inter-tables, **écart d'inventaire calculé par la base** (et quantité attendue figée par déclencheur), historique non effaçable (`RESTRICT` + verrous de suppression + suppression logique), journaux de connexion et de comptes, annulation tracée et irréversible, table de paramètres avec sentinelle « à décider », index de recherche, **4 rôles non superutilisateurs à privilèges par colonne** + RLS par site. **100 contrôles, 0 échec** (`db/tests/DERNIER_RESULTAT.md`). Reste : décisions métier de l'addendum (points b, d, e, g), fonction d'authentification (C2), exploitation de la RLS (C3), reprise sur une base contenant de vraies données. |
 | C2 | Authentification et comptes | **0 %** | Non vérifié par exécution. Le schéma prévoit hash, `tentatives_echouees`, `doit_changer_mot_de_passe` ; aucun journal de connexion, aucune session/jeton, aucun audit de compte. |
 | C3 | Habilitations et cloisonnement des rôles | **0 %** | Non vérifié. CHECK sur `role`, `site_id` présent, mais pas de contrainte rôle↔site, pas de RLS, cloisonnement supposé uniquement applicatif (« masquer l'UI ne suffit pas »). Rôle « caissier » non tranché (addendum h). |
 | C4 | Articles et stock | **0 %** | Non vérifié. Règle des 20 %, seuil non modifiable, mouvements tracés : présents au CDC, absents de la base (défaut `seuil_alerte = 5`, aucun trigger). Pas de transfert inter-sites (addendum a), pas de retours/casse (addendum f). |
@@ -37,7 +37,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après cycle 1 : ≈ 7,9 %** (C0 10, C1 35, C9 25, C14 40, autres 0).
+**Moyenne indicative après cycle 2 : ≈ 11 %** (C0 10, C1 80, C9 25, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -134,18 +134,67 @@ parcourues, aucune n'a été sautée.** Seule faiblesse corrigée pendant ce
 contrôle : la sortie d'exécution n'était pas archivée dans le dépôt →
 `DERNIER_RESULTAT.md` ajouté.
 
+### Cycle 2 — Durcissement de la base de données (C1) — 2026-09-11
+
+- **Phase 1 — Diagnostic par exécution** : PostgreSQL absent de la machine
+  (Docker inutilisable faute de WSL, winget en échec réseau) ; installé en
+  **binaires portables PostgreSQL 17.11**, sans droits administrateur, sur le
+  port 5433. Base créée à partir du seul `creation_base_donnees.sql`, puis
+  `db/tests/diagnostic_schema_origine.sql` exécuté : **toutes** les écritures
+  aberrantes ont été ACCEPTÉES — stock à −50, prix à −999, quantité vendue −5,
+  comptage « attendu 10, compté 3, **écart déclaré 0** », vente « 1 + 1 =
+  999999 », TVA à 500 %, agent sans site, congé finissant avant de commencer,
+  deux recettes pour une vente, article d'un autre site dans une vente, seuil
+  d'alerte remis à 0 ; supprimer un article a **effacé son historique de prix**
+  (1 ligne → 0). Et : 0 table de journal, 0 table de paramètres, 0 déclencheur,
+  0 colonne générée, aucun rôle non superutilisateur.
+- **Phase 2 — Objectif** : corriger le schéma par migrations numérotées
+  réversibles. Critère de sortie : les migrations s'appliquent sur une base
+  issue du schéma d'origine ; une suite de tests prouve que chaque protection
+  refuse ce qu'elle doit refuser ; les migrations inverses ramènent le schéma à
+  son état initial.
+- **Phase 3 — Action** : branche `cycle-2-base-donnees`. 9 migrations +
+  9 inverses (`db/migrations/`), 3 outils (`db/outils/` : `migrer.sh`,
+  `prevol.sql`, `definir_mot_de_passe_app.sql`), 5 fichiers de test
+  (`db/tests/`), documentation complète des droits (`db/README.md`).
+- **Phase 4 — Vérification par exécution réelle** (`bash db/tests/executer_tests.sh`) :
+  - migrations **9/9** appliquées ;
+  - `01_protections.sql` : **44/44** — dont le test décisif : le client envoie
+    une quantité attendue de 999 alors que le stock réel est 30 ; la base
+    **ignore** la valeur envoyée, retient 30 et calcule l'écart réel **−5** ;
+  - `02_habilitations.sql` : **52/52** — `permission denied` de PostgreSQL
+    lui-même sur les colonnes de prix pour l'agent stock, sur les quantités pour
+    le comptable, sur le hachage de mot de passe pour tous, sur le seuil
+    d'alerte pour tous ;
+  - `03_concurrence.sh` : **4/4** — deux sessions simultanées sur un article à
+    stock 1 : une seule aboutit, stock final 0 jamais négatif, un seul
+    mouvement, message explicite à la perdante ;
+  - migrations inverses : schéma restauré, **2 différences** connues et
+    documentées (position de `comptages_stock.ecart`, extension `pg_trgm`
+    conservée).
+  - **Total : 100 contrôles, 0 échec.** Trace : `db/tests/DERNIER_RESULTAT.md`.
+- **Trouvé par les tests, corrigé pendant le cycle** : (1) le responsable
+  pouvait lire un hachage de mot de passe et modifier le seuil d'alerte — un
+  `GRANT` au niveau table écrasait les restrictions de colonne ; (2) le script
+  d'annulation cassait sur l'espace du chemin (« THED CONNECT ») ; (3) un
+  `TRUNCATE … CASCADE` du jeu d'essai effaçait la table `parametres` ; (4) un
+  rôle PostgreSQL étant global au serveur, son retrait doit être tolérant.
+- **Phase 5 — Mémoire** : C1 **35 % → 80 %**. Commit, PR, fusion.
+- **Reste à faire (C1)** : décisions métier de l'addendum (points b, d, e, g) ;
+  fonction d'authentification pour que personne n'ait à lire un hachage
+  (chantier C2) ; exploitation complète de la RLS (C3) ; reprise sur une base
+  contenant de vraies données (`db/outils/prevol.sql` est prêt pour ça).
+
 ---
 
 ## Prochain cycle — sélection
 
-1. **Cycle 2 — C1** : migration corrective du schéma (CHECK de domaine, `ecart`
-   calculé, `CHECK (quantite_stock >= 0)`, cascades d'audit en `RESTRICT`, table
-   `parametres`, rôle applicatif non superutilisateur, tables d'audit
-   manquantes). Prérequis : PostgreSQL disponible sur la machine.
-2. **Cycle 3 — C2 / C3 / C11** : noyau serveur (FastAPI en couches),
-   authentification, habilitations appliquées au niveau des requêtes SQL,
-   cloisonnement par site, journalisation.
-3. **C0** — environnement reproductible + **script de fabrication du `.exe`**
+1. **Cycle 3 — C2 / C3 / C11** : noyau serveur (FastAPI en couches),
+   authentification (avec la fonction de vérification côté base, pour que le
+   hachage reste illisible), habilitations appliquées au niveau des requêtes
+   SQL en s'appuyant sur les rôles et la RLS posés au cycle 2, cloisonnement par
+   site, journalisation dans `journal_connexions` et `journal_comptes`.
+2. **C0** — environnement reproductible + **script de fabrication du `.exe`**
    (PyInstaller : serveur web + lanceur kiosque en un exécutable autonome),
    dépendances figées, CI minimale : débloque la vérification automatisée et
    la livraison réelle aux postes.

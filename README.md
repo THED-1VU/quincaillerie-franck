@@ -26,6 +26,20 @@ Dépôt de la reconstruction de l'application de gestion des **Ets Quincaillerie
 | [`RAPPORT AVANCEMENT/COMPARAISON_ARCHITECTURE.md`](RAPPORT%20AVANCEMENT/COMPARAISON_ARCHITECTURE.md) | Comparaison des deux architectures cibles (bureau+web vs web unique). |
 | [`.agents/skills/finalisation-loop/SKILL.md`](.agents/skills/finalisation-loop/SKILL.md) | Le cycle de finalisation en 5 phases utilisé sur ce projet. |
 
+## Cycle 2 — base de données durcie (chantier C1)
+
+| Élément | Contenu |
+|---|---|
+| [`db/README.md`](db/README.md) | Mode d'emploi des migrations et **tableau complet des droits** : qui peut lire et écrire quoi, colonne par colonne. |
+| [`db/migrations/`](db/migrations/) | 9 migrations numérotées + leurs 9 inverses. Le schéma d'origine est corrigé, jamais remplacé. |
+| [`db/outils/`](db/outils/) | `migrer.sh` (appliquer / annuler / état), `prevol.sql` (ce qui bloquerait sur une base contenant des données), `definir_mot_de_passe_app.sql`. |
+| [`db/tests/`](db/tests/) | Vérification **par exécution** : 44 protections, 52 habilitations, 4 contrôles de concurrence, aller-retour des migrations. |
+| [`db/tests/DERNIER_RESULTAT.md`](db/tests/DERNIER_RESULTAT.md) | Trace de la dernière exécution : **100 contrôles, 0 échec**, avec l'avant/après. |
+
+L'écart d'inventaire est désormais **calculé par la base** et la quantité
+attendue y est figée par déclencheur : ni l'un ni l'autre ne peut être forgé par
+un programme client. L'application ne se connecte plus en superutilisateur.
+
 ## Cycle 1 — maquette d'ergonomie (chantier C9)
 
 | Élément | Contenu |
