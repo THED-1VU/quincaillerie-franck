@@ -1,0 +1,314 @@
+/* =============================================================================
+   styles.css — mise en page et composants communs de la maquette.
+   Toutes les valeurs viennent de theme.css via var(--...). Aucune couleur ni
+   dimension « en dur » ici.
+   ============================================================================= */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--police);
+  font-size: var(--t-base);
+  line-height: var(--interligne);
+  color: var(--c-texte);
+  background: var(--c-fond);
+}
+
+h1, h2, h3 { margin: 0 0 var(--e-3); line-height: 1.25; }
+h1 { font-size: var(--t-lg); font-weight: var(--poids-fort); }
+h2 { font-size: var(--t-md); font-weight: var(--poids-demi); }
+h3 { font-size: var(--t-base); font-weight: var(--poids-demi); }
+p  { margin: 0 0 var(--e-3); }
+
+a { color: var(--c-primaire); }
+
+/* ---- Accessibilité : focus toujours visible ---- */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-anneau);
+  border-radius: var(--r-sm);
+}
+
+.saut-contenu {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--c-surface); color: var(--c-texte);
+  padding: var(--e-3) var(--e-4); border-radius: var(--r-md); z-index: 50;
+}
+.saut-contenu:focus { left: var(--e-3); }
+
+/* ---- Bandeau supérieur ---- */
+.bandeau {
+  display: flex; align-items: center; gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-bordure);
+}
+.bandeau__titre { font-size: var(--t-md); font-weight: var(--poids-demi); margin: 0; }
+.bandeau__marque {
+  font-weight: var(--poids-fort); color: var(--c-primaire);
+  white-space: nowrap;
+}
+.bandeau__pousse { margin-left: auto; }
+.bandeau__role {
+  font-size: var(--t-sm); color: var(--c-texte-doux);
+  background: var(--c-surface-2); padding: var(--e-1) var(--e-3);
+  border-radius: var(--r-plein);
+}
+
+/* ---- Conteneurs ---- */
+.page { min-height: 100dvh; display: flex; flex-direction: column; }
+.contenu {
+  width: 100%; max-width: var(--largeur-max);
+  margin: 0 auto; padding: var(--e-5) var(--e-4); flex: 1;
+}
+.contenu--etroit { max-width: var(--largeur-lecture); }
+
+/* ---- Cartes ---- */
+.carte {
+  background: var(--c-surface);
+  border: 1px solid var(--c-bordure);
+  border-radius: var(--r-lg);
+  padding: var(--e-5);
+  box-shadow: var(--ombre-1);
+}
+.carte + .carte { margin-top: var(--e-4); }
+.carte__titre { display: flex; align-items: baseline; gap: var(--e-3); }
+.carte__titre .lien-petit { margin-left: auto; font-size: var(--t-sm); }
+
+/* ---- Champs de formulaire ---- */
+.champ { display: block; margin-bottom: var(--e-4); }
+.champ__label {
+  display: block; font-weight: var(--poids-demi);
+  font-size: var(--t-sm); margin-bottom: var(--e-2); color: var(--c-texte);
+}
+.champ__saisie, .champ__select {
+  width: 100%; height: var(--champ-hauteur);
+  padding: 0 var(--e-3); font-size: var(--t-base); font-family: inherit;
+  color: var(--c-texte); background: var(--c-surface);
+  border: 1px solid var(--c-bordure); border-radius: var(--r-md);
+  transition: border-color var(--duree-rapide);
+}
+.champ__saisie:focus, .champ__select:focus { border-color: var(--c-primaire); }
+.champ__saisie--caisse { height: var(--champ-hauteur-caisse); font-size: var(--t-md); }
+.champ__aide { font-size: var(--t-xs); color: var(--c-texte-doux); margin-top: var(--e-2); }
+
+/* ---- Message d'erreur au plus près du champ ---- */
+.erreur-champ {
+  display: flex; gap: var(--e-2); align-items: flex-start;
+  margin-top: var(--e-2); padding: var(--e-2) var(--e-3);
+  background: var(--c-alerte-clair); color: var(--c-alerte);
+  border-left: 4px solid var(--c-alerte); border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+}
+.erreur-champ::before { content: "!"; font-weight: var(--poids-fort); }
+[hidden] { display: none !important; }
+
+/* ---- Boutons ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--e-2);
+  min-height: var(--cible-min); padding: var(--e-3) var(--e-5);
+  font-size: var(--t-base); font-family: inherit; font-weight: var(--poids-demi);
+  border: 1px solid transparent; border-radius: var(--r-md);
+  cursor: pointer; transition: background var(--duree-rapide), border-color var(--duree-rapide);
+}
+.btn--primaire { background: var(--c-primaire); color: var(--c-texte-inverse); }
+.btn--primaire:hover { background: var(--c-primaire-fonce); }
+.btn--secondaire {
+  background: var(--c-surface); color: var(--c-primaire);
+  border-color: var(--c-bordure-forte);
+}
+.btn--secondaire:hover { background: var(--c-primaire-clair); }
+.btn--fantome { background: transparent; color: var(--c-texte-doux); }
+.btn--fantome:hover { background: var(--c-surface-2); }
+.btn--large { width: 100%; }
+.btn--caisse { min-height: var(--champ-hauteur-caisse); font-size: var(--t-md); }
+.btn__raccourci {
+  font-size: var(--t-xs); font-weight: var(--poids-fort);
+  background: rgba(255,255,255,0.22); padding: 0 var(--e-2);
+  border-radius: var(--r-sm);
+}
+.btn--secondaire .btn__raccourci, .btn--fantome .btn__raccourci {
+  background: var(--c-surface-2); color: var(--c-texte-doux);
+}
+
+/* ---- Pastilles d'état ---- */
+.pastille {
+  display: inline-flex; align-items: center; gap: var(--e-2);
+  padding: var(--e-1) var(--e-3); border-radius: var(--r-plein);
+  font-size: var(--t-sm); font-weight: var(--poids-demi);
+}
+.pastille--ok      { background: var(--c-succes-clair); color: var(--c-succes); }
+.pastille--alerte  { background: var(--c-alerte-clair); color: var(--c-alerte); }
+.pastille--info    { background: var(--c-neutre-info-clair); color: var(--c-neutre-info); }
+.pastille--neutre  { background: var(--c-surface-2); color: var(--c-texte-doux); }
+.pastille__point { width: 10px; height: 10px; border-radius: var(--r-plein); background: currentColor; }
+
+/* ---- Tableaux ---- */
+.tableau { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
+.tableau th, .tableau td {
+  text-align: left; padding: var(--e-3);
+  border-bottom: 1px solid var(--c-bordure);
+}
+.tableau th { color: var(--c-texte-doux); font-weight: var(--poids-demi); }
+.tableau td.num, .tableau th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tableau tbody tr:nth-child(even) { background: var(--c-surface-2); }
+
+/* ---- Listes clé/valeur ---- */
+.kv { display: grid; grid-template-columns: 1fr auto; gap: var(--e-2) var(--e-4); }
+.kv dt { color: var(--c-texte-doux); font-size: var(--t-sm); }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- Barre d'aide raccourcis clavier (écran de caisse) ---- */
+.aide-clavier {
+  display: flex; flex-wrap: wrap; gap: var(--e-2) var(--e-4);
+  padding: var(--e-2) var(--e-4);
+  background: var(--c-surface-2); border-top: 1px solid var(--c-bordure);
+  font-size: var(--t-xs); color: var(--c-texte-doux);
+}
+.aide-clavier kbd {
+  font-family: inherit; font-weight: var(--poids-fort);
+  background: var(--c-surface); border: 1px solid var(--c-bordure);
+  border-radius: var(--r-sm); padding: 0 var(--e-2); color: var(--c-texte);
+}
+
+/* ---- Grille de l'écran de vente ---- */
+.vente {
+  display: grid; gap: var(--e-4);
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  align-items: start;
+}
+.vente__col { min-width: 0; }
+
+/* Zone de recherche + suggestions */
+.recherche { position: relative; }
+.suggestions {
+  list-style: none; margin: var(--e-2) 0 0; padding: 0;
+  border: 1px solid var(--c-bordure); border-radius: var(--r-md);
+  background: var(--c-surface); overflow: hidden;
+}
+.suggestions li {
+  padding: var(--e-3); cursor: pointer; display: flex; justify-content: space-between;
+  gap: var(--e-3); min-height: var(--cible-min); align-items: center;
+}
+.suggestions li[aria-selected="true"] { background: var(--c-primaire-clair); }
+.suggestions li .unite { color: var(--c-texte-doux); font-size: var(--t-sm); }
+
+/* Panier */
+.panier__ligne {
+  display: grid; gap: var(--e-2) var(--e-3);
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center; padding: var(--e-3) 0;
+  border-bottom: 1px solid var(--c-bordure);
+}
+.panier__nom { font-weight: var(--poids-demi); }
+.panier__mini {
+  width: 84px; height: var(--champ-hauteur); text-align: right;
+  padding: 0 var(--e-2); font-size: var(--t-base); font-family: inherit;
+  border: 1px solid var(--c-bordure); border-radius: var(--r-sm);
+  font-variant-numeric: tabular-nums;
+}
+.panier__sup {
+  border: none; background: transparent; color: var(--c-alerte);
+  font-size: var(--t-md); cursor: pointer; width: var(--cible-min); height: var(--cible-min);
+  border-radius: var(--r-sm);
+}
+.panier__sup:hover { background: var(--c-alerte-clair); }
+.panier__vide { color: var(--c-texte-doux); padding: var(--e-5) 0; text-align: center; }
+
+.total-ligne {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-top: var(--e-3);
+}
+.total-ligne--grand .montant { font-size: var(--t-xl); font-weight: var(--poids-fort); }
+.montant { font-variant-numeric: tabular-nums; }
+
+/* ---- Grille tableau de bord (mobile d'abord) ---- */
+.tb-grille { display: grid; gap: var(--e-4); grid-template-columns: 1fr; }
+.stat { display: flex; flex-direction: column; gap: var(--e-1); }
+.stat__valeur { font-size: var(--t-xl); font-weight: var(--poids-fort); font-variant-numeric: tabular-nums; }
+.stat__libelle { color: var(--c-texte-doux); font-size: var(--t-sm); }
+.liste-nue { list-style: none; margin: 0; padding: 0; }
+.liste-nue li {
+  display: flex; justify-content: space-between; gap: var(--e-3);
+  padding: var(--e-3) 0; border-bottom: 1px solid var(--c-bordure);
+}
+.actions-rapides { display: grid; gap: var(--e-3); grid-template-columns: 1fr 1fr; }
+
+/* ---- Écran d'inventaire à l'aveugle ---- */
+.compte-entete {
+  display: flex; flex-wrap: wrap; gap: var(--e-3); align-items: center;
+  margin-bottom: var(--e-4);
+}
+.compte-progression {
+  margin-left: auto; font-size: var(--t-sm); color: var(--c-texte-doux);
+}
+.compte-carte { text-align: center; }
+.compte-carte__nom { font-size: var(--t-md); font-weight: var(--poids-demi); }
+.compte-carte__unite { color: var(--c-texte-doux); margin-bottom: var(--e-4); }
+.compte-saisie {
+  width: 100%; max-width: 240px; margin: 0 auto var(--e-4);
+  height: 72px; font-size: var(--t-xl); text-align: center;
+  border: 2px solid var(--c-bordure-forte); border-radius: var(--r-lg);
+  font-variant-numeric: tabular-nums; font-family: inherit;
+}
+.compte-saisie:focus { border-color: var(--c-primaire); }
+.compte-nav { display: grid; gap: var(--e-3); grid-template-columns: 1fr 1fr; }
+.compte-note {
+  margin-top: var(--e-5); padding: var(--e-3) var(--e-4);
+  background: var(--c-neutre-info-clair); color: var(--c-neutre-info);
+  border-radius: var(--r-md); font-size: var(--t-sm);
+}
+
+/* ---- Bandeau de simulation ---- */
+.simu {
+  background: var(--c-attention-clair); color: var(--c-attention);
+  text-align: center; font-size: var(--t-xs); padding: var(--e-2) var(--e-3);
+  border-bottom: 1px solid var(--c-bordure);
+}
+
+/* ---- Index de la maquette ---- */
+.index-liste { display: grid; gap: var(--e-4); grid-template-columns: 1fr; }
+.index-liste a {
+  display: block; text-decoration: none; color: inherit;
+  padding: var(--e-5); border: 1px solid var(--c-bordure);
+  border-radius: var(--r-lg); background: var(--c-surface);
+}
+.index-liste a:hover { border-color: var(--c-primaire); background: var(--c-primaire-clair); }
+.index-liste strong { display: block; font-size: var(--t-md); margin-bottom: var(--e-1); color: var(--c-primaire); }
+
+/* =========================================================================
+   Points de rupture — mise en page « mobile d'abord » élargie vers le PC
+   ========================================================================= */
+
+/* Tablette et plus */
+@media (min-width: 700px) {
+  .tb-grille { grid-template-columns: 1fr 1fr; }
+  .index-liste { grid-template-columns: 1fr 1fr; }
+  .compte-nav { grid-template-columns: auto 1fr auto; }
+}
+
+/* PC de caisse 1366x768 et plus */
+@media (min-width: 1100px) {
+  .contenu { padding: var(--e-5); }
+  .tb-grille { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Sous 720px : l'écran de vente repasse en une seule colonne */
+@media (max-width: 719px) {
+  .vente { grid-template-columns: 1fr; }
+  .panier__ligne { grid-template-columns: 1fr auto auto; }
+  .actions-rapides { grid-template-columns: 1fr; }
+  .aide-clavier { display: none; } /* le clavier physique n'est pas le cas d'usage mobile */
+
+  /* Bandeau : on autorise le retour à la ligne pour éviter tout débordement */
+  .bandeau { flex-wrap: wrap; padding-left: var(--e-3); padding-right: var(--e-3); }
+  .bandeau__titre { font-size: var(--t-sm); flex-basis: 100%; order: 3; }
+  .bandeau__role { white-space: normal; font-size: var(--t-xs); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

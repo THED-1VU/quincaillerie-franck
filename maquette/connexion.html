@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connexion — Quincaillerie Franck</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Maquette — données simulées. Testez : <code>awa</code> / <code>franck</code> pour entrer, ou un mauvais mot de passe pour voir l'erreur.</div>
+<div class="page">
+  <main class="contenu contenu--etroit" style="display:flex; align-items:center; justify-content:center;">
+    <div class="carte" style="width:100%; max-width:420px;">
+      <h1 style="text-align:center;">Ets Quincaillerie Franck</h1>
+      <p style="text-align:center; color:var(--c-texte-doux); margin-bottom:var(--e-5);">Connexion à l'application de gestion</p>
+
+      <form id="form-connexion" novalidate>
+        <div class="champ">
+          <label class="champ__label" for="identifiant">Identifiant</label>
+          <input class="champ__saisie" id="identifiant" name="identifiant" type="text"
+                 autocomplete="username" autocapitalize="none" spellcheck="false" autofocus>
+        </div>
+
+        <div class="champ">
+          <label class="champ__label" for="motdepasse">Mot de passe</label>
+          <input class="champ__saisie" id="motdepasse" name="motdepasse" type="password"
+                 autocomplete="current-password">
+        </div>
+
+        <div id="zone-erreur" class="erreur-champ" hidden></div>
+
+        <button class="btn btn--primaire btn--large" type="submit" style="margin-top:var(--e-4);">
+          Se connecter
+        </button>
+      </form>
+
+      <p class="champ__aide" style="text-align:center; margin-top:var(--e-5);">
+        Mot de passe oublié&nbsp;: prévenez le responsable, il peut le réinitialiser.
+      </p>
+    </div>
+  </main>
+</div>
+
+<script src="donnees-simulees.js"></script>
+<script>
+  const form = document.getElementById("form-connexion");
+  const zoneErreur = document.getElementById("zone-erreur");
+
+  function montrerErreur(message) {
+    zoneErreur.textContent = message;
+    zoneErreur.hidden = false;
+    document.getElementById("motdepasse").focus();
+    document.getElementById("motdepasse").select();
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    zoneErreur.hidden = true;
+    const id = form.identifiant.value.trim();
+    const mdp = form.motdepasse.value;
+
+    if (!id && !mdp) { montrerErreur("Saisissez votre identifiant et votre mot de passe."); return; }
+    if (!id)  { montrerErreur("L'identifiant est vide."); document.getElementById("identifiant").focus(); return; }
+    if (!mdp) { montrerErreur("Le mot de passe est vide."); return; }
+
+    // Maquette : un seul couple accepté, aucune vérification réelle.
+    if (id.toLowerCase() === "awa" && mdp === "franck") {
+      window.location.href = "vente.html";
+    } else {
+      montrerErreur("Identifiant ou mot de passe incorrect. Après 5 essais, le compte se bloque : voyez le responsable.");
+    }
+  });
+</script>
+</body>
+</html>

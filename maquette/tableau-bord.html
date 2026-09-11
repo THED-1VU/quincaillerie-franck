@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tableau de bord — Quincaillerie Franck</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Maquette — données simulées. Vue responsable, conçue d'abord pour le téléphone (390&nbsp;px).</div>
+<div class="page">
+  <header class="bandeau">
+    <span class="bandeau__marque">Quincaillerie Franck</span>
+    <span class="bandeau__role bandeau__pousse" id="entete-role">Responsable</span>
+  </header>
+
+  <main class="contenu">
+    <h1>Aujourd'hui</h1>
+    <p style="color:var(--c-texte-doux); margin-top:calc(-1 * var(--e-2));" id="date-jour"></p>
+
+    <div class="tb-grille">
+
+      <section class="carte">
+        <h2>Ventes du jour</h2>
+        <div id="ventes-jour"></div>
+        <div class="total-ligne total-ligne--grand" style="margin-top:var(--e-4);">
+          <span>Total consolidé</span><span class="montant" id="ventes-total">—</span>
+        </div>
+      </section>
+
+      <section class="carte">
+        <div class="carte__titre">
+          <h2>Alertes de stock faible</h2>
+          <span class="pastille pastille--alerte" id="nb-alertes"><span class="pastille__point"></span>0</span>
+        </div>
+        <ul class="liste-nue" id="liste-alertes"></ul>
+      </section>
+
+      <section class="carte">
+        <div class="carte__titre">
+          <h2>Écarts d'inventaire du jour</h2>
+          <span class="pastille" id="etat-inventaire"></span>
+        </div>
+        <ul class="liste-nue" id="liste-ecarts"></ul>
+        <p class="champ__aide">Le comptage est fait à l'aveugle par l'agent stock. L'écart est calculé après validation.</p>
+      </section>
+
+      <section class="carte">
+        <h2>Saisie rapide</h2>
+        <p style="color:var(--c-texte-doux);">Enregistrer une opération de caisse hors vente.</p>
+        <div class="actions-rapides">
+          <button class="btn btn--primaire" type="button" onclick="ouvrir('recette')">+ Recette</button>
+          <button class="btn btn--secondaire" type="button" onclick="ouvrir('depense')">+ Dépense</button>
+        </div>
+        <div id="zone-saisie" class="erreur-champ" hidden
+             style="background:var(--c-neutre-info-clair); color:var(--c-neutre-info); border-color:var(--c-neutre-info);"></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script src="donnees-simulees.js"></script>
+<script>
+(function () {
+  "use strict";
+  const tb = DONNEES.tableauBord;
+  const $ = (id) => document.getElementById(id);
+
+  $("entete-role").textContent = DONNEES.session.role + " · " + DONNEES.session.nom;
+  $("date-jour").textContent = tb.date;
+
+  // Ventes du jour par site
+  const kv = document.createElement("dl");
+  kv.className = "kv";
+  let total = 0;
+  tb.ventesJour.forEach((v) => {
+    total += v.total;
+    const dt = document.createElement("dt");
+    dt.textContent = v.site + " (" + v.nbVentes + ")";
+    const dd = document.createElement("dd");
+    dd.textContent = fcfa(v.total);
+    kv.append(dt, dd);
+  });
+  $("ventes-jour").appendChild(kv);
+  $("ventes-total").textContent = fcfa(total);
+
+  // Alertes de stock
+  $("nb-alertes").innerHTML = '<span class="pastille__point"></span>' + tb.alertesStock.length;
+  const ulA = $("liste-alertes");
+  tb.alertesStock.forEach((a) => {
+    const li = document.createElement("li");
+    li.innerHTML = "<span>" + a.article + "<br><span style='color:var(--c-texte-doux); font-size:var(--t-xs);'>" + a.site + "</span></span>"
+      + "<span class='pastille pastille--alerte'>reste " + a.reste + " " + a.unite + "</span>";
+    ulA.appendChild(li);
+  });
+
+  // Écarts d'inventaire
+  const ulE = $("liste-ecarts");
+  const aucunEcart = tb.ecartsInventaire.every((e) => e.ecart === 0);
+  const etat = $("etat-inventaire");
+  if (aucunEcart) {
+    etat.className = "pastille pastille--ok";
+    etat.innerHTML = "<span class='pastille__point'></span>Tout concorde";
+  } else {
+    etat.className = "pastille pastille--alerte";
+    etat.innerHTML = "<span class='pastille__point'></span>Écarts à examiner";
+  }
+  tb.ecartsInventaire.forEach((e) => {
+    const li = document.createElement("li");
+    const signe = e.ecart > 0 ? "+" + e.ecart : e.ecart;
+    const classe = e.ecart === 0 ? "pastille--ok" : "pastille--alerte";
+    li.innerHTML = "<span>" + e.article + "<br><span style='color:var(--c-texte-doux); font-size:var(--t-xs);'>" + e.site + " · " + e.moment + "</span></span>"
+      + "<span class='pastille " + classe + "'>écart " + signe + "</span>";
+    ulE.appendChild(li);
+  });
+})();
+
+function ouvrir(type) {
+  const z = document.getElementById("zone-saisie");
+  z.hidden = false;
+  z.textContent = (type === "recette" ? "Saisie d'une recette" : "Saisie d'une dépense")
+    + " : l'écran dédié (montant, description, site, date) sera câblé dans un cycle ultérieur.";
+}
+</script>
+</body>
+</html>

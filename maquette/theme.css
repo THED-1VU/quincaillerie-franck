@@ -1,0 +1,80 @@
+/* =============================================================================
+   theme.css — SOURCE UNIQUE des jetons de design (maquette Quincaillerie Franck)
+   -----------------------------------------------------------------------------
+   Couleurs, tailles de texte, espacements, rayons, ombres : définis ICI, une
+   seule fois. Aucun écran ni composant n'a le droit d'écrire une couleur ou une
+   dimension « en dur » : tout passe par var(--...).
+   ============================================================================= */
+
+:root {
+  /* ---- Couleurs de base ---- */
+  --c-fond            : #f4f5f7;   /* fond d'application */
+  --c-surface         : #ffffff;   /* cartes, panneaux, champs */
+  --c-surface-2       : #eef0f3;   /* zones secondaires, lignes paires */
+  --c-bordure         : #c9ced6;   /* bordures de champs et de cartes */
+  --c-bordure-forte   : #9aa2ae;
+
+  --c-texte           : #1c2430;   /* texte principal */
+  --c-texte-doux      : #55607a;   /* texte secondaire, libellés */
+  --c-texte-inverse   : #ffffff;
+
+  /* ---- Couleur d'action principale ---- */
+  --c-primaire        : #1a5fb4;
+  --c-primaire-fonce  : #154c92;
+  --c-primaire-clair  : #e5eefb;
+
+  /* ---- États sémantiques ---- */
+  --c-succes          : #1c7c3c;
+  --c-succes-clair    : #e3f4e8;
+  --c-alerte          : #a8320a;   /* stock faible, erreurs, écart négatif */
+  --c-alerte-clair    : #fbe7e1;
+  --c-attention       : #8a5a00;   /* avertissements non bloquants */
+  --c-attention-clair : #fdf1dc;
+  --c-neutre-info     : #33566b;
+  --c-neutre-info-clair : #e6eef2;
+
+  /* ---- Typographie ---- */
+  --police  : "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --t-xs    : 0.8125rem;  /* 13px */
+  --t-sm    : 0.9375rem;  /* 15px */
+  --t-base  : 1.0625rem;  /* 17px — lecture confortable, utilisateurs non experts */
+  --t-md    : 1.25rem;    /* 20px */
+  --t-lg    : 1.625rem;   /* 26px */
+  --t-xl    : 2.125rem;   /* 34px — totaux, chiffres clés */
+  --poids-normal : 400;
+  --poids-demi   : 600;
+  --poids-fort   : 700;
+  --interligne   : 1.45;
+
+  /* ---- Espacements (échelle de 4) ---- */
+  --e-1 : 0.25rem;
+  --e-2 : 0.5rem;
+  --e-3 : 0.75rem;
+  --e-4 : 1rem;
+  --e-5 : 1.5rem;
+  --e-6 : 2rem;
+  --e-7 : 3rem;
+
+  /* ---- Rayons ---- */
+  --r-sm : 4px;
+  --r-md : 8px;
+  --r-lg : 14px;
+  --r-plein : 999px;
+
+  /* ---- Ombres ---- */
+  --ombre-1 : 0 1px 2px rgba(20, 30, 45, 0.10);
+  --ombre-2 : 0 4px 14px rgba(20, 30, 45, 0.12);
+
+  /* ---- Cibles tactiles / champs ---- */
+  --cible-min      : 44px;   /* hauteur minimale interactive sur mobile */
+  --champ-hauteur  : 48px;
+  --champ-hauteur-caisse : 52px;
+
+  /* ---- Conteneurs ---- */
+  --largeur-max    : 1280px;  /* jamais > 1300px (contrainte du cycle) */
+  --largeur-lecture: 760px;
+
+  /* ---- Divers ---- */
+  --focus-anneau : 0 0 0 3px var(--c-primaire-clair), 0 0 0 5px var(--c-primaire);
+  --duree-rapide : 120ms;
+}
