@@ -5,8 +5,14 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
 - Dernier cycle fusionné : **Cycle 1 — maquette du parcours (C9)**, 2026-09-11
-- Décision d'architecture : **application web unique servie sur le réseau local**
-  (PC de caisse au navigateur plein écran + téléphones). Pas de bureau PyQt6.
+- Décision d'architecture (précisée 2026-09-11) : **un seul code applicatif web**,
+  mais **livré et exécuté comme une application Windows (.exe)** sur les postes de
+  la boutique — l'exécutable embarque le serveur local et ouvre l'interface web en
+  plein écran / mode kiosque ; **aucune installation de Python sur les postes**,
+  double-clic comme aujourd'hui. Les **téléphones Android et iPhone** utilisent la
+  **même** application dans un navigateur (usage **et** suivi), via le réseau local
+  ou un tunnel. **Pas d'interface de bureau PyQt6** : le .exe est le véhicule de
+  livraison du PC, pas une seconde UI native.
 - Règle : un score ne monte que sur **preuve d'exécution réelle**.
 
 ---
@@ -15,7 +21,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 | Code | Chantier | Score | Base d'évaluation |
 |------|----------|:-----:|-------------------|
-| C0 | Infrastructure et dépôt | **10 %** | Dépôt Git + GitHub privé créés dans ce cycle de cadrage ; `.gitignore` en place. Pas encore de CI, pas de scripts de build, pas d'environnement reproductible, pas de migrations. |
+| C0 | Infrastructure et dépôt | **10 %** | Dépôt Git + GitHub privé créés dans ce cycle de cadrage ; `.gitignore` en place. Pas encore de CI, **pas de script de fabrication de l'exécutable Windows** (le livrable final est un `.exe` qui embarque le serveur web + le mode kiosque), pas d'environnement reproductible, pas de migrations. |
 | C1 | Base de données et intégrité | **35 %** | Évalué sur pièces (`creation_base_donnees.sql`). Structure et types corrects (NUMERIC partout, FK présentes, 2 tables d'audit, index de filtre). Mais quasi aucune règle d'intégrité défendue par la base : pas de CHECK de domaine, pas de trigger, `ecart` non calculé, pas de verrou anti-survente, cascades destructrices sur l'audit, connexion en superutilisateur, pas de RLS, pas de table de paramètres. Voir `MODELE_DONNEES.md` §4. |
 | C2 | Authentification et comptes | **0 %** | Non vérifié par exécution. Le schéma prévoit hash, `tentatives_echouees`, `doit_changer_mot_de_passe` ; aucun journal de connexion, aucune session/jeton, aucun audit de compte. |
 | C3 | Habilitations et cloisonnement des rôles | **0 %** | Non vérifié. CHECK sur `role`, `site_id` présent, mais pas de contrainte rôle↔site, pas de RLS, cloisonnement supposé uniquement applicatif (« masquer l'UI ne suffit pas »). Rôle « caissier » non tranché (addendum h). |
@@ -25,7 +31,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C7 | Inventaire et écarts | **0 %** | Non vérifié. `comptages_stock` + comptage à l'aveugle modélisés. `ecart` stocké et non contraint (faille anti-vol) ; pas d'unicité par créneau ; pas de rattachement des écarts de survente au comptage (addendum e). |
 | C8 | Tableaux de bord et rapports | **0 %** | Non vérifié. Exigés au CDC (consolidé/par site, alertes, exports Excel/PDF avec gating du prix par rôle) ; aucune preuve d'exécution. |
 | C9 | Ergonomie et UI *(priorité 1)* | **25 %** | Cycle 1. Maquette non câblée des 4 écrans clés (`maquette/`), thème unique, données simulées isolées. Vérifié par exécution : 20/20 captures aux 5 largeurs sans débordement, 0 erreur console, cibles ≥ 44 px, ajout au panier en 2 actions, comptage à l'aveugle sans quantité attendue dans la page (`maquette/verification/`, 14/14). **Plafonné à 60 %** tant que le tableau de mesures humaines de `UX_BASELINE.md` §4 n'est pas rempli (vitesse, compréhension des erreurs, clavier réel). Reste : implémentation réelle des écrans, câblage, mesures chronométrées. |
-| C10 | Mobile et API web *(priorité 1)* | **0 %** | Diagnostic : « Web API or mobile interface : Not found ». Aucune interface mobile dans le livré. Priorité n°2 du propriétaire non couverte. |
+| C10 | Mobile et API web *(priorité 1)* | **0 %** | Diagnostic : « Web API or mobile interface : Not found ». Aucune interface mobile dans le livré. Cible : **la même application web** ouverte dans le navigateur d'un **Android / iPhone**, pour **utiliser** (recettes, dépenses, inventaire) **et suivre** (tableau de bord, alertes, écarts), via LAN ou tunnel — jamais PostgreSQL exposé. Priorité n°2 du propriétaire, non couverte à ce jour. |
 | C11 | Sécurité applicative | **0 %** | Non vérifié (le « Sécurité : 100 % » du diagnostic est un artefact : mots-clés trouvés dans le script de diagnostic lui-même). Connexion superutilisateur, `secret_key` d'exemple, pas de RLS, cloisonnement non prouvé côté requêtes. |
 | C12 | Sauvegarde et exploitation | **0 %** | Diagnostic : « Backup and restore procedure : Not found ». Aucun script, aucune procédure. Onduleur, RPO/RTO, mise à jour des postes : à définir (addendum i). |
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
@@ -98,18 +104,48 @@ Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % sépar�
 - **Reste à faire (C9)** : implémenter les écrans réels et les câbler ; faire
   remplir le tableau de mesures humaines de `UX_BASELINE.md` §4.
 
+### Contrôle de boucle — après cycle 1 (2026-09-11, sans code)
+
+- **SKILL.md** : présent, décrit bien les 5 phases (Diagnostic → Objectif →
+  Action → Vérification → Mémoire).
+- **loop-state.md** : présent, liste les 15 chantiers `C0`–`C14` avec un score
+  chacun, entrée datée pour le cycle 1.
+- **Score C9 (25 %)** : adossé à des preuves versionnées — 8 fichiers source de
+  maquette, **20 captures** dans `maquette/captures/`, 2 scripts de vérification
+  rejouables, et `maquette/verification/DERNIER_RESULTAT.md` (trace 20/20 + 14/14).
+  Plafond 60 % maintenu (mesures humaines de `UX_BASELINE.md` §4 non faites).
+  Score jugé **cohérent**, non revu à la baisse.
+- **Git** : une seule branche (`main`), arbre propre, aucune branche orpheline,
+  PR #1 **fusionnée** puis branche supprimée, aucun fichier non suivi.
+- **.gitignore** : protège `config.ini` (y compris imbriqué), `*.exe`, `build/`,
+  `dist/`, `__pycache__/`, `*.log`, et les dumps/sauvegardes `.sql` de données
+  (`*dump*.sql`, `*backup*.sql`, `*sauvegarde*.sql`, `*_data.sql`, `*.dump`,
+  `*.backup`) — plus `node_modules/`, `.playwright-mcp/`.
+- **Secrets** : aucun mot de passe ni clé réels dans les fichiers suivis ;
+  `config.example.ini` ne contient que des placeholders explicites ; aucun `.exe`
+  versionné.
+- **Précision d'architecture enregistrée ce jour** : livrable final = **`.exe`
+  Windows embarquant le serveur web + mode kiosque** ; téléphones Android/iPhone
+  sur la **même** application web (usage + suivi). Descriptions C0 et C10 mises à
+  jour en conséquence.
+
+**Verdict : la boucle a bien tourné sur le cycle 1 — les 5 phases ont été
+parcourues, aucune n'a été sautée.** Seule faiblesse corrigée pendant ce
+contrôle : la sortie d'exécution n'était pas archivée dans le dépôt →
+`DERNIER_RESULTAT.md` ajouté.
+
 ---
 
 ## Prochain cycle — sélection
 
-1. **Contrôle de boucle** (sans code) : vérifier que le cycle 1 a bien parcouru
-   les 5 phases, que le score C9 est adossé à des preuves, et l'état de Git.
-2. **Cycle 2 — C1** : migration corrective du schéma (CHECK de domaine, `ecart`
+1. **Cycle 2 — C1** : migration corrective du schéma (CHECK de domaine, `ecart`
    calculé, `CHECK (quantite_stock >= 0)`, cascades d'audit en `RESTRICT`, table
    `parametres`, rôle applicatif non superutilisateur, tables d'audit
    manquantes). Prérequis : PostgreSQL disponible sur la machine.
-3. **Cycle 3 — C2 / C3 / C11** : noyau serveur (FastAPI en couches),
+2. **Cycle 3 — C2 / C3 / C11** : noyau serveur (FastAPI en couches),
    authentification, habilitations appliquées au niveau des requêtes SQL,
    cloisonnement par site, journalisation.
-4. **C0** — environnement reproductible (dépendances figées, CI minimale) :
-   à intégrer tôt, débloque la vérification automatisée des cycles suivants.
+3. **C0** — environnement reproductible + **script de fabrication du `.exe`**
+   (PyInstaller : serveur web + lanceur kiosque en un exécutable autonome),
+   dépendances figées, CI minimale : débloque la vérification automatisée et
+   la livraison réelle aux postes.

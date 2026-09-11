@@ -6,8 +6,14 @@ Dépôt de la reconstruction de l'application de gestion des **Ets Quincaillerie
 > **État : reconstruction, cycle 1 fusionné.** L'application d'origine a été livrée
 > uniquement en exécutables Windows ; le code source est introuvable. Le dépôt a
 > commencé par une phase de cadrage (rétro-spécifications, addendum), puis les
-> cycles de finalisation. **Architecture actée : application web unique servie sur
-> le réseau local** (PC de caisse + téléphones).
+> cycles de finalisation.
+>
+> **Architecture actée :** un seul code applicatif **web**, mais **livré et exécuté
+> comme une application Windows (`.exe`)** sur les postes de la boutique —
+> l'exécutable embarque le serveur local et ouvre l'interface en plein écran, sans
+> installation de Python. Les **téléphones Android / iPhone** ouvrent la **même**
+> application dans un navigateur, pour l'**usage** et le **suivi**, via le réseau
+> local ou un tunnel. Pas d'interface de bureau PyQt6.
 
 ## Documents de cadrage
 
