@@ -7,17 +7,62 @@ par migrations successives, jamais en le remplaçant.
 ```
 db/
 ├── migrations/   NNN_nom.sql + NNN_nom_inverse.sql, appliquées dans l'ordre
-├── outils/       migrer.sh, prevol.sql, definir_mot_de_passe_app.sql
+├── outils/       migrer.sh, prevol.sql, definir_mot_de_passe_app.sql,
+│                 demarrer_pg.ps1, arreter_pg.ps1
 └── tests/        vérification PAR EXÉCUTION (protections, habilitations, concurrence)
 ```
+
+---
+
+## Environnement de développement local (`_pgdev/`)
+
+Pour travailler sur ce projet, il n'est **pas nécessaire d'installer PostgreSQL**
+au sens habituel (pas de MSI, pas de droits administrateur, pas de service
+Windows). Deux scripts PowerShell suffisent :
+
+```powershell
+# Démarrer (télécharge et initialise tout seul la toute première fois)
+.\db\outils\demarrer_pg.ps1
+
+# Arrêter
+.\db\outils\arreter_pg.ps1
+```
+
+Ce que fait `demarrer_pg.ps1`, la première fois :
+
+1. télécharge PostgreSQL 17 en **binaires portables** (~330 Mo, une seule fois)
+   et les installe dans `_pgdev\pgsql\` ;
+2. initialise une base neuve dans `_pgdev\data\`, avec un mot de passe de
+   **développement local fixe** : `qf_dev_local` (utilisateur `postgres`) ;
+3. démarre le serveur sur `127.0.0.1:5433`.
+
+Les fois suivantes, il se contente de démarrer le serveur (idempotent : le
+relancer alors qu'il tourne déjà ne fait rien).
+
+**`_pgdev\` n'est jamais versionné** (voir `.gitignore`) : c'est un dossier de
+travail local, environ 1 Go, propre à chaque poste. Il peut être supprimé et
+recréé à tout moment en relançant `demarrer_pg.ps1` — c'est d'ailleurs le test
+de reproductibilité à faire de temps en temps.
+
+> **Pourquoi pas le dossier temporaire de Windows ?** Le tout premier
+> environnement de ce cycle avait été installé dans le dossier temporaire de la
+> session (`%TEMP%\...`), que Windows peut purger à tout moment (redémarrage,
+> nettoyage de disque). `_pgdev\` vit **dans le dépôt** (mais hors de Git) :
+> stable, à côté du code qui l'utilise.
+
+> **Mot de passe `qf_dev_local`.** C'est un mot de passe de développement
+> local, jamais transmis nulle part, propre à une base qui ne contient que des
+> données de test. Ce n'est pas le mot de passe de `qf_app` (voir plus bas), qui
+> lui protège les rôles applicatifs à privilèges restreints et **doit** être
+> choisi et gardé secret pour un déploiement réel.
 
 ---
 
 ## Appliquer les migrations
 
 ```bash
-export PGHOST=127.0.0.1 PGPORT=5432 PGUSER=postgres PGDATABASE=quincaillerie
-export PGPASSWORD=...            # jamais dans le dépôt
+export PGHOST=127.0.0.1 PGPORT=5433 PGUSER=postgres PGDATABASE=quincaillerie_test
+export PGPASSWORD=qf_dev_local   # dev local ; jamais un vrai secret dans le dépôt
 
 # 1. Sur une base contenant DÉJÀ des données : vérifier ce qui bloquerait
 psql -f db/outils/prevol.sql     # toute ligne avec nb_lignes > 0 est à traiter
@@ -31,6 +76,9 @@ db/outils/migrer.sh etat
 # 4. Revenir en arrière si besoin
 db/outils/migrer.sh annuler
 ```
+
+En déploiement réel, `PGPORT` est `5432` (le port par défaut de PostgreSQL) et
+`PGPASSWORD` est le vrai mot de passe du serveur — jamais celui ci-dessus.
 
 Chaque fichier est exécuté **dans une transaction unique** avec `ON_ERROR_STOP` :
 une migration passe en entier, ou pas du tout. La table `schema_migrations`
@@ -182,10 +230,18 @@ contre-passation) relève de l'**addendum, points b et g**.
 
 ## Tests — vérification par exécution
 
+```powershell
+.\db\outils\demarrer_pg.ps1   # si ce n'est pas déjà fait
+```
+
 ```bash
-export PGHOST=... PGPORT=... PGUSER=postgres PGPASSWORD=...
+export PGHOST=127.0.0.1 PGPORT=5433 PGUSER=postgres PGPASSWORD=qf_dev_local
+export PSQL="_pgdev/pgsql/bin/psql.exe" PG_DUMP="_pgdev/pgsql/bin/pg_dump.exe"
 bash db/tests/executer_tests.sh
 ```
+
+(sous Git Bash / WSL ; `PSQL` et `PG_DUMP` ne sont utiles que si les binaires ne
+sont pas dans le `PATH`, ce qui est le cas par défaut avec `_pgdev\`.)
 
 Le script recrée une base de test à partir du schéma d'origine, applique les
 migrations, puis enchaîne :
