@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Session réelle (cycle 5). Liste d'articles à compter <strong>simulée</strong> : la route <code>/articles</code> existante inclut la quantité en stock (légitime pour la gestion quotidienne), ce qui violerait le comptage <strong>à l'aveugle</strong> si on l'utilisait ici. Une route dédiée sans cette colonne reste à construire (chantier C7). Ce que le système escompte pour chaque article n'existe donc ni à l'écran ni dans le code de la page.</div>
+<div class="simu">Écran câblé (cycle 7) : la liste à compter et l'enregistrement de chaque comptage sont réels (<code>GET/POST /inventaire/...</code>). Ce que le système escompte pour chaque article n'existe toujours ni à l'écran, ni dans le code de la page, ni dans aucune réponse du serveur — c'est le principe même de la route.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Quincaillerie Franck</span>
@@ -18,28 +18,46 @@
   </header>
 
   <main class="contenu contenu--etroit">
-    <div class="compte-entete">
-      <div>
-        <h1 style="margin-bottom:var(--e-1);">Comptage <span id="moment"></span></h1>
-        <span style="color:var(--c-texte-doux);" id="site-date"></span>
+    <div class="champ" id="choix-moment" style="margin-bottom:var(--e-4);">
+      <label class="champ__label">Moment du comptage</label>
+      <div style="display:flex; gap:var(--e-2);">
+        <button class="btn" id="btn-matin" type="button" style="flex:1;">Matin</button>
+        <button class="btn" id="btn-soir" type="button" style="flex:1;">Soir</button>
       </div>
-      <span class="compte-progression" id="progression">1 / 5</span>
     </div>
 
-    <div class="carte compte-carte">
-      <div class="compte-carte__nom" id="art-nom">—</div>
-      <div class="compte-carte__unite" id="art-unite">—</div>
+    <div id="zone-erreur-liste" class="erreur-champ" hidden></div>
 
-      <label class="champ__label" for="saisie" style="text-align:center;">Quantité comptée</label>
-      <input class="compte-saisie" id="saisie" type="number" inputmode="numeric" min="0" step="1"
-             autocomplete="off" autofocus aria-describedby="aide-saisie">
-      <p class="champ__aide" id="aide-saisie">Comptez ce que vous voyez réellement, sans chercher à deviner un total « attendu ».</p>
-
-      <div class="compte-nav">
-        <button class="btn btn--fantome" id="btn-prec" type="button">Précédent</button>
-        <button class="btn btn--secondaire" id="btn-passer" type="button">Passer</button>
-        <button class="btn btn--primaire" id="btn-suivant" type="button">Suivant</button>
+    <div id="bloc-comptage">
+      <div class="compte-entete">
+        <div>
+          <h1 style="margin-bottom:var(--e-1);">Comptage <span id="moment-libelle"></span></h1>
+          <span style="color:var(--c-texte-doux);" id="site-date"></span>
+        </div>
+        <span class="compte-progression" id="progression">1 / 5</span>
       </div>
+
+      <div class="carte compte-carte">
+        <div class="compte-carte__nom" id="art-nom">—</div>
+        <div class="compte-carte__unite" id="art-unite">—</div>
+
+        <label class="champ__label" for="saisie" style="text-align:center;">Quantité comptée</label>
+        <input class="compte-saisie" id="saisie" type="number" inputmode="numeric" min="0" step="1"
+               autocomplete="off" autofocus aria-describedby="aide-saisie">
+        <p class="champ__aide" id="aide-saisie">Comptez ce que vous voyez réellement, sans chercher à deviner un total « attendu ».</p>
+        <div id="zone-erreur-saisie" class="erreur-champ" hidden></div>
+
+        <div class="compte-nav">
+          <button class="btn btn--fantome" id="btn-prec" type="button">Précédent</button>
+          <button class="btn btn--secondaire" id="btn-passer" type="button">Passer</button>
+          <button class="btn btn--primaire" id="btn-suivant" type="button">Suivant</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="zone-tout-compte" class="erreur-champ" hidden
+         style="background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);">
+      Tous les articles de ce site ont déjà un comptage enregistré pour ce moment, aujourd'hui.
     </div>
 
     <div id="zone-fin" class="erreur-champ" hidden
@@ -47,13 +65,12 @@
 
     <p class="compte-note">
       Vous ne verrez jamais la quantité que le système attend. Les écarts éventuels
-      seront calculés après validation et présentés au responsable.
+      sont calculés par le serveur après chaque comptage et présentés au responsable.
     </p>
   </main>
 </div>
 
 <script src="api.js"></script>
-<script src="donnees-simulees.js"></script>
 <script>
 (async function () {
   "use strict";
@@ -62,52 +79,123 @@
   const session = await exigerSession(["agent_stock"]);
   if (!session) return;
 
-  const inv = DONNEES.inventaire; // liste d'articles SIMULÉE — voir bandeau d'avertissement
   const $ = (id) => document.getElementById(id);
 
   $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
   $("bouton-deconnexion").addEventListener("click", deconnecter);
+  $("site-date").textContent = (session.site_id ? LIBELLE_SITE[session.site_id] : "—") + " · "
+    + new Date().toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-  // Saisies de l'agent uniquement. Aucune donnée « attendue » n'est chargée,
-  // ni depuis le serveur (aucun appel réseau ne la contient), ni dans ce
-  // fichier (donnees-simulees.js ne porte que id/nom/unité pour l'inventaire).
-  const saisies = new Array(inv.articles.length).fill(null);
+  // Par défaut, avant 13h -> matin, sinon soir. L'agent peut changer : ce
+  // n'est qu'une suggestion, pas une règle métier (aucune décision du
+  // propriétaire ne fixe l'heure de bascule).
+  let moment = new Date().getHours() < 13 ? "matin" : "soir";
+
+  let articles = [];
+  let saisies = [];   // { soumis: bool, valeur: number|null }
   let i = 0;
 
-  $("moment").textContent = inv.moment;
-  // Site réellement connecté (session), pas celui du jeu de données simulé.
-  $("site-date").textContent = (session.site_id ? LIBELLE_SITE[session.site_id] : inv.site) + " · " + inv.date;
+  function libelleMoment(m) { return m === "matin" ? "du matin" : "du soir"; }
+
+  function majBoutonsMoment() {
+    $("btn-matin").className = "btn " + (moment === "matin" ? "btn--primaire" : "btn--secondaire");
+    $("btn-soir").className  = "btn " + (moment === "soir"  ? "btn--primaire" : "btn--secondaire");
+  }
+
+  async function chargerListe() {
+    majBoutonsMoment();
+    $("zone-erreur-liste").hidden = true;
+    $("zone-fin").hidden = true;
+    $("zone-tout-compte").hidden = true;
+    $("moment-libelle").textContent = libelleMoment(moment);
+
+    let echecChargement = false;
+    try {
+      const donnees = await appelApi("/inventaire/articles-a-compter?moment=" + moment);
+      articles = donnees.articles;
+    } catch (erreur) {
+      articles = [];
+      echecChargement = true;
+      afficherErreurServeur("zone-erreur-liste", erreur);
+    }
+
+    saisies = articles.map(() => ({ soumis: false, valeur: null }));
+    i = 0;
+
+    if (articles.length === 0) {
+      $("bloc-comptage").hidden = true;
+      // Liste vide = tout est déjà compté (succès) ; une panne réseau a déjà
+      // son propre message dans zone-erreur-liste, pas la peine de le doubler.
+      if (!echecChargement) $("zone-tout-compte").hidden = false;
+    } else {
+      $("bloc-comptage").hidden = false;
+      afficher();
+    }
+  }
 
   function afficher() {
-    const a = inv.articles[i];
+    const a = articles[i];
+    const s = saisies[i];
     $("art-nom").textContent = a.nom;
     $("art-unite").textContent = "en " + a.unite;
-    $("progression").textContent = (i + 1) + " / " + inv.articles.length;
-    $("saisie").value = saisies[i] === null ? "" : saisies[i];
+    $("progression").textContent = (i + 1) + " / " + articles.length;
+    $("saisie").value = s.valeur === null ? "" : s.valeur;
+    $("saisie").disabled = s.soumis;
+    $("zone-erreur-saisie").hidden = true;
     $("btn-prec").disabled = (i === 0);
-    $("btn-suivant").textContent = (i === inv.articles.length - 1) ? "Terminer" : "Suivant";
-    $("saisie").focus();
-    $("saisie").select();
+    $("btn-passer").disabled = s.soumis;
+    $("btn-suivant").textContent = s.soumis
+      ? (i === articles.length - 1 ? "Terminer" : "Suivant")
+      : (i === articles.length - 1 ? "Enregistrer et terminer" : "Enregistrer et continuer");
+    if (!s.soumis) { $("saisie").focus(); $("saisie").select(); }
   }
 
-  function enregistrerSaisie() {
-    const v = $("saisie").value.trim();
-    saisies[i] = v === "" ? null : Math.max(0, parseInt(v, 10));
+  async function soumettre() {
+    const s = saisies[i];
+    if (s.soumis) return true; // déjà enregistré (ex. après "Précédent") : rien à refaire.
+
+    const brut = $("saisie").value.trim();
+    if (brut === "") return true; // rien saisi -> équivaut à "Passer" pour cet article.
+
+    const valeur = Math.max(0, parseInt(brut, 10));
+    try {
+      await appelApi("/inventaire/comptages", {
+        method: "POST",
+        body: JSON.stringify({ article_id: articles[i].id, moment, quantite_comptee: valeur }),
+      });
+      s.soumis = true;
+      s.valeur = valeur;
+      return true;
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-saisie", erreur);
+      return false;
+    }
   }
 
-  function suivant() {
-    enregistrerSaisie();
-    if (i < inv.articles.length - 1) { i++; afficher(); }
+  async function suivant() {
+    const ok = await soumettre();
+    if (!ok) return; // erreur affichée près du champ, on reste sur cet article.
+    if (i < articles.length - 1) { i++; afficher(); }
     else { terminer(); }
   }
-  function precedent() { enregistrerSaisie(); if (i > 0) { i--; afficher(); } }
-  function passer() { saisies[i] = null; if (i < inv.articles.length - 1) { i++; afficher(); } else { terminer(); } }
+
+  function precedent() {
+    if (i > 0) { i--; afficher(); }
+  }
+
+  function passer() {
+    saisies[i] = { soumis: false, valeur: null };
+    if (i < articles.length - 1) { i++; afficher(); }
+    else { terminer(); }
+  }
 
   function terminer() {
-    const faits = saisies.filter((s) => s !== null).length;
+    const faits = saisies.filter((s) => s.soumis).length;
+    $("bloc-comptage").hidden = true;
     $("zone-fin").hidden = false;
-    $("zone-fin").textContent = "SIMULATION — " + faits + " article(s) saisi(s) sur "
-      + inv.articles.length + " ; rien n'a été envoyé au serveur (chantier C7, route pas encore construite).";
+    $("zone-fin").textContent = faits + " article(s) enregistré(s) sur " + articles.length
+      + " pour le comptage " + libelleMoment(moment) + " de " + new Date().toLocaleDateString("fr-FR")
+      + ". Les écarts éventuels seront visibles par le responsable, jamais par vous ici.";
   }
 
   $("btn-suivant").addEventListener("click", suivant);
@@ -116,8 +204,10 @@
   $("saisie").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); suivant(); }
   });
+  $("btn-matin").addEventListener("click", () => { moment = "matin"; chargerListe(); });
+  $("btn-soir").addEventListener("click", () => { moment = "soir"; chargerListe(); });
 
-  afficher();
+  await chargerListe();
 })();
 </script>
 </body>

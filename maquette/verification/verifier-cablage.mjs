@@ -323,9 +323,11 @@ for (const largeur of LARGEURS) {
   const totalTexte = await page.textContent("#ventes-total");
   verifier(totalTexte.includes("11") && totalTexte.includes("700"), `responsable : total consolidé correct (lu : "${totalTexte}")`);
 
+  // Depuis le cycle 7, seule « Alertes de stock faible » reste simulée (C8) :
+  // les écarts d'inventaire et de vente sont désormais réels (C7).
   const cartesSimulees = await page.$$eval(".pastille--neutre", (els) => els.map((e) => e.textContent));
-  verifier(cartesSimulees.length === 2 && cartesSimulees.every((t) => t.includes("simulée")),
-    "tableau de bord : les 2 cartes non câblées sont explicitement marquées « donnée simulée »");
+  verifier(cartesSimulees.length === 1 && cartesSimulees.every((t) => t.includes("simulée")),
+    "tableau de bord : la seule carte non câblée restante est explicitement marquée « donnée simulée »");
 
   // Un agent qui tenterait cet écran est redirigé ailleurs (déjà prouvé pour
   // agent_stock plus haut) — ici on vérifie le sens inverse : le responsable

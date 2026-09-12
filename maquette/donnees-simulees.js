@@ -6,10 +6,11 @@
    serveur. Aucun écran ne doit inventer de donnée en dehors d'ici.
 
    RÈGLE MÉTIER RESPECTÉE ICI : le comptage d'inventaire est « à l'aveugle ».
-   La quantité attendue par le système N'EST PAS présente dans ce fichier, ni
-   nulle part côté page. Elle n'existe que côté serveur ; l'écart sera calculé
-   par la base (voir MODELE_DONNEES.md et le cycle C1). Ne PAS ajouter de champ
-   « quantite_attendue » dans DONNEES.inventaire.
+   La liste à compter (inventaire.html) et la synthèse des écarts
+   (tableau-bord.html) sont RÉELLES depuis le cycle 7 (chantier C7,
+   `/inventaire/...`) — ce fichier ne porte donc plus aucune donnée
+   d'inventaire, simulée ou non. La quantité attendue par le système n'a
+   jamais existé ici et n'existe toujours nulle part côté page.
    ============================================================================= */
 
 const DONNEES = {
@@ -51,41 +52,20 @@ const DONNEES = {
     { code: "autre",         libelle: "Autre" },
   ],
 
-  /* Tableau de bord responsable (mobile). Chiffres figés. */
+  /* Tableau de bord responsable (mobile). Seule "alertesStock" reste
+     simulée ici (chantier C8) : date et ventes du jour sont réelles depuis
+     le cycle 5, écarts réels depuis le cycle 7 — voir tableau-bord.html. */
   tableauBord: {
-    date: "mercredi 10 septembre 2026",
-    ventesJour: [
-      { site: "Comptoir", nbVentes: 14, total: 168500 },
-      { site: "Magasin de stock", nbVentes: 6, total: 240000 },
-    ],
     alertesStock: [
       { article: "Ciment CIM II 50 kg", site: "Magasin de stock", reste: 4, unite: "sac" },
       { article: "Peinture blanche 4 L", site: "Comptoir", reste: 2, unite: "bidon" },
       { article: "Disque à tronçonner 230", site: "Comptoir", reste: 3, unite: "pièce" },
     ],
-    /* Écarts d'inventaire du jour : la valeur est un RÉSULTAT déjà calculé côté
-       serveur, affiché au responsable après coup. Ce n'est pas le comptage
-       à l'aveugle lui-même. */
-    ecartsInventaire: [
-      { article: "Ciment CIM II 50 kg", site: "Magasin de stock", moment: "matin", ecart: -2 },
-      { article: "Robinet standard", site: "Comptoir", moment: "matin", ecart: 0 },
-    ],
+    // Les écarts d'inventaire ET les écarts de stock issus des ventes sont
+    // réels depuis le cycle 7 (/inventaire/ecarts, /inventaire/ecarts-ventes)
+    // — plus de donnée simulée ici pour eux.
   },
 
-  /* Écran de comptage à l'aveugle : UNIQUEMENT de quoi identifier l'article.
-     PAS de quantité attendue. PAS de stock. L'agent saisit ce qu'il compte. */
-  inventaire: {
-    site: "Magasin de stock",
-    moment: "matin",
-    date: "10 septembre 2026",
-    articles: [
-      { id: "ART-021", nom: "Ciment CIM II 50 kg", unite: "sac" },
-      { id: "ART-007", nom: "Fer à béton 8 mm",    unite: "barre" },
-      { id: "ART-052", nom: "Tuyau PVC 100 mm",    unite: "barre" },
-      { id: "ART-063", nom: "Colle à carrelage 25 kg", unite: "sac" },
-      { id: "ART-070", nom: "Disque à tronçonner 230", unite: "pièce" },
-    ],
-  },
 };
 
 /* Petit utilitaire d'affichage des montants en francs CFA (pas de sous-unité). */

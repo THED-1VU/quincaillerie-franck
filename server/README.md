@@ -2,9 +2,10 @@
 
 Chantiers **C2** (authentification), **C3** (habilitations au niveau des
 requêtes SQL), **C11** (sécurité applicative), **C0** (fabrication de
-l'exécutable Windows) et, depuis le cycle 6, **C5** (première route de
-vente). Les écrans (`maquette/`, servis sous `/app`) sont câblés depuis le
-cycle 5 — voir `RAPPORT AVANCEMENT/loop-state.md`.
+l'exécutable Windows), **C5** (ventes, depuis le cycle 6) et **C7**
+(inventaire et écarts, depuis le cycle 7). Les écrans (`maquette/`, servis
+sous `/app`) sont câblés depuis le cycle 5 — voir
+`RAPPORT AVANCEMENT/loop-state.md`.
 
 ```
 server/
@@ -21,7 +22,8 @@ server/
 │   └── routes/
 │       ├── auth.py         connexion, changer-mot-de-passe, déverrouillage
 │       ├── demonstration.py  articles, synthèse du jour, profil
-│       └── ventes.py         POST /ventes (chantier C5, cycle 6) + taux de TVA en vigueur
+│       ├── ventes.py         POST /ventes (chantier C5, cycle 6) + taux de TVA en vigueur
+│       └── inventaire.py     comptage à l'aveugle + écarts (chantier C7, cycle 7)
 ├── fabrication/           empaquetage en .exe (chantier C0) — voir plus bas
 └── tests/                 pytest — exécution réelle contre PostgreSQL
 ```
@@ -213,6 +215,58 @@ voir `db/tests/DERNIER_RESULTAT.md`).
 
 ---
 
+## Chantier C7 — inventaire et écarts (cycle 7)
+
+Le socle existait déjà en base depuis le cycle 2 (migration 003) :
+`comptages_stock.quantite_attendue` figée par déclencheur à partir du stock
+réel, `ecart` généré (`quantite_comptee - quantite_attendue`, non
+inscriptible), un seul comptage par article/moment/jour, immuable. Aucune
+route ne l'exposait avant ce cycle.
+
+| Route | Rôle requis | Ce qu'elle fait |
+|---|---|---|
+| `GET /inventaire/articles-a-compter?moment=matin\|soir` | agent stock, responsable | liste `{id, nom, unite}` du site — **aucune** quantité ; exclut les articles déjà comptés aujourd'hui pour ce moment |
+| `POST /inventaire/comptages` | agent stock, responsable | enregistre un comptage ; n'accepte que `article_id`/`moment`/`quantite_comptee`, ne renvoie que cela |
+| `GET /inventaire/ecarts` | responsable | comptages du jour dont l'écart est non nul |
+| `GET /inventaire/ecarts-ventes` | responsable | écarts de stock issus d'une vente à découvert (`ecarts_stock_ventes`, chantier C5) survenus aujourd'hui |
+
+### Défense en profondeur trouvée et corrigée — migration 012
+
+Diagnostic, avant d'écrire une route : `SET ROLE qf_agent_stock; SELECT
+ecart, quantite_attendue FROM comptages_stock;` était **accepté** par
+PostgreSQL. La migration 008 accordait un `SELECT` sans restriction de
+colonne à `qf_agent_stock` sur `comptages_stock` — jamais exploité, aucune
+route ne lisant ces colonnes pour ce rôle, mais la protection reposait sur
+une absence de code, pas sur la base. Corrigée par
+`db/migrations/012_comptage_aveugle_colonnes.sql`, exactement comme pour
+`articles.prix_vente` (cycle 2) : `GRANT SELECT (colonnes autorisées)`,
+sans `ecart` ni `quantite_attendue`. Revérifié par exécution après coup :
+la même requête est désormais refusée (`permission denied`).
+
+### Écran d'inventaire — un comptage est un fait, pas un brouillon
+
+`maquette/inventaire.html` soumet chaque comptage dès que l'agent avance
+(« Suivant »), jamais différé jusqu'à la fin de la liste : la base interdit
+toute modification d'un comptage déjà enregistré (migration 003), donc un
+flux « brouillon modifiable jusqu'au bout » aurait laissé croire à une
+correction possible qui n'existe pas. « Précédent » redevient une simple
+lecture d'un article déjà soumis (champ désactivé), jamais une réédition.
+
+### Tests — `server/tests/test_inventaire.py`, 9/9
+
+Liste à compter strictement limitée à `{id, nom, unite}` ; réponse d'un
+comptage strictement limitée à ce que le client a envoyé ; lecture directe
+de `ecart`/`quantite_attendue` refusée à l'agent stock (preuve la plus
+forte, hors API, comme `test_cloisonnement_site.py`) ; article déjà compté
+absent de la liste et second envoi refusé (409) ; comptage d'un article de
+l'autre site refusé (422) ; comptabilité totalement exclue (403) ; écarts
+réservés au responsable, avec une valeur d'écart vérifiée à la main
+(30 en stock, 22 comptés → **-8**) ; un écart de vente à découvert
+(chantier C5) retrouvé tel quel dans `/inventaire/ecarts-ventes`. Suite
+complète : **53/53** (44 héritées + 9 nouvelles).
+
+---
+
 ## Chantier C11 — sécurité applicative
 
 - **Jamais de connexion superutilisateur** : `config.py` refuse `user =
@@ -268,8 +322,9 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 | `test_cloisonnement_site.py` | un site fourni en paramètre est ignoré ; **RLS bloquée en SQL direct**, hors API |
 | `test_securite.py` | aucun hachage ne fuit, config refuse superutilisateur/clé d'exemple, injection SQL neutralisée, jetons expirés/falsifiés/mal signés refusés |
 | `test_ventes.py` | TVA calculée à la main et comparée, vente à découvert jamais refusée (écart consigné), crédit client refusé, cloisonnement par rôle/site sur une route d'ÉCRITURE |
+| `test_inventaire.py` | liste à compter sans aucune quantité, réponse d'un comptage limitée à ce qui a été envoyé, **lecture de `ecart` refusée en SQL direct**, article déjà compté exclu, écarts réservés au responsable et exacts |
 
-Dernier résultat : **44/44**, trace complète dans
+Dernier résultat : **53/53**, trace complète dans
 [`tests/DERNIER_RESULTAT.md`](tests/DERNIER_RESULTAT.md).
 
 ### Piège à éviter en écrivant un test (Windows)

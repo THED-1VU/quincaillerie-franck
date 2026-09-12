@@ -17,11 +17,17 @@ non câblée (`maquette/`).
 > ils parlent réellement au serveur (connexion, jeton, `/articles`,
 > `/ventes/synthese-jour`). Le protocole ci-dessous peut donc désormais
 > s'exécuter **pour de vrai**, avec de vrais comptes, et pas seulement sur
-> `maquette/` servie à part. Voir §1 bis pour le démarrage exact. Ce qui reste
-> simulé (validation d'une vente, alertes de stock, écarts d'inventaire,
-> liste d'articles à compter) est signalé explicitement à l'écran — le
-> testeur humain doit considérer ces messages « SIMULATION » ou « donnée
-> simulée » comme la confirmation attendue, pas comme un bug.
+> `maquette/` servie à part. Voir §1 bis pour le démarrage exact.
+>
+> **Mise à jour cycle 6 :** la validation d'une vente est désormais réelle
+> (`POST /ventes`, TVA calculée par le serveur).
+>
+> **Mise à jour cycle 7 :** la liste d'articles à compter, l'enregistrement
+> d'un comptage et les écarts affichés au tableau de bord (comptage **et**
+> vente à découvert) sont désormais réels. Seule « Alertes de stock faible »
+> reste simulée (chantier C8), signalée explicitement à l'écran — le testeur
+> humain doit considérer cette pastille « donnée simulée » comme la
+> confirmation attendue, pas comme un bug.
 
 ---
 
@@ -183,6 +189,29 @@ Preuve : `maquette/verification/verifier-cablage.mjs` (73 contrôles, 0 échec),
 par un humain, chronomètre en main — la vitesse, la compréhension des messages
 par une personne non formée, et le confort réel sur un téléphone physique.
 Le tableau du §4 reste donc la seule voie pour lever le plafond de 60 %.
+
+---
+
+## 3 ter. Ce que les cycles 6 et 7 ajoutent (ventes et inventaire réels)
+
+Preuves : `maquette/verification/verifier-vente-reelle.mjs` (10 contrôles),
+`verifier-inventaire-reel.mjs` (12 contrôles), tous deux 0 échec.
+
+| Critère de sortie | Résultat |
+|---|---|
+| Validation d'une vente réelle (numéro renvoyé par le serveur, plus de « SIMULATION ») | **OK** (cycle 6) |
+| Aperçu du total affiché AVANT validation identique à la confirmation serveur | **OK** — un bug d'arrondi trouvé et corrigé pendant le cycle 6 |
+| Vente à découvert de stock acceptée (jamais un refus), écart signalé à l'écran | **OK** (cycle 6) |
+| Liste à compter sans aucune quantité de stock | **OK** (cycle 7) |
+| Comptage enregistré : quantité attendue absente de la page, du réseau et du code source, même après un écart réel | **OK** (cycle 7) — même contrôle qu'au cycle 5, rejoué sur la vraie route d'écriture |
+| Article déjà compté aujourd'hui disparaît de la liste au rechargement | **OK** (cycle 7) |
+| Écarts d'inventaire ET écarts de vente à découvert affichés au tableau de bord, valeurs exactes | **OK** (cycle 7) |
+| Aucune régression sur la suite automatisée du serveur | **OK** — 53/53 |
+
+**Ce que ces cycles NE prouvent toujours pas** : comme pour le cycle 5, la
+vitesse et la compréhension par un humain non formé, en particulier le
+parcours de comptage au téléphone (Étape F du §2) — le tableau du §4 reste
+la seule voie pour lever le plafond de 60 %.
 
 ---
 

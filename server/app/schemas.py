@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -77,3 +77,26 @@ class ReponseVente(BaseModel):
     montant_tva: float
     total_ttc: float
     ecarts: List[LigneEcartReponse]
+
+
+class DemandeComptage(BaseModel):
+    """Un comptage à l'aveugle : SEULE la quantité comptée vient du client.
+
+    ``quantite_attendue`` n'existe même pas comme champ ici — l'envoyer
+    n'aurait de toute façon aucun effet (figée par la base, migration 003),
+    mais elle est absente du modèle pour qu'aucun code ne puisse même
+    l'écrire par erreur."""
+
+    article_id: int
+    moment: Literal["matin", "soir"]
+    quantite_comptee: int = Field(ge=0)
+
+
+class ReponseComptage(BaseModel):
+    """Ne renvoie JAMAIS quantite_attendue ni ecart — voir
+    server/app/routes/inventaire.py."""
+
+    comptage_id: int
+    article_id: int
+    moment: str
+    quantite_comptee: int
