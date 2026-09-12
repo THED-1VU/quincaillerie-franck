@@ -250,3 +250,30 @@ Toutes les étapes sont passées.
 ```
 
 **100 contrôles exécutés, 0 échec.**
+
+---
+
+## Cycle 7 — chantier C7 (inventaire et écarts), 2026-09-12
+
+Migrations 000 à **012** (`012_comptage_aveugle_colonnes.sql`) : retire le
+`SELECT` sans restriction de colonne accordé à `qf_agent_stock` sur
+`comptages_stock` (migration 008) — `ecart` et `quantite_attendue`
+désormais illisibles pour ce rôle, comme les prix d'`articles`. Aucun
+fichier de test SQL à modifier : ni `01_protections.sql` (exécuté comme
+superutilisateur, jamais affecté par un `GRANT`), ni `02_habilitations.sql`
+(le seul comptage y est un `INSERT`, jamais un `SELECT` de ces colonnes).
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 012) : OK
+>>> jeu d'essai chargé             : OK
+>>> protections                    : OK   (44/44)
+>>> habilitations                  : OK   (52/52)
+>>> concurrence                    : OK   (6/6)
+>>> aller / retour des migrations  : OK
+Toutes les étapes sont passées.
+```
+
+**100 contrôles exécutés, 0 échec** — inchangé, migration 012 vérifiée
+séparément par `server/tests/test_inventaire.py` (voir
+`server/tests/DERNIER_RESULTAT.md`).

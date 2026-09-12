@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Cycle 6 (chantier C5) : l'écran de vente enregistre désormais de vraies ventes (<code>POST /ventes</code>). Voir la bannière de chaque écran pour ce qui reste simulé.</div>
+<div class="simu">Cycle 7 (chantier C7) : le comptage d'inventaire à l'aveugle et les écarts (comptage et ventes) sont désormais réels. Voir la bannière de chaque écran pour ce qui reste simulé.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Ets Quincaillerie Franck</span>
@@ -29,11 +29,11 @@
       </a>
       <a href="tableau-bord.html">
         <strong>3. Tableau de bord responsable (téléphone)</strong>
-        Ventes du jour réelles (<code>GET /ventes/synthese-jour</code>). Alertes et écarts encore simulés. Conçu pour 390&nbsp;px.
+        Ventes du jour, écarts d'inventaire et écarts de stock (ventes) réels. Seules les alertes de stock faible restent simulées (chantier C8). Conçu pour 390&nbsp;px.
       </a>
       <a href="inventaire.html">
         <strong>4. Comptage d'inventaire à l'aveugle</strong>
-        Session réelle ; liste d'articles simulée à dessein (éviter toute fuite de la quantité attendue). Utilisable au téléphone, une main.
+        Liste à compter et enregistrement réels (<code>/inventaire/...</code>). La quantité attendue n'atteint toujours jamais le navigateur. Utilisable au téléphone, une main.
       </a>
     </nav>
   </main>

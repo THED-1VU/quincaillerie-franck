@@ -4,7 +4,7 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 6 — première route de vente, C5**, 2026-09-12
+- Dernier cycle fusionné : **Cycle 7 — inventaire et écarts, C7**, 2026-09-12
 - Décision d'architecture (précisée 2026-09-11) : **un seul code applicatif web**,
   mais **livré et exécuté comme une application Windows (.exe)** sur les postes de
   la boutique — l'exécutable embarque le serveur local et ouvre l'interface web en
@@ -28,7 +28,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C4 | Articles et stock | **0 %** | Non vérifié. Règle des 20 %, seuil non modifiable, mouvements tracés : présents au CDC, absents de la base (défaut `seuil_alerte = 5`, aucun trigger). Pas de transfert inter-sites (addendum a), pas de retours/casse (addendum f). |
 | C5 | Ventes et facturation | **40 %** | Cycle 6. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` (`server/app/routes/ventes.py`) enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. Vérifié par exécution : 8/8 tests pytest dédiés (44/44 au total, 0 régression), suite SQL du cycle 2 rejouée à jour (44/44 protections, 52/52 habilitations, **6/6 concurrence — réécrite pour le nouveau comportement anti-survente**, réversibilité des migrations confirmée), et 10/10 contrôles Playwright bout-en-bout sur l'écran de vente réellement câblé (`verifier-vente-reelle.mjs`) : vente normale (aperçu affiché AVANT validation identique à la confirmation serveur), vente à découvert acceptée avec écart affiché, crédit client absent des choix, responsable contraint de choisir un site. Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), annulation d'une vente, régularisation d'un écart, documents imprimés (ticket/facture), écarts de stock pas encore affichés au tableau de bord (prévu chantier C7). |
 | C6 | Comptabilité et RH | **0 %** | Non vérifié. `transactions`, `employes`, `absences_conges`, `avances_salaire` présents. Manquent : clôture de caisse (addendum g), contre-passation d'annulation, `transactions.vente_id` non unique, audit des corrections. |
-| C7 | Inventaire et écarts | **0 %** | Non vérifié. `comptages_stock` + comptage à l'aveugle modélisés. `ecart` stocké et non contraint (faille anti-vol) ; pas d'unicité par créneau ; pas de rattachement des écarts de survente au comptage (addendum e). |
+| C7 | Inventaire et écarts | **45 %** | Cycle 7. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 9/9 tests pytest dédiés (53/53 au total, 0 régression), 12/12 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel. Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
 | C8 | Tableaux de bord et rapports | **0 %** | Non vérifié. Exigés au CDC (consolidé/par site, alertes, exports Excel/PDF avec gating du prix par rôle) ; aucune preuve d'exécution. |
 | C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
 | C10 | Mobile et API web *(priorité 1)* | **30 %** | Cycle 5. Les deux écrans mobile-first (tableau de bord responsable, comptage d'inventaire) sont désormais **la même application web**, session réelle, testée et capturée à 360/390/768 px avec de vrais comptes — première preuve d'exécution sur ce chantier (`verifier-cablage.mjs`). Reste : accès démontré depuis un **téléphone physique** sur le LAN ou via tunnel (seules des largeurs de navigateur ont été testées ici, pas un appareil réel), API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
@@ -37,7 +37,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après cycle 6 : ≈ 32 %** (C0 55, C1 80, C2 65, C3 60, C5 40, C9 50, C10 30, C11 55, C14 40, autres 0).
+**Moyenne indicative après cycle 7 : ≈ 35 %** (C0 55, C1 80, C2 65, C3 60, C5 40, C7 45, C9 50, C10 30, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -514,22 +514,116 @@ contrôle : la sortie d'exécution n'était pas archivée dans le dépôt →
 
 ---
 
+### Cycle 7 — Inventaire et écarts : C7 — 2026-09-12
+
+- **Phase 1 — Diagnostic** : C7 était à 0 % — le socle existait déjà en
+  base depuis le cycle 2 (`comptages_stock`, `ecart` généré, `quantite_
+  attendue` figée par déclencheur, un seul comptage par article/moment/jour,
+  immuable) mais n'était exposé par aucune route ; `inventaire.html` restait
+  simulé (décision explicite du cycle 5, faute de route dédiée) et le
+  tableau de bord n'affichait aucun écart réel. Avant d'écrire une route,
+  vérification par exécution : sous `qf_agent_stock`, `SELECT ecart,
+  quantite_attendue FROM comptages_stock` était **accepté** — la migration
+  008 accordait un `SELECT` sans restriction de colonne, contrairement à ce
+  qui avait été fait pour les prix d'`articles`.
+- **Phase 2 — Objectif** : câbler le comptage à l'aveugle et les écarts sans
+  attendre aucune décision du propriétaire (chantier indépendant des points
+  encore ouverts). Critère de sortie : liste à compter sans aucune quantité,
+  quantité attendue absente de l'écran/réseau/code source même après un
+  comptage réel produisant un écart, écarts de comptage ET de vente à
+  découvert visibles au tableau de bord du seul responsable — le tout
+  prouvé par exécution, sans régression.
+- **Phase 3 — Action** : branche `cycle-7-inventaire-ecarts`.
+  - `db/migrations/012_comptage_aveugle_colonnes.sql` (+ inverse) : retire
+    le `SELECT` sans restriction sur `comptages_stock` pour `qf_agent_stock`,
+    le remplace par une liste de colonnes excluant `ecart` et `quantite_
+    attendue` — défense en profondeur, la base protège même si une route
+    future oubliait de filtrer.
+  - `server/app/routes/inventaire.py` (nouveau) : `GET /inventaire/
+    articles-a-compter` (liste par site, exclut les articles déjà comptés
+    aujourd'hui pour le moment demandé), `POST /inventaire/comptages`
+    (n'accepte que `article_id`/`moment`/`quantite_comptee`, ne renvoie que
+    cela), `GET /inventaire/ecarts` et `GET /inventaire/ecarts-ventes`
+    (réservées au responsable).
+  - `maquette/inventaire.html` : réécrit pour consommer les routes
+    ci-dessus. Chaque article est soumis dès qu'on avance (« Suivant »),
+    jamais différé jusqu'à la fin : un comptage est un fait immuable
+    (migration 003), une saisie « en brouillon modifiable jusqu'au bout »
+    aurait été trompeuse. « Précédent » redevient un simple retour en
+    lecture sur un article déjà soumis. Choix du moment (matin/soir) ajouté
+    à l'écran, présélectionné selon l'heure.
+  - `maquette/tableau-bord.html` : cartes « Écarts d'inventaire du jour » et
+    nouvelle « Écarts de stock (ventes) » câblées sur les deux routes de
+    lecture ; seule « Alertes de stock faible » reste simulée (C8).
+- **Phase 4 — Vérification par exécution réelle** :
+  - Fonction/politiques testées en SQL direct avant tout code Python (comme
+    aux cycles 3 et 6) : après la migration 012, `SELECT ecart FROM
+    comptages_stock` sous `qf_agent_stock` est refusé (`permission denied`) ;
+    les colonnes autorisées restent lisibles ; l'INSERT normal fonctionne
+    toujours ; compter l'article d'un autre site échoue proprement (« introuvable »,
+    la RLS d'`articles` rend l'article invisible au déclencheur) ; un second
+    comptage du même article/moment/jour est rejeté par la contrainte
+    d'unicité.
+  - **9/9 tests pytest dédiés** (`test_inventaire.py`) : liste à compter
+    strictement limitée à `{id, nom, unite}` ; réponse d'un comptage
+    strictement limitée à ce que le client a envoyé ; lecture directe de
+    `ecart`/`quantite_attendue` refusée à l'agent stock (preuve la plus
+    forte, hors API) ; article déjà compté absent de la liste et second
+    envoi refusé (409) ; comptage d'un article de l'autre site refusé
+    (422) ; comptabilité totalement exclue de l'inventaire (403) ; écarts
+    réservés au responsable, avec un écart de comptage réel vérifié
+    (30 en stock, 22 comptés → écart **-8**, valeur exacte) ; un écart de
+    vente à découvert (chantier C5) retrouvé tel quel dans `/inventaire/
+    ecarts-ventes`, prouvant que C5 et C7 se relient correctement.
+    **Suite complète : 53/53, 0 régression.**
+  - Suite SQL du cycle 2 rejouée en entier : protections **44/44**,
+    habilitations **52/52**, concurrence **6/6**, réversibilité des
+    migrations 000-012 confirmée.
+  - **12/12 contrôles Playwright** sur les écrans réels
+    (`verifier-inventaire-reel.mjs`, nouveau) : liste à compter réelle
+    affichée, comptage produisant un écart de -8 sans que « quantité
+    attendue » n'apparaisse dans la page, le code source ou les 3 réponses
+    réseau observées après rechargement ; article compté absent de la liste
+    au rechargement ; tableau de bord affichant l'écart de comptage exact
+    (-8) et l'écart de vente à découvert exact (manque 2), les deux
+    invisibles avant ce cycle.
+  - Non-régression des cycles précédents : `verifier-cablage.mjs` (cycle 5)
+    et `verifier-vente-reelle.mjs` (cycle 6) rejoués à jour — **74/74** et
+    **10/10**.
+- **Bugs/faille trouvés PAR l'exécution et corrigés pendant le cycle** :
+  1. **Faille de confidentialité, présente depuis le cycle 2** : `qf_agent_stock`
+     pouvait lire `ecart` et `quantite_attendue` de `comptages_stock` en SQL
+     direct — jamais exploitée par une route (aucune n'existait), mais la
+     protection reposait sur une absence de code, pas sur la base. Corrigée
+     par la migration 012, sur le même principe que les prix d'`articles`.
+  2. Le test Playwright combinant deux connexions successives dans le même
+     contexte navigateur échouait (`connexion.html` redirige immédiatement
+     si une session valide existe déjà, empêchant même l'affichage du
+     formulaire) — corrigé en isolant chaque rôle dans son propre contexte,
+     comme le fait déjà `verifier-cablage.mjs`.
+- **Phase 5 — Mémoire** : C7 **0 % → 45 %**. Commit, PR, fusion.
+- **Reste à faire (C7)** : régularisation d'un écart (qui a le droit, addendum
+  point e question 3, non tranché) ; plafond de vraisemblance sur une
+  quantité comptée ; historique des écarts au-delà du jour courant ; export
+  ou rapport imprimable ; lien explicite entre un écart de vente à découvert
+  et le prochain comptage (la donnée existe dans `ecarts_stock_ventes`, le
+  rapprochement automatique reste à construire).
+
+---
+
 ## Prochain cycle — proposition (non démarré, choix laissé au propriétaire)
 
-1. **C7 (inventaire et écarts)** : indépendant des points a/c/f encore
-   ouverts. Permettrait de construire la route dédiée au comptage à
-   l'aveugle (sans quantité en stock, remplaçant les données simulées
-   d'`inventaire.html`), et de brancher au tableau de bord à la fois les
-   écarts de comptage ET les écarts de stock issus des ventes à découvert
-   (`ecarts_stock_ventes`, nouveau ce cycle) — aujourd'hui simulés ou
-   invisibles.
-2. **C4 (articles/stock)** : nécessite au préalable les décisions du
+1. **C4 (articles/stock)** : nécessite au préalable les décisions du
    propriétaire sur les points a (transfert inter-sites) et f (retours,
    casse, remises, unités) — sans elles, une route de mouvement de stock
    exposée inventerait une règle métier.
-3. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
+2. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
    développement — un testeur humain, chronomètre en main, sur le serveur
-   désormais câblé pour de vrai jusqu'à l'enregistrement d'une vente
-   (protocole exact au §1 bis). Lèverait le plafond de 60 % sur C9 et C10 si
-   les résultats sont conformes. Peut se faire à tout moment, en parallèle
-   d'un autre cycle.
+   désormais câblé pour de vrai jusqu'au comptage d'inventaire (protocole
+   exact au §1 bis). Lèverait le plafond de 60 % sur C9 et C10 si les
+   résultats sont conformes. Peut se faire à tout moment, en parallèle d'un
+   autre cycle.
+3. **C6 (comptabilité/RH)** ou **C8 (tableaux de bord)** : les deux restent
+   entièrement à 0 %, sans blocage connu par une décision non tranchée —
+   candidats raisonnables si le propriétaire préfère avancer sur un
+   chantier neuf plutôt que d'attendre les décisions de C4.

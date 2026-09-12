@@ -9,6 +9,65 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 7 — chantier C7 (inventaire et écarts), 2026-09-12
+
+Migrations 000 à **012** appliquées (nouvelle :
+`012_comptage_aveugle_colonnes.sql`).
+
+### `test_inventaire.py` — nouveau, 9/9
+
+```
+test_liste_a_compter_ne_contient_aucune_quantite PASSED
+test_comptage_ne_renvoie_jamais_quantite_attendue_ni_ecart PASSED
+test_agent_stock_ne_peut_pas_lire_ecart_en_sql_direct[ecart] PASSED
+test_agent_stock_ne_peut_pas_lire_ecart_en_sql_direct[quantite_attendue] PASSED
+test_article_deja_compte_disparait_de_la_liste_et_refuse_un_second_envoi PASSED
+test_agent_stock_ne_peut_pas_compter_un_article_de_lautre_site PASSED
+test_agent_comptabilite_interdit_sur_linventaire PASSED
+test_ecarts_du_jour_reserves_au_responsable PASSED
+test_ecarts_ventes_du_jour_relie_c5_et_c7 PASSED
+```
+
+Point le plus important, prouvé par exécution : **avant** la migration 012,
+`SET ROLE qf_agent_stock; SELECT ecart, quantite_attendue FROM
+comptages_stock;` était accepté par PostgreSQL — jamais exploité par aucune
+route, mais une faille de confidentialité réelle. Après la migration :
+`ERROR: permission denied for table comptages_stock`.
+
+### Suite complète — 53/53, 0 régression
+
+```
+53 passed in ~71s
+```
+
+### Non-régression SQL du cycle 2, rejouée à jour (`db/tests/executer_tests.sh`)
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 012) : OK
+>>> jeu d'essai chargé : OK
+>>> protections   : OK   (44/44)
+>>> habilitations : OK   (52/52)
+>>> concurrence   : OK   (6/6)
+>>> aller / retour des migrations : OK
+```
+
+### Vérification bout-en-bout sur les écrans réels (Playwright, `verifier-inventaire-reel.mjs`)
+
+```
+12/12 — liste à compter réelle sans quantité, comptage produisant un écart
+réel (-8) sans qu'il n'apparaisse dans la page, le code source ou les
+réponses réseau observées après rechargement, article compté absent de la
+liste au rechargement, tableau de bord affichant l'écart de comptage exact
+(-8) et l'écart de vente à découvert exact (manque 2).
+```
+
+Non-régression des cycles 5 et 6 (`verifier-cablage.mjs`,
+`verifier-vente-reelle.mjs`, tous deux mis à jour pour refléter les écarts
+désormais réels au tableau de bord) : **74/74** et **10/10**.
+
+---
+
 ## Cycle 6 — chantier C5 (ventes), 2026-09-12
 
 Exécuté avec **Python 3.13.3**, contre **PostgreSQL 17.11** (`_pgdev/`), base

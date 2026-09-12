@@ -7,7 +7,8 @@
     "affichage": "node verifier-affichage.mjs",
     "flux": "node verifier-flux.mjs",
     "cablage": "node verifier-cablage.mjs",
-    "vente": "node verifier-vente-reelle.mjs"
+    "vente": "node verifier-vente-reelle.mjs",
+    "inventaire": "node verifier-inventaire-reel.mjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0"

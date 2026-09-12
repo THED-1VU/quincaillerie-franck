@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Écran câblé (cycle 5) : « Ventes du jour » vient réellement de <code>GET /ventes/synthese-jour</code>. Les autres cartes marquées « donnée simulée » attendent une route serveur (chantiers C7/C8).</div>
+<div class="simu">Écran câblé (cycle 7) : « Ventes du jour », « Écarts d'inventaire du jour » et « Écarts de stock (ventes) » sont réels. Seule « Alertes de stock faible » reste simulée (chantier C8).</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Quincaillerie Franck</span>
@@ -43,12 +43,17 @@
       </section>
 
       <section class="carte">
-        <div class="carte__titre">
-          <h2>Écarts d'inventaire du jour</h2>
-          <span class="pastille pastille--neutre">donnée simulée</span>
-        </div>
+        <h2>Écarts d'inventaire du jour</h2>
+        <div id="zone-erreur-ecarts" class="erreur-champ" hidden></div>
         <ul class="liste-nue" id="liste-ecarts"></ul>
-        <p class="champ__aide">Le comptage est fait à l'aveugle par l'agent stock. Route serveur pas encore construite (chantier C7).</p>
+        <p class="champ__aide">Le comptage est fait à l'aveugle par l'agent stock, qui ne voit jamais ces écarts.</p>
+      </section>
+
+      <section class="carte">
+        <h2>Écarts de stock (ventes)</h2>
+        <div id="zone-erreur-ecarts-ventes" class="erreur-champ" hidden></div>
+        <ul class="liste-nue" id="liste-ecarts-ventes"></ul>
+        <p class="champ__aide">Vente enregistrée alors que le stock était insuffisant (chantier C5) — jamais bloquée, toujours consignée.</p>
       </section>
 
       <section class="carte">
@@ -76,7 +81,7 @@
   const session = await exigerSession(["responsable"]);
   if (!session) return;
 
-  const tb = DONNEES.tableauBord; // alertes + écarts : encore simulés, voir cartes ci-dessus
+  const tb = DONNEES.tableauBord; // alertes de stock : encore simulées (chantier C8), voir carte ci-dessous
   const $ = (id) => document.getElementById(id);
 
   $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
@@ -117,16 +122,46 @@
     ulA.appendChild(li);
   });
 
-  // --- Écarts d'inventaire (SIMULÉ — aucune route serveur pour l'instant) ---
-  const ulE = $("liste-ecarts");
-  tb.ecartsInventaire.forEach((e) => {
-    const li = document.createElement("li");
-    const signe = e.ecart > 0 ? "+" + e.ecart : e.ecart;
-    const classe = e.ecart === 0 ? "pastille--ok" : "pastille--alerte";
-    li.innerHTML = "<span>" + e.article + "<br><span style='color:var(--c-texte-doux); font-size:var(--t-xs);'>" + e.site + " · " + e.moment + "</span></span>"
-      + "<span class='pastille " + classe + "'>écart " + signe + "</span>";
-    ulE.appendChild(li);
-  });
+  // --- Écarts d'inventaire du jour : RÉEL, via /inventaire/ecarts ---
+  // (chantier C7 ; ne renvoie que des comptages où l'écart est non nul —
+  // voir server/app/routes/inventaire.py)
+  try {
+    const donnees = await appelApi("/inventaire/ecarts");
+    const ulE = $("liste-ecarts");
+    if (donnees.ecarts.length === 0) {
+      ulE.innerHTML = "<li><span>Aucun écart de comptage aujourd'hui.</span></li>";
+    } else {
+      donnees.ecarts.forEach((e) => {
+        const li = document.createElement("li");
+        const signe = e.ecart > 0 ? "+" + e.ecart : e.ecart;
+        li.innerHTML = "<span>" + e.article_nom + "<br><span style='color:var(--c-texte-doux); font-size:var(--t-xs);'>"
+          + (LIBELLE_SITE[e.site_id] || "Site " + e.site_id) + " · " + e.moment + "</span></span>"
+          + "<span class='pastille pastille--alerte'>écart " + signe + "</span>";
+        ulE.appendChild(li);
+      });
+    }
+  } catch (erreur) {
+    afficherErreurServeur("zone-erreur-ecarts", erreur);
+  }
+
+  // --- Écarts de stock issus d'une vente à découvert : RÉEL (chantier C5) ---
+  try {
+    const donnees = await appelApi("/inventaire/ecarts-ventes");
+    const ulV = $("liste-ecarts-ventes");
+    if (donnees.ecarts.length === 0) {
+      ulV.innerHTML = "<li><span>Aucune vente à découvert de stock aujourd'hui.</span></li>";
+    } else {
+      donnees.ecarts.forEach((e) => {
+        const li = document.createElement("li");
+        li.innerHTML = "<span>" + e.article_nom + "<br><span style='color:var(--c-texte-doux); font-size:var(--t-xs);'>"
+          + (LIBELLE_SITE[e.site_id] || "Site " + e.site_id) + " · vente n°" + e.vente_id + "</span></span>"
+          + "<span class='pastille pastille--alerte'>manque " + e.quantite_manquante + "</span>";
+        ulV.appendChild(li);
+      });
+    }
+  } catch (erreur) {
+    afficherErreurServeur("zone-erreur-ecarts-ventes", erreur);
+  }
 })();
 
 function ouvrir(type) {

@@ -69,10 +69,17 @@ réinitialisent eux-mêmes la base de test (jeu d'essai + comptes réels).
   responsable doit choisir un site avant de valider, et l'aperçu affiché
   AVANT validation correspond exactement à ce que le serveur confirme.
   Dernier résultat : **10/10**.
+- **`verifier-inventaire-reel.mjs`** (cycle 7, C7) : le comptage à l'aveugle
+  est réel (`GET/POST /inventaire/...`) — liste sans aucune quantité, un
+  comptage produisant un écart réel ne le laisse fuir nulle part (page,
+  réseau, code source), un article déjà compté disparaît de la liste, et le
+  tableau de bord du responsable affiche l'écart de comptage ET l'écart de
+  vente à découvert, valeurs exactes. Dernier résultat : **12/12**.
 
 ```
 node verifier-cablage.mjs
 node verifier-vente-reelle.mjs
+node verifier-inventaire-reel.mjs
 ```
 
 Détail complet des deux dans `DERNIER_RESULTAT.md`.
