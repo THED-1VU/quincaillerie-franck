@@ -277,3 +277,28 @@ Toutes les étapes sont passées.
 **100 contrôles exécutés, 0 échec** — inchangé, migration 012 vérifiée
 séparément par `server/tests/test_inventaire.py` (voir
 `server/tests/DERNIER_RESULTAT.md`).
+
+---
+
+## Cycle de correction après le cycle 7, 2026-09-12
+
+Migration 000 à **013** (`013_fuseau_horaire_boutique.sql`) : fixe le
+fuseau au niveau de la base (`ALTER DATABASE ... SET timezone`), trouvé
+faux (`Europe/Paris`) lors d'un contrôle de boucle — voir
+`RAPPORT AVANCEMENT/loop-state.md` et `db/README.md`, section
+« Fuseau horaire ». Aucun fichier de test SQL à modifier : ni
+`01_protections.sql` ni `02_habilitations.sql` ne dépendent du fuseau.
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 013) : OK
+>>> jeu d'essai chargé             : OK
+>>> protections                    : OK   (44/44)
+>>> habilitations                  : OK   (52/52)
+>>> concurrence                    : OK   (6/6)
+>>> aller / retour des migrations  : OK
+Toutes les étapes sont passées.
+```
+
+**100 contrôles exécutés, 0 échec** — inchangé. Vérification directe du
+fuseau (fraîche connexion) : `SHOW TimeZone` renvoie `Africa/Douala`.

@@ -193,7 +193,13 @@
       const li = document.createElement("li");
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", i === selIndex ? "true" : "false");
-      li.innerHTML = '<span>' + a.nom + '</span><span class="unite">' + a.unite + '</span>';
+      const spanNom = document.createElement("span");
+      spanNom.textContent = a.nom;
+      const spanUnite = document.createElement("span");
+      spanUnite.className = "unite";
+      spanUnite.textContent = a.unite;
+      li.appendChild(spanNom);
+      li.appendChild(spanUnite);
       li.addEventListener("click", () => ajouter(a));
       suggestions.appendChild(li);
     });
@@ -249,20 +255,54 @@
       panier.forEach((l) => {
         const ligne = document.createElement("div");
         ligne.className = "panier__ligne";
-        ligne.innerHTML =
-          '<div><div class="panier__nom">' + l.nom + '</div>' +
-          '<div class="unite" style="color:var(--c-texte-doux); font-size:var(--t-sm);">' + l.unite + '</div></div>' +
-          '<input class="panier__mini" type="number" min="1" step="1" value="' + l.quantite + '" aria-label="Quantité pour ' + l.nom + '">' +
-          '<input class="panier__mini" type="number" min="0" step="50" value="' + l.prixUnitaire + '" aria-label="Prix unitaire pour ' + l.nom + '">' +
-          '<button class="panier__sup" type="button" aria-label="Retirer ' + l.nom + '">&times;</button>';
-        const [qteInput, prixInput] = ligne.querySelectorAll("input");
+
+        // Construit chaque morceau via le DOM, jamais via innerHTML : l.nom
+        // vient du catalogue réel (article.nom), modifiable par le
+        // personnel — le concaténer dans du HTML permettrait d'y injecter
+        // des balises, y compris dans un attribut (aria-label). Trouvé et
+        // corrigé lors du contrôle de boucle après le cycle 7.
+        const infos = document.createElement("div");
+        const nomDiv = document.createElement("div");
+        nomDiv.className = "panier__nom";
+        nomDiv.textContent = l.nom;
+        const uniteDiv = document.createElement("div");
+        uniteDiv.className = "unite";
+        uniteDiv.style.color = "var(--c-texte-doux)";
+        uniteDiv.style.fontSize = "var(--t-sm)";
+        uniteDiv.textContent = l.unite;
+        infos.appendChild(nomDiv);
+        infos.appendChild(uniteDiv);
+
+        const qteInput = document.createElement("input");
+        qteInput.className = "panier__mini";
+        qteInput.type = "number"; qteInput.min = "1"; qteInput.step = "1";
+        qteInput.value = l.quantite;
+        qteInput.setAttribute("aria-label", "Quantité pour " + l.nom);
+
+        const prixInput = document.createElement("input");
+        prixInput.className = "panier__mini";
+        prixInput.type = "number"; prixInput.min = "0"; prixInput.step = "50";
+        prixInput.value = l.prixUnitaire;
+        prixInput.setAttribute("aria-label", "Prix unitaire pour " + l.nom);
+
+        const btnSup = document.createElement("button");
+        btnSup.className = "panier__sup";
+        btnSup.type = "button";
+        btnSup.setAttribute("aria-label", "Retirer " + l.nom);
+        btnSup.textContent = "×";
+
+        ligne.appendChild(infos);
+        ligne.appendChild(qteInput);
+        ligne.appendChild(prixInput);
+        ligne.appendChild(btnSup);
+
         qteInput.addEventListener("input", () => { l.quantite = Math.max(1, parseInt(qteInput.value || "1", 10)); majTotaux(); });
         prixInput.addEventListener("input", () => { l.prixUnitaire = Math.max(0, parseInt(prixInput.value || "0", 10)); majTotaux(); });
         [qteInput, prixInput].forEach((inp) => inp.addEventListener("keydown", (e) => {
           if (e.key === "Enter") { e.preventDefault(); recherche.focus(); }
           if (e.key === "Escape") { e.preventDefault(); recherche.focus(); }
         }));
-        ligne.querySelector(".panier__sup").addEventListener("click", () => retirer(l.id));
+        btnSup.addEventListener("click", () => retirer(l.id));
         panierEl.appendChild(ligne);
       });
     }

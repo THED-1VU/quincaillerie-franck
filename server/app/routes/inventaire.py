@@ -39,6 +39,11 @@ def articles_a_compter(
     Un article déjà compté aujourd'hui pour ce moment est exclu de la
     liste (évite un refus prévisible à la soumission), sans jamais
     indiquer sa quantité comptée ni l'écart constaté.
+
+    ``site_id`` figure dans la réponse : un agent stock a toujours un seul
+    site (la colonne est alors constante), mais le responsable couvre les
+    deux — sans elle, sa liste mélangerait Magasin et Comptoir sans moyen
+    de les distinguer (constat du contrôle de boucle après le cycle 7).
     """
     if moment not in ("matin", "soir"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Moment invalide (matin ou soir).")
@@ -50,7 +55,7 @@ def articles_a_compter(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT a.id, a.nom, a.unite
+                SELECT a.id, a.nom, a.unite, a.site_id
                   FROM articles a
                  WHERE a.actif = TRUE
                    AND NOT EXISTS (
@@ -59,7 +64,7 @@ def articles_a_compter(
                             AND c.moment = %s
                             AND c.date_comptage::date = CURRENT_DATE
                        )
-                 ORDER BY a.nom
+                 ORDER BY a.site_id, a.nom
                 """,
                 (moment,),
             )

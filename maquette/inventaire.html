@@ -167,6 +167,17 @@
       s.valeur = valeur;
       return true;
     } catch (erreur) {
+      if (erreur.statut === 409) {
+        // Déjà compté : très probablement une panne réseau après un envoi
+        // qui avait en réalité réussi (la réponse ne nous est jamais
+        // revenue). Le comptage est bien enregistré côté serveur — rien à
+        // refaire, on avance normalement plutôt que de bloquer l'agent sur
+        // une « erreur » qui n'en est pas une. Trouvé et corrigé lors du
+        // contrôle de boucle après le cycle 7.
+        s.soumis = true;
+        s.valeur = valeur;
+        return true;
+      }
       afficherErreurServeur("zone-erreur-saisie", erreur);
       return false;
     }

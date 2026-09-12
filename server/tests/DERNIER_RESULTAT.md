@@ -9,6 +9,85 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle de correction après le cycle 7, 2026-09-12
+
+Fait avant de démarrer un nouveau chantier, sur validation explicite du
+propriétaire, après qu'un contrôle de boucle a rejoué le cycle 7 comme un
+relecteur extérieur et trouvé 5 constats absents du rapport initial (voir
+`RAPPORT AVANCEMENT/loop-state.md`). Migrations 000 à **013** appliquées
+(nouvelle : `013_fuseau_horaire_boutique.sql`).
+
+### `test_inventaire.py` — 11/11 (9 + 2 nouveaux)
+
+```
+test_liste_a_compter_ne_contient_aucune_quantite PASSED
+test_liste_a_compter_du_responsable_distingue_les_deux_sites PASSED   (nouveau)
+test_comptage_ne_renvoie_jamais_quantite_attendue_ni_ecart PASSED
+test_champs_interdits_injectes_par_le_client_sont_sans_effet PASSED   (nouveau)
+test_agent_stock_ne_peut_pas_lire_ecart_en_sql_direct[ecart] PASSED
+test_agent_stock_ne_peut_pas_lire_ecart_en_sql_direct[quantite_attendue] PASSED
+test_article_deja_compte_disparait_de_la_liste_et_refuse_un_second_envoi PASSED
+test_agent_stock_ne_peut_pas_compter_un_article_de_lautre_site PASSED
+test_agent_comptabilite_interdit_sur_linventaire PASSED
+test_ecarts_du_jour_reserves_au_responsable PASSED
+test_ecarts_ventes_du_jour_relie_c5_et_c7 PASSED
+```
+
+### Suite complète — 55/55, 0 régression
+
+```
+55 passed in ~91s
+```
+
+### Fuseau horaire — vérifié à deux niveaux indépendants
+
+```
+SHOW TimeZone;  ->  Africa/Douala   (fraîche connexion, après migration 013)
+```
+
+Défense en profondeur confirmée par exécution : la base a été réglée
+délibérément sur `UTC` (`ALTER DATABASE ... SET timezone TO 'UTC'`), puis
+`connexion_anonyme()` et `connexion_pour()` (`server/app/database.py`) ont
+quand même renvoyé `Africa/Douala` — le réglage applicatif ne dépend pas de
+celui de la base. Remis à `Africa/Douala` ensuite.
+
+### Non-régression SQL du cycle 2, rejouée à jour (`db/tests/executer_tests.sh`)
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 013) : OK
+>>> jeu d'essai chargé : OK
+>>> protections   : OK   (44/44)
+>>> habilitations : OK   (52/52)
+>>> concurrence   : OK   (6/6)
+>>> aller / retour des migrations : OK
+```
+
+### Vérification bout-en-bout sur les écrans réels (Playwright)
+
+```
+verifier-cablage.mjs (C9/C10)         : 74/74 — 0 régression
+verifier-vente-reelle.mjs (C5)        : 10/10 — 0 régression (rejoué après le
+                                          correctif de fuseau horaire, qui
+                                          touche aussi /ventes/synthese-jour)
+verifier-inventaire-reel.mjs (C7)     : 17/17 (12 + 5 nouveaux : double
+                                          soumission/409 à deux onglets)
+verifier-echappement-html.mjs (nouveau) : 11/11 — un nom d'article portant
+                                          une charge HTML/JS ne s'exécute nulle
+                                          part (vente.html et tableau-bord.html),
+                                          s'affiche partout comme texte brut
+```
+
+Bug trouvé par l'exécution en écrivant la vérification (pas en la
+concevant) : le script `verifier-inventaire-reel.mjs` supposait le moment
+par défaut ("matin" avant 13h) figé — le correctif de fuseau horaire a
+changé l'heure locale réellement utilisée par la page, faisant basculer ce
+défaut à "soir" au moment du contrôle. Corrigé en forçant explicitement le
+moment (bouton "Matin") plutôt que de dépendre de l'heure du jour au
+moment du test.
+
+---
+
 ## Cycle 7 — chantier C7 (inventaire et écarts), 2026-09-12
 
 Migrations 000 à **012** appliquées (nouvelle :

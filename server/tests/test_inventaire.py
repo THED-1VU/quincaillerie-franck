@@ -24,7 +24,8 @@ from conftest import (
 
 def test_liste_a_compter_ne_contient_aucune_quantite(client):
     """Ni quantite_stock, ni seuil_alerte, ni aucune autre colonne de stock
-    ne doit apparaître dans la liste à compter — seulement id/nom/unité."""
+    ne doit apparaître dans la liste à compter — seulement id/nom/unité/site,
+    et pour l'agent stock, toujours le même site que sa session."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.get(
         "/inventaire/articles-a-compter?moment=matin", headers=entete_autorisation(session["jeton"])
@@ -33,7 +34,21 @@ def test_liste_a_compter_ne_contient_aucune_quantite(client):
     articles = reponse.json()["articles"]
     assert len(articles) > 0
     for a in articles:
-        assert set(a.keys()) == {"id", "nom", "unite"}, f"colonne inattendue : {a}"
+        assert set(a.keys()) == {"id", "nom", "unite", "site_id"}, f"colonne inattendue : {a}"
+        assert a["site_id"] == 1
+
+
+def test_liste_a_compter_du_responsable_distingue_les_deux_sites(client):
+    """Correction du contrôle de boucle après le cycle 7 : le responsable
+    couvre les deux sites, la liste doit permettre de les distinguer."""
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get(
+        "/inventaire/articles-a-compter?moment=matin", headers=entete_autorisation(session["jeton"])
+    )
+    assert reponse.status_code == 200, reponse.text
+    articles = reponse.json()["articles"]
+    sites_presents = {a["site_id"] for a in articles}
+    assert sites_presents == {1, 2}, f"le responsable devrait voir les deux sites, trouvé : {sites_presents}"
 
 
 def test_comptage_ne_renvoie_jamais_quantite_attendue_ni_ecart(client):
@@ -53,6 +68,40 @@ def test_comptage_ne_renvoie_jamais_quantite_attendue_ni_ecart(client):
     assert corps["quantite_comptee"] == 25
     assert "ecart" not in str(corps)  # ceinture et bretelles : absent même en texte brut
     assert "attendu" not in str(corps).lower()
+
+
+def test_champs_interdits_injectes_par_le_client_sont_sans_effet(client):
+    """Trouvé lors du contrôle de boucle après le cycle 7 (aucun test ne
+    l'essayait avant) : un client qui injecte volontairement
+    quantite_attendue/ecart dans le corps de la requête ne doit ni les voir
+    dans la réponse (déjà couvert ci-dessus), ni leur voir le moindre effet
+    en base — c'est la vraie valeur (le stock réel au moment du comptage)
+    qui doit être enregistrée, jamais celle envoyée par le client."""
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    entetes = entete_autorisation(session["jeton"])
+
+    # Article 1 "Ciment CIM II 50 kg" : stock réel 30 (jeu d'essai).
+    reponse = client.post(
+        "/inventaire/comptages",
+        headers=entetes,
+        json={
+            "article_id": 1, "moment": "matin", "quantite_comptee": 25,
+            "quantite_attendue": 999, "ecart": 0,
+        },
+    )
+    assert reponse.status_code == 201, reponse.text
+    corps = reponse.json()
+    assert set(corps.keys()) == {"comptage_id", "article_id", "moment", "quantite_comptee"}
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute(
+                "SELECT quantite_attendue, ecart FROM comptages_stock WHERE id = %s",
+                (corps["comptage_id"],),
+            )
+            ligne = cur.fetchone()
+            assert ligne["quantite_attendue"] == 30, "la valeur injectée (999) n'aurait jamais dû être retenue"
+            assert ligne["ecart"] == 25 - 30
 
 
 @pytest.mark.parametrize("colonne", ["ecart", "quantite_attendue"])

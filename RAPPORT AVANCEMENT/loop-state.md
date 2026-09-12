@@ -5,6 +5,9 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
 - Dernier cycle fusionné : **Cycle 7 — inventaire et écarts, C7**, 2026-09-12
+  ; puis un **cycle de correction transverse** (sans chantier propre),
+  2026-09-12 — voir le journal, après le contrôle de boucle qui a suivi le
+  cycle 7
 - Décision d'architecture (précisée 2026-09-11) : **un seul code applicatif web**,
   mais **livré et exécuté comme une application Windows (.exe)** sur les postes de
   la boutique — l'exécutable embarque le serveur local et ouvre l'interface web en
@@ -26,9 +29,9 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C2 | Authentification et comptes | **65 %** | Cycle 3. Noyau serveur (`server/`, FastAPI) : connexion via `verifier_connexion()` (fonction PostgreSQL `SECURITY DEFINER`, migration 009, seule à lire le hachage, jamais restitué) ; verrouillage après 5 échecs, déverrouillage réservé au responsable, obligation de changement à la première connexion, libre-service limité à sa propre ligne, limitation de débit. **36/36 tests, 0 échec** (`server/tests/DERNIER_RESULTAT.md`). Reste : session à durée limitée = choix technique temporaire (`duree_session_minutes` reste `a_definir` en base — décision propriétaire) ; pas de révocation de jeton avant expiration (limite technique documentée) ; pas d'écran, pas de création de compte via API (hors périmètre du cycle). |
 | C3 | Habilitations et cloisonnement des rôles | **60 %** | Cycle 3. Habilitations appliquées **au niveau des requêtes SQL** (pas de vérification applicative dispersée) : privilèges par colonne + RLS par site posés au cycle 2, exploités par `BaseDeDonnees.connexion_pour()` (point de bascule de rôle unique). Prouvé par exécution en **contournant l'API** : `SELECT ... WHERE site_id=2` sous `qf_agent_stock` renvoie 0 ligne même en le demandant explicitement (`server/tests/test_cloisonnement_site.py`). Rôle « caissier » toujours non tranché (addendum h) — non traité ce cycle. Reste : cloisonnement RH/fournisseurs non testé par une route, pas encore d'écran. |
 | C4 | Articles et stock | **0 %** | Non vérifié. Règle des 20 %, seuil non modifiable, mouvements tracés : présents au CDC, absents de la base (défaut `seuil_alerte = 5`, aucun trigger). Pas de transfert inter-sites (addendum a), pas de retours/casse (addendum f). |
-| C5 | Ventes et facturation | **40 %** | Cycle 6. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` (`server/app/routes/ventes.py`) enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. Vérifié par exécution : 8/8 tests pytest dédiés (44/44 au total, 0 régression), suite SQL du cycle 2 rejouée à jour (44/44 protections, 52/52 habilitations, **6/6 concurrence — réécrite pour le nouveau comportement anti-survente**, réversibilité des migrations confirmée), et 10/10 contrôles Playwright bout-en-bout sur l'écran de vente réellement câblé (`verifier-vente-reelle.mjs`) : vente normale (aperçu affiché AVANT validation identique à la confirmation serveur), vente à découvert acceptée avec écart affiché, crédit client absent des choix, responsable contraint de choisir un site. Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), annulation d'une vente, régularisation d'un écart, documents imprimés (ticket/facture), écarts de stock pas encore affichés au tableau de bord (prévu chantier C7). |
+| C5 | Ventes et facturation | **43 %** | Cycle 6, durci par le cycle de correction après C7. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` (`server/app/routes/ventes.py`) enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. Vérifié par exécution : 8/8 tests pytest dédiés (55/55 au total, 0 régression), suite SQL du cycle 2 rejouée à jour (44/44 protections, 52/52 habilitations, **6/6 concurrence — réécrite pour le nouveau comportement anti-survente**, réversibilité des migrations confirmée), et 10/10 contrôles Playwright bout-en-bout sur l'écran de vente réellement câblé (`verifier-vente-reelle.mjs`) : vente normale (aperçu affiché AVANT validation identique à la confirmation serveur), vente à découvert acceptée avec écart affiché, crédit client absent des choix, responsable contraint de choisir un site. **+3 points (cycle de correction)** : fuseau horaire de `/ventes/synthese-jour` fixé à Africa/Douala au lieu d'hériter d'un réglage faux (Europe/Paris) — le « jour » des ventes dépendait silencieusement de l'horloge du poste serveur ; recherche/panier de `vente.html` ne construisent plus le HTML par concaténation non échappée (nom d'article), vérifié par un essai d'injection réel. Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), annulation d'une vente, régularisation d'un écart, documents imprimés (ticket/facture), écarts de stock pas encore affichés au tableau de bord (prévu chantier C7). |
 | C6 | Comptabilité et RH | **0 %** | Non vérifié. `transactions`, `employes`, `absences_conges`, `avances_salaire` présents. Manquent : clôture de caisse (addendum g), contre-passation d'annulation, `transactions.vente_id` non unique, audit des corrections. |
-| C7 | Inventaire et écarts | **45 %** | Cycle 7. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 9/9 tests pytest dédiés (53/53 au total, 0 régression), 12/12 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel. Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
+| C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
 | C8 | Tableaux de bord et rapports | **0 %** | Non vérifié. Exigés au CDC (consolidé/par site, alertes, exports Excel/PDF avec gating du prix par rôle) ; aucune preuve d'exécution. |
 | C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
 | C10 | Mobile et API web *(priorité 1)* | **30 %** | Cycle 5. Les deux écrans mobile-first (tableau de bord responsable, comptage d'inventaire) sont désormais **la même application web**, session réelle, testée et capturée à 360/390/768 px avec de vrais comptes — première preuve d'exécution sur ce chantier (`verifier-cablage.mjs`). Reste : accès démontré depuis un **téléphone physique** sur le LAN ou via tunnel (seules des largeurs de navigateur ont été testées ici, pas un appareil réel), API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
@@ -37,7 +40,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après cycle 7 : ≈ 35 %** (C0 55, C1 80, C2 65, C3 60, C5 40, C7 45, C9 50, C10 30, C11 55, C14 40, autres 0).
+**Moyenne indicative après le cycle de correction : ≈ 35 %** (C0 55, C1 80, C2 65, C3 60, C5 43, C7 50, C9 50, C10 30, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -717,6 +720,103 @@ contrainte. Les 5 constats ci-dessus ne sont pas des motifs de blocage ; ce
 sont des corrections mineures à trancher (les proposer maintenant ou les
 reporter) plutôt que des raisons de ne pas fusionner un travail qui fait ce
 qu'il annonce.
+
+**PR #8 fusionnée** le 2026-09-12 (commit de fusion `dd84dcd`, puis un
+second commit pour intégrer le diagnostic ci-dessus, poussé sur la branche
+juste avant la fusion et resté hors du premier commit de fusion — les deux
+réconciliés sur `main`, commit `b55a375`).
+
+---
+
+### Cycle de correction après le cycle 7 — 2026-09-12 (aucun chantier créé)
+
+Suit le processus corrigé de `SKILL.md` (voir le commit séparé sur `main`,
+`59d270c`) : les étapes 1 à 3 ont eu lieu dans l'échange avec le
+propriétaire, avant tout code — reprises ici pour mémoire, en plus du
+détail déjà consigné dans le contrôle de boucle ci-dessus.
+
+- **Étape 1 — Diagnostic** : voir « Contrôle de boucle — après cycle 7 »
+  ci-dessus. 5 constats trouvés, aucun ne remettant en cause le score ou la
+  garantie centrale du chantier C7, mais absents du rapport initial.
+- **Étape 2 — Propositions** : corriger les 5 constats (sans risque métier,
+  ne débloque rien de nouveau mais fiabilise l'existant) présentée en
+  option principale, à côté de C4 (tranche sans a/f), C6 (tranche sans g),
+  C8 (tableaux de bord) et des mesures humaines de `UX_BASELINE.md`.
+- **Étape 3 — Objectif retenu et plan** : corriger les 5 constats, sans
+  créer de nouveau chantier. **Validé explicitement par le propriétaire**,
+  avec trois précisions : fuseau horaire Africa/Douala fixé à la fois côté
+  base et côté application (jamais hérité du système d'exploitation) ;
+  `site_id` ajouté à la liste à compter du responsable plutôt que de lui
+  retirer l'accès à la route ; ce cycle reste transverse, sans score de
+  chantier C0–C14 propre — seuls C7 et C5 (touché par le fuseau horaire)
+  sont mis à jour.
+- **Étape 4 — Mise en œuvre** : branche `cycle-8-corrections-c7`.
+  - `db/migrations/013_fuseau_horaire_boutique.sql` (+ inverse) : fixe le
+    fuseau **au niveau de la base** (`ALTER DATABASE ... SET timezone`,
+    appliqué dynamiquement à la base courante — pas de nom de base en dur,
+    valable en dev comme en production).
+  - `server/app/database.py` : `FUSEAU_HORAIRE_BOUTIQUE = "Africa/Douala"`,
+    imposé à **chaque connexion** (`connexion_anonyme()` et
+    `connexion_pour()`) — défense en profondeur, vérifiée par exécution en
+    réglant délibérément la base sur `UTC` : l'application a quand même
+    imposé `Africa/Douala`.
+  - Recensement de **toutes** les occurrences d'`innerHTML` dans les 5
+    écrans de la maquette : **5 dangereuses** (interpolation de données non
+    échappées — 2 dans `vente.html`, 3 dans `tableau-bord.html`), 7 autres
+    littérales ou des vidages, non concernées. Les 5 corrigées : `api.js`
+    gagne `creerLigneListe()` (construction DOM, jamais d'`innerHTML`) pour
+    les 3 de `tableau-bord.html` ; `vente.html` reconstruit ses deux listes
+    (suggestions, panier) par le DOM — la plus grave incluait le nom
+    d'article dans un attribut `aria-label` construit par concaténation,
+    une injection y aurait aussi pu casser l'attribut lui-même.
+  - `maquette/inventaire.html` : un 409 (« déjà compté ») après l'envoi
+    d'un comptage est désormais traité comme un succès local (le comptage
+    est en réalité déjà enregistré), pas comme une erreur bloquante.
+  - `server/app/routes/inventaire.py` : `site_id` ajouté à la réponse de
+    `GET /inventaire/articles-a-compter`.
+  - `server/tests/test_inventaire.py` : +2 tests — injection de champs
+    interdits dans le corps de la requête (sans effet, ni sur la réponse ni
+    en base) ; liste à compter du responsable distinguant les deux sites.
+  - `maquette/verification/verifier-echappement-html.mjs` (nouveau) : essai
+    d'injection réel (nom d'article `<img src=x onerror="...">`) sur les
+    deux écrans concernés.
+  - `maquette/verification/verifier-inventaire-reel.mjs` : +5 contrôles
+    (double soumission à deux onglets, simulant une panne réseau suivie
+    d'une nouvelle tentative).
+- **Vérification par exécution, les deux suites de non-régression
+  demandées** (C7, directement corrigé, et C5, touché par le fuseau
+  horaire) :
+  - `server/tests/test_inventaire.py` : **11/11** (9 existants + 2 nouveaux).
+  - Suite complète pytest : **55/55**, 0 régression.
+  - `db/tests/executer_tests.sh` (migrations 000 à 013) : protections
+    **44/44**, habilitations **52/52**, concurrence **6/6**, réversibilité
+    confirmée.
+  - `verifier-cablage.mjs` (C9/C10) : **74/74**, 0 régression.
+  - `verifier-vente-reelle.mjs` (**C5**, rejouée spécifiquement à cause du
+    fuseau horaire) : **10/10**, 0 régression.
+  - `verifier-inventaire-reel.mjs` (**C7**) : **17/17** (12 + 5 nouveaux).
+  - `verifier-echappement-html.mjs` (nouveau) : **11/11** — le nom
+    malveillant ne s'exécute nulle part, s'affiche comme texte partout,
+    aucune balise `<img>` réelle créée dans le DOM.
+  - Garantie centrale de C7 revérifiée une dernière fois après toutes ces
+    migrations : `SELECT ecart`, `SELECT quantite_attendue`, `SELECT *`
+    sous `qf_agent_stock` — toujours refusés (`permission denied`).
+- **Bug trouvé par l'exécution en écrivant la vérification** (pas en la
+  concevant) : `verifier-inventaire-reel.mjs` supposait le moment par
+  défaut de l'écran ("matin" avant 13h) figé dans le temps — le correctif
+  de fuseau horaire a changé l'heure locale réellement utilisée par la
+  page au moment du contrôle, faisant basculer ce défaut à "soir" et
+  cassant une assertion qui comparait deux sections sous une hypothèse de
+  moment différente. Corrigé en forçant explicitement le moment dans le
+  script (bouton « Matin ») plutôt que de dépendre de l'heure du jour —
+  confirme, par la pratique, le risque même que ce cycle corrigeait.
+- **Score** : C7 **45 % → 50 %**, C5 **40 % → 43 %** (fuseau horaire de
+  `/ventes/synthese-jour`, échappement HTML de `vente.html`). **Aucun
+  chantier créé.** Commit, PR sur `cycle-8-corrections-c7` — **non
+  fusionnée**, sur instruction explicite du propriétaire.
+- **Reste ouvert** : le cinquième constat du contrôle de boucle (absence de
+  test d'injection) est la correction elle-même, ci-dessus. Rien d'autre
+  en suspens sur ce cycle de correction.
 
 ---
 

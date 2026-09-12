@@ -69,17 +69,26 @@ réinitialisent eux-mêmes la base de test (jeu d'essai + comptes réels).
   responsable doit choisir un site avant de valider, et l'aperçu affiché
   AVANT validation correspond exactement à ce que le serveur confirme.
   Dernier résultat : **10/10**.
-- **`verifier-inventaire-reel.mjs`** (cycle 7, C7) : le comptage à l'aveugle
-  est réel (`GET/POST /inventaire/...`) — liste sans aucune quantité, un
-  comptage produisant un écart réel ne le laisse fuir nulle part (page,
-  réseau, code source), un article déjà compté disparaît de la liste, et le
-  tableau de bord du responsable affiche l'écart de comptage ET l'écart de
-  vente à découvert, valeurs exactes. Dernier résultat : **12/12**.
+- **`verifier-inventaire-reel.mjs`** (cycle 7, C7 ; complété au cycle de
+  correction après le cycle 7) : le comptage à l'aveugle est réel
+  (`GET/POST /inventaire/...`) — liste sans aucune quantité, un comptage
+  produisant un écart réel ne le laisse fuir nulle part (page, réseau, code
+  source), un article déjà compté disparaît de la liste, le tableau de bord
+  du responsable affiche l'écart de comptage ET l'écart de vente à
+  découvert (valeurs exactes), et une double soumission (panne réseau
+  simulée à deux onglets) laisse l'agent avancer normalement au lieu de le
+  bloquer sur un 409. Dernier résultat : **17/17**.
+- **`verifier-echappement-html.mjs`** (cycle de correction après le
+  cycle 7) : un nom d'article contenant une charge HTML/JS ne s'exécute
+  JAMAIS — vérifié sur les suggestions et le panier de `vente.html`, et sur
+  les deux listes d'écarts de `tableau-bord.html` — et s'affiche partout
+  comme texte brut. Dernier résultat : **11/11**.
 
 ```
 node verifier-cablage.mjs
 node verifier-vente-reelle.mjs
 node verifier-inventaire-reel.mjs
+node verifier-echappement-html.mjs
 ```
 
 Détail complet des deux dans `DERNIER_RESULTAT.md`.
