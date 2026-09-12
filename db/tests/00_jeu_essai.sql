@@ -22,7 +22,10 @@
 -- TRUNCATE : elles référencent utilisateurs(id), PostgreSQL exigerait sinon
 -- un CASCADE qui les viderait de toute façon. On les re-amorce donc juste
 -- après, à l'identique de la migration 006 — SOURCE DE VÉRITÉ : si le jeu de
--- paramètres change là-bas, le reporter ici.
+-- paramètres change là-bas, le reporter ici. Les 4 paramètres de fiscalité
+-- (point d) reprennent en plus la décision du propriétaire appliquée par la
+-- migration 011 (cycle 6) : un jeu d'essai doit refléter une base migrée
+-- jusqu'au bout, pas seulement jusqu'à 006.
 TRUNCATE TABLE
     journal_comptes, journal_connexions,
     comptages_stock_ecarts_declares, comptages_stock, mouvements_stock,
@@ -44,16 +47,16 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
  'Téléphone imprimé sur les tickets et factures.', TRUE, TRUE, 'à fournir par le propriétaire'),
 ('boutique_numero_contribuable', 'a_definir', 'texte',
  'Numéro de contribuable, si les mentions légales l''exigent.', TRUE, TRUE, 'addendum point d'),
-('regime_fiscal', 'a_definir', 'texte',
+('regime_fiscal', 'reel', 'texte',
  'Régime fiscal réel : impot_liberatoire, simplifie ou reel (assujetti TVA). '
- 'Tant que ce point n''est pas tranché, aucune TVA n''est appliquée.', TRUE, TRUE, 'addendum point d'),
-('taux_tva', '0', 'decimal',
+ 'Tant que ce point n''est pas tranché, aucune TVA n''est appliquée.', TRUE, FALSE, 'addendum point d, décidé cycle 6'),
+('taux_tva', '19.25', 'decimal',
  'Taux de TVA en pourcentage. 0 = aucune TVA appliquée, ce qui est le '
- 'fonctionnement par défaut et parfaitement valide.', TRUE, TRUE, 'addendum point d'),
-('prix_saisis_ttc', 'a_definir', 'texte',
- 'Les prix négociés avec le client sont-ils compris TTC (oui) ou HT (non) ?', TRUE, TRUE, 'addendum point d'),
-('arrondi_montants', 'a_definir', 'texte',
- 'Méthode d''arrondi au franc CFA (le FCFA n''a pas de sous-unité).', TRUE, TRUE, 'addendum point d'),
+ 'fonctionnement par défaut et parfaitement valide.', TRUE, FALSE, 'addendum point d, décidé cycle 6'),
+('prix_saisis_ttc', 'oui', 'texte',
+ 'Les prix négociés avec le client sont-ils compris TTC (oui) ou HT (non) ?', TRUE, FALSE, 'addendum point d, décidé cycle 6'),
+('arrondi_montants', 'arithmetique', 'texte',
+ 'Méthode d''arrondi au franc CFA (le FCFA n''a pas de sous-unité).', TRUE, FALSE, 'addendum point d, décidé cycle 6'),
 ('devise', 'FCFA', 'texte',
  'Devise affichée.', FALSE, FALSE, NULL),
 ('seuil_alerte_pourcentage', '20', 'entier',

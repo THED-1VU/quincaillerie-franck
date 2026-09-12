@@ -282,12 +282,17 @@ for (const largeur of LARGEURS) {
     "agent comptabilité : article réel ajouté au panier avec son vrai prix"
   );
 
-  // Validation : doit rester EXPLICITEMENT simulée (aucune route d'écriture).
+  // Validation RÉELLE depuis le cycle 6 (chantier C5, POST /ventes) : plus de
+  // mention SIMULATION, un vrai numéro de vente apparaît. Le contrôle détaillé
+  // de cette route (TVA, écarts, crédit désactivé...) est dans
+  // verifier-vente-reelle.mjs ; on vérifie ici seulement que l'écran l'utilise
+  // vraiment, pas que la maquette invente encore une confirmation locale.
   await page.keyboard.press("F9");
   await page.keyboard.press("F9");
-  await page.waitForTimeout(100);
+  await page.waitForFunction(() => !document.getElementById("zone-succes").hidden, { timeout: 10000 });
   const messageValidation = await page.textContent("#zone-succes");
-  verifier(messageValidation.startsWith("SIMULATION"), "vente : validation clairement annoncée SIMULATION, aucune route inventée");
+  verifier(/^Vente n°\d+ enregistrée/.test(messageValidation), `vente : validation réelle, numéro de vente renvoyé par le serveur ("${messageValidation}")`);
+  verifier(!/SIMULATION/i.test(messageValidation), "vente : plus aucune confirmation inventée localement");
 
   for (const largeur of LARGEURS) {
     await page.setViewportSize({ width: largeur, height: largeur < 700 ? 780 : largeur < 1400 ? 800 : 960 });
@@ -312,8 +317,11 @@ for (const largeur of LARGEURS) {
   const texteVentes = await page.textContent("#ventes-jour");
   verifier(texteVentes.includes("Magasin de stock"), "responsable : ventes du jour réelles -> site Magasin de stock présent");
   verifier(texteVentes.includes("Comptoir"), "responsable : ventes du jour réelles -> site Comptoir présent (consolidé)");
+  // 9700 (les deux ventes semées ci-dessus) + 2000 (la vente RÉELLE créée
+  // plus haut, section agent comptabilité, en validant "Article rare" par
+  // POST /ventes — chantier C5, cycle 6) = 11700.
   const totalTexte = await page.textContent("#ventes-total");
-  verifier(totalTexte.includes("9") && totalTexte.includes("700"), `responsable : total consolidé correct (lu : "${totalTexte}")`);
+  verifier(totalTexte.includes("11") && totalTexte.includes("700"), `responsable : total consolidé correct (lu : "${totalTexte}")`);
 
   const cartesSimulees = await page.$$eval(".pastille--neutre", (els) => els.map((e) => e.textContent));
   verifier(cartesSimulees.length === 2 && cartesSimulees.every((t) => t.includes("simulée")),

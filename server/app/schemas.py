@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -38,3 +38,42 @@ class ReponseProfil(BaseModel):
 class ReponseDeverrouillage(BaseModel):
     utilisateur_id: int
     tentatives_echouees: int
+
+
+class LigneVenteDemande(BaseModel):
+    """Une ligne telle que saisie par la comptabilité depuis le facturier
+    papier : ``prix_unitaire`` est le prix négocié TTC (addendum, point d),
+    qui peut légitimement différer du prix catalogue."""
+
+    article_id: int
+    quantite: int = Field(gt=0)
+    prix_unitaire: float = Field(ge=0)
+
+
+class DemandeVente(BaseModel):
+    """``site_id`` n'est utilisé QUE pour un compte responsable (deux
+    sites) : pour un agent comptabilité, le site vient toujours de sa
+    session, jamais du corps de la requête."""
+
+    site_id: Optional[int] = None
+    mode_paiement: str = Field(min_length=1, max_length=30)
+    lignes: List[LigneVenteDemande] = Field(min_length=1)
+
+
+class LigneEcartReponse(BaseModel):
+    """Un écart signalé au comptable au moment même de la saisie — jamais un
+    refus (addendum, point e) : la quantité demandée dépassait le stock
+    disponible, la différence a été consignée pour le responsable."""
+
+    article_id: int
+    quantite_manquante: int
+
+
+class ReponseVente(BaseModel):
+    vente_id: int
+    site_id: int
+    sous_total_ht: float
+    taux_tva: float
+    montant_tva: float
+    total_ttc: float
+    ecarts: List[LigneEcartReponse]

@@ -5,7 +5,9 @@
   "description": "Vérification par exécution de la maquette (cycle 1, chantier C9).",
   "scripts": {
     "affichage": "node verifier-affichage.mjs",
-    "flux": "node verifier-flux.mjs"
+    "flux": "node verifier-flux.mjs",
+    "cablage": "node verifier-cablage.mjs",
+    "vente": "node verifier-vente-reelle.mjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0"

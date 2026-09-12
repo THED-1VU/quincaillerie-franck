@@ -4,11 +4,15 @@ Cycle 3 (chantiers C2, C3, C11) a posé l'authentification, les habilitations
 au niveau des requêtes SQL et la sécurité applicative de base — sans écran,
 sans règle métier de vente ou de stock.
 
-Cycle 5 (chantiers C9/C10) y ajoute UNIQUEMENT le service des fichiers
-statiques de la maquette (`maquette/`, cycle 1) sous `/app` : même origine
-que l'API, donc aucun CORS à gérer, conforme à l'architecture actée
-(« un seul code applicatif web »). Aucune route métier n'est ajoutée ici —
-les écrans consomment les routes déjà existantes (`auth`, `demonstration`).
+Cycle 5 (chantiers C9/C10) y a ajouté le service des fichiers statiques de
+la maquette (`maquette/`, cycle 1) sous `/app` : même origine que l'API,
+donc aucun CORS à gérer, conforme à l'architecture actée (« un seul code
+applicatif web »).
+
+Cycle 6 (chantier C5) y ajoute la première route métier de vente
+(`routes/ventes.py`) — voir ce module pour les décisions du propriétaire
+qu'elle applique (addendum, points b/d/e) et celle qu'elle laisse
+volontairement de côté (point c, non tranché).
 
 Lancer en développement :
     server\\.venv\\Scripts\\uvicorn.exe app.main:app --reload --app-dir server
@@ -26,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import Config, ErreurConfiguration, charger_config
 from .database import BaseDeDonnees
-from .routes import auth, demonstration
+from .routes import auth, demonstration, ventes
 from .securite import GestionnaireSessions, LimiteurDebit
 
 logger = logging.getLogger("quincaillerie")
@@ -65,6 +69,7 @@ def creer_application(config: Config | None = None) -> FastAPI:
     app.include_router(auth.routeur)
     app.include_router(auth.routeur_admin)
     app.include_router(demonstration.routeur)
+    app.include_router(ventes.routeur)
 
     if MAQUETTE_DIR.is_dir():
         app.mount("/app", StaticFiles(directory=str(MAQUETTE_DIR), html=True), name="maquette")

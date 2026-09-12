@@ -62,6 +62,15 @@ entre sites »).
 
 ## b) Vente à crédit — créance client, solde, règlement
 
+> **Statu quo maintenu explicitement (cycle 6, 2026-09-12).** Le propriétaire
+> n'a pas encore répondu aux 6 questions ci-dessous. Plutôt que d'attendre
+> pour livrer le reste du chantier C5, `mode_paiement = 'credit_client'` est
+> **désactivé côté serveur** (`server/app/routes/ventes.py` le refuse avec un
+> message explicite) — aucune table Client, aucune créance créée. Ce n'est
+> pas une décision sur le FOND du point b, seulement la confirmation que rien
+> n'est inventé à sa place : dès que le propriétaire répond, ce statu quo est
+> le premier à lever.
+
 **Contexte.** `mode_paiement = 'credit_client'` est autorisé. Le cahier des charges (§3.3)
 crée une **recette immédiate** à la validation de la vente. Or, en crédit, **aucun argent
 n'est entré**. Il n'existe ni table `clients`, ni créance, ni solde, ni règlement ultérieur.
@@ -153,6 +162,17 @@ catalogue et prix facturé ne peut être rattaché à personne.
 
 ## d) Régime fiscal et TVA
 
+> **Décidé (cycle 6, 2026-09-12).** Régime du **réel**, taux de TVA
+> **19,25 %** (global, sans séparer TVA/CAC sur les documents — aucun ticket
+> imprimé n'existe encore pour que la question se pose). Les prix négociés
+> avec le client sont compris **TTC**. Arrondi **arithmétique standard**
+> (0,5 arrondit vers le haut), calculé sur le **total** de TVA de la vente,
+> jamais ligne à ligne. Appliqué dans `db/migrations/011_ventes_fiscalite_
+> anti_survente.sql` (table `parametres`) et `server/app/routes/ventes.py`.
+> Restent ouvertes, non bloquantes pour C5 : le numéro de contribuable et les
+> mentions légales (question 4 — aucun document imprimé n'existe encore) et
+> les ventes exonérées (question 5 — aucun cas rencontré à ce jour).
+
 **Contexte.** Le cahier des charges calcule « la TVA » mais ne précise ni le **régime
 fiscal**, ni le **taux**, ni les **règles d'arrondi**, ni les cas d'**exonération**.
 `ventes.taux_tva` a pour défaut `0`. Au Cameroun, selon le chiffre d'affaires et le régime,
@@ -198,6 +218,19 @@ du **régime du réel** (assujettie à la TVA, taux courant **19,25 %** = 17,5 %
 ---
 
 ## e) Contradiction : décrément atomique anti-survente vs. saisie a posteriori
+
+> **Décidé (cycle 6, 2026-09-12), question 1 confirmée.** La règle proposée
+> ci-dessous est retenue telle quelle : une vente déjà encaissée **n'est
+> jamais bloquée**, le stock est ramené à 0 (jamais négatif), l'écart est
+> consigné dans `ecarts_stock_ventes` et réservé au responsable (jamais visible
+> de l'agent stock — comptage à l'aveugle, chantier C7). Appliqué dans
+> `db/migrations/011_ventes_fiscalite_anti_survente.sql`
+> (`decrementer_stock_vente`) et prouvé par `db/tests/03_concurrence.sh`
+> (6/6). Questions 2 à 5 restent ouvertes et **non traitées** ce cycle :
+> aucun seuil d'alerte immédiate au-delà du simple enregistrement, aucune
+> route de régularisation d'un écart, aucun plafond de vraisemblance par
+> ligne, et la sortie de stock manuelle / le transfert (hors périmètre C5)
+> restent à trancher séparément.
 
 **Contexte.** Le cahier des charges (§3.3), le scénario de test (client n°8) et le dossier de
 recette (§6) exigent tous que l'application **refuse** une vente quand le stock est
@@ -600,21 +633,22 @@ prestataire et **incapable de reconstruire, corriger ou reprendre** l'outil.
 
 ## Récapitulatif des décisions attendues
 
-| Point | Décision structurante | Bloque quoi si non tranché |
+| Point | Décision structurante | État |
 |---|---|---|
-| a | Modèle de transfert inter-sites | C4, réappro quotidien |
-| b | Créance client / vente à crédit | C5, C6, exactitude des recettes |
-| c | Numéro facturier + vendeur obligatoires | C5, objectif anti-vol |
-| d | **Régime fiscal / taux de TVA** | C5, tous les documents et rapports |
-| e | **Saisie a posteriori vs blocage anti-survente** | C5, C7, sens du test de concurrence |
-| f | Retours / casse / remises / unités | C4, C5, suivi des pertes |
-| g | Clôture de caisse | C6, rapprochement espèces |
-| h | Rôle caissier oui/non | C3, C5, poste de caisse |
-| i | RPO / RTO / onduleur / mises à jour | C12, continuité |
-| j | Volumétrie + reprise du stock + formation | C4, dimensionnement, bascule |
-| k | Cibles ergonomiques comme critères de recette | C9, C10, définition de « fini » |
-| l | **Propriété du code + livraison du dépôt** | tout le projet, réversibilité |
+| a | Modèle de transfert inter-sites | Bloque C4, réappro quotidien — non tranché |
+| b | Créance client / vente à crédit | Statu quo confirmé cycle 6 : **désactivé**, C5/C6 attendent toujours les 6 questions |
+| c | Numéro facturier + vendeur obligatoires | Bloque l'objectif anti-vol de C5 — non tranché |
+| d | **Régime fiscal / taux de TVA** | **Décidé cycle 6** : réel, 19,25 %, TTC, arrondi arithmétique sur le total |
+| e | **Saisie a posteriori vs blocage anti-survente** | **Décidé cycle 6** (question 1) : jamais de blocage, écart consigné — questions 2-5 ouvertes |
+| f | Retours / casse / remises / unités | Bloque C4/C5, suivi des pertes — non tranché |
+| g | Clôture de caisse | Bloque C6, rapprochement espèces — non tranché |
+| h | Rôle caissier oui/non | Bloque C3/C5, poste de caisse — non tranché |
+| i | RPO / RTO / onduleur / mises à jour | Bloque C12, continuité — non tranché |
+| j | Volumétrie + reprise du stock + formation | Bloque C4, dimensionnement — non tranché |
+| k | Cibles ergonomiques comme critères de recette | Bloque C9/C10, définition de « fini » — non tranché |
+| l | **Propriété du code + livraison du dépôt** | Bloque tout le projet, réversibilité — non tranché |
 
-Les trois décisions à trancher **en premier** (elles conditionnent le reste) : **d (fiscalité),
-e (modèle de vente a posteriori) et l'architecture cible** (voir `RAPPORT AVANCEMENT` /
-comparaison d'architecture).
+Décisions encore à trancher **en priorité** pour poursuivre C4/C5 : **a et f**
+(transfert, retours/casse — bloquent C4), **c** (numéro facturier — objectif
+anti-vol de C5), et le reste du point **b** (vente à crédit) si le crédit
+client doit un jour être réellement proposé aux clients.

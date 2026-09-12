@@ -209,7 +209,7 @@ déclencheurs, index, tables et rôles ajoutés ont bien été retirés.
 
 ---
 
-## Bilan
+## Bilan (cycle 2)
 
 ```
 >>> création de quincaillerie_test : OK
@@ -218,6 +218,33 @@ déclencheurs, index, tables et rôles ajoutés ont bien été retirés.
 >>> protections                    : OK   (44/44)
 >>> habilitations                  : OK   (52/52)
 >>> concurrence                    : OK   (4/4)
+>>> aller / retour des migrations  : OK
+Toutes les étapes sont passées.
+```
+
+---
+
+## Cycle 6 — chantier C5 (ventes), 2026-09-12
+
+Migrations 000 à **011** (`011_ventes_fiscalite_anti_survente.sql`, décisions
+du propriétaire — addendum points b/d/e). Deux fichiers mis à jour pour
+rester exacts :
+
+- `01_protections.sql` utilisait `regime_fiscal`/`taux_tva` comme exemples
+  d'un paramètre « non tranché » — désormais faux (point d décidé). Basculé
+  sur `duree_session_minutes`, toujours réellement indécis.
+- `03_concurrence.sh` attendait qu'une des deux ventes concurrentes soit
+  **refusée** — comportement abandonné (point e décidé : jamais de blocage).
+  Réécrit pour vérifier le NOUVEAU contrat : les deux ventes réussissent,
+  une seule marchandise réelle sort, un seul écart d'1 unité est consigné.
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 011) : OK
+>>> jeu d'essai chargé             : OK
+>>> protections                    : OK   (44/44)
+>>> habilitations                  : OK   (52/52)
+>>> concurrence                    : OK   (6/6 — anti-survente, plus de « perdante »)
 >>> aller / retour des migrations  : OK
 Toutes les étapes sont passées.
 ```
