@@ -1,12 +1,13 @@
-# Noyau serveur — authentification, habilitations, sécurité (cycle 3)
+# Noyau serveur — authentification, habilitations, sécurité, fabrication
 
 Chantiers **C2** (authentification), **C3** (habilitations au niveau des
-requêtes SQL) et **C11** (sécurité applicative). Ce cycle **ne construit
-aucun écran** (pas de HTML, pas de gabarit) et **n'implémente aucune règle
-métier de vente ou de stock** — le décrément de stock, le calcul de TVA, la
-composition d'un panier existent déjà côté base (cycle 2) mais ne sont
-exposés par aucune route ici, sauf les deux/trois routes de démonstration
-prévues pour prouver le cloisonnement.
+requêtes SQL), **C11** (sécurité applicative) et **C0** (fabrication de
+l'exécutable Windows). Ce cycle **ne construit aucun écran** (pas de HTML,
+pas de gabarit) et **n'implémente aucune règle métier de vente ou de
+stock** — le décrément de stock, le calcul de TVA, la composition d'un
+panier existent déjà côté base (cycle 2) mais ne sont exposés par aucune
+route ici, sauf les deux/trois routes de démonstration prévues pour prouver
+le cloisonnement.
 
 ```
 server/
@@ -23,6 +24,7 @@ server/
 │   └── routes/
 │       ├── auth.py         connexion, changer-mot-de-passe, déverrouillage
 │       └── demonstration.py  articles, synthèse du jour, profil
+├── fabrication/           empaquetage en .exe (chantier C0) — voir plus bas
 └── tests/                 pytest — exécution réelle contre PostgreSQL
 ```
 
@@ -234,3 +236,80 @@ psycopg3 (`ProgrammingError: Explicit commit() forbidden within a
 Transaction context`). Seule `connexion_anonyme()` (utilisée avant
 authentification) ne gère pas de transaction elle-même : c'est là, et
 seulement là, qu'un `conn.commit()` explicite est nécessaire.
+
+---
+
+## Chantier C0 — fabrication de l'exécutable Windows
+
+Architecture actée (`RAPPORT AVANCEMENT/loop-state.md`) : un seul code
+applicatif web, **livré comme un `.exe` Windows** qui embarque ce serveur et
+ouvre l'interface dans un navigateur — aucune installation de Python sur les
+postes de la boutique, double-clic comme l'application d'origine.
+
+```
+server/fabrication/
+├── lanceur.py                     point d'entrée compilé (démarre le serveur + ouvre le navigateur)
+├── quincaillerie_franck.spec      configuration PyInstaller
+├── construire.ps1                 script humain : "lance juste ça"
+├── DERNIER_RESULTAT.md            trace de la dernière construction + vérifications
+├── dist/    (ignoré par Git)      QuincaillerieFranck.exe produit
+└── build/   (ignoré par Git)      fichiers intermédiaires de PyInstaller
+```
+
+### Construire
+
+```powershell
+.\server\fabrication\construire.ps1
+```
+
+Installe PyInstaller dans `server\.venv` si besoin, construit l'exécutable,
+copie `config.example.ini` à côté. Résultat :
+`server\fabrication\dist\QuincaillerieFranck.exe`.
+
+### Distribuer sur un poste
+
+1. Copier tout le contenu de `server\fabrication\dist\` sur le poste cible.
+2. Renommer `config.example.ini` en `config.ini`, le remplir (voir
+   « Configurer » plus haut) — **jamais** committer ce fichier rempli.
+3. Double-cliquer `QuincaillerieFranck.exe`. Une fenêtre console s'ouvre
+   (messages de démarrage, erreurs de configuration lisibles), le serveur
+   démarre, un navigateur s'ouvre automatiquement.
+
+Aucun Python, aucune dépendance à installer : vérifié en lançant l'exécutable
+depuis un dossier **totalement isolé** du dépôt, avec seulement lui-même et
+`config.ini` — voir `fabrication/DERNIER_RESULTAT.md`.
+
+### État actuel du lanceur — placeholder documenté
+
+Le navigateur ouvert par `lanceur.py` pointe aujourd'hui sur `/docs`
+(documentation interactive de l'API) : la maquette du cycle 1 n'est pas
+encore câblée sur ce serveur (chantiers C9/C10, cycle ultérieur). Le
+mécanisme de lancement (port, attente de démarrage, ouverture du
+navigateur) ne changera pas quand ce sera fait — seule la constante
+`CHEMIN_A_OUVRIR` dans `lanceur.py` sera mise à jour. Le mode kiosque
+(plein écran) n'a pas non plus été activé, faute d'écran réel à afficher.
+
+### Piège rencontré et corrigé — nommage du dossier
+
+Ce dossier s'appelle `fabrication/`, **pas** `build/` : `.gitignore` exclut
+tout dossier nommé `build/` (artefact de compilation générique). Un premier
+essai nommé `server/build/` s'est retrouvé **entièrement ignoré par Git, y
+compris ses fichiers sources** (`lanceur.py`, le `.spec`, `construire.ps1`) —
+`git check-ignore -v` l'a révélé, `git status` seul ne l'aurait jamais
+montré. Les **sous-dossiers de sortie** de PyInstaller, eux, s'appellent
+volontairement `dist/` et `build/` (noms attendus par les règles génériques
+déjà en place) : aucune nouvelle entrée `.gitignore` n'a été nécessaire.
+
+### Piège rencontré — avertissements de construction, confirmés inoffensifs
+
+```
+WARNING: Hidden import "_cffi_backend" not found!
+WARNING: Hidden import "psycopg_binary._uuid" not found!
+```
+
+Le premier vient du hook communautaire de `bcrypt`, écrit pour d'anciennes
+versions basées sur `cffi` — `bcrypt` 4.x utilise une extension **Rust**, ce
+module n'existe simplement pas. Le second n'a eu **aucune conséquence
+observée** dans les tests (aucune colonne de type UUID dans ce projet). Les
+deux avertissements sont attendus ; ne pas chercher à les faire disparaître
+sans une raison fonctionnelle constatée.

@@ -9,11 +9,28 @@ from __future__ import annotations
 
 import configparser
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-RACINE_SERVEUR = Path(__file__).resolve().parent.parent
+
+def _racine_serveur() -> Path:
+    """Dossier où chercher config.ini par défaut.
+
+    En développement (`python -m ...`), c'est le dossier `server/` (parent de
+    `app/`). Une fois empaqueté par PyInstaller (`sys.frozen` posé par le
+    bootloader), le code tourne depuis un dossier temporaire d'extraction —
+    config.ini, lui, doit rester À CÔTÉ DE L'EXÉCUTABLE (c'est l'utilisateur
+    qui l'édite, il ne fait pas partie du paquet). Voir
+    `server/build/lanceur.py` et `server/build/README.md`.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+RACINE_SERVEUR = _racine_serveur()
 CONFIG_PAR_DEFAUT = RACINE_SERVEUR / "config.ini"
 
 # Rôles PostgreSQL applicatifs valides — voir db/migrations/008_roles_applicatifs.sql.

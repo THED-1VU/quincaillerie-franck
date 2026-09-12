@@ -4,7 +4,7 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 3 — noyau serveur, C2/C3/C11**, 2026-09-12
+- Dernier cycle fusionné : **Cycle 4 — fabrication de l'exécutable, C0**, 2026-09-12
 - Décision d'architecture (précisée 2026-09-11) : **un seul code applicatif web**,
   mais **livré et exécuté comme une application Windows (.exe)** sur les postes de
   la boutique — l'exécutable embarque le serveur local et ouvre l'interface web en
@@ -21,7 +21,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 | Code | Chantier | Score | Base d'évaluation |
 |------|----------|:-----:|-------------------|
-| C0 | Infrastructure et dépôt | **10 %** | Dépôt Git + GitHub privé créés dans ce cycle de cadrage ; `.gitignore` en place. Pas encore de CI, **pas de script de fabrication de l'exécutable Windows** (le livrable final est un `.exe` qui embarque le serveur web + le mode kiosque), pas d'environnement reproductible, pas de migrations. |
+| C0 | Infrastructure et dépôt | **55 %** | Cycle 4. `server/fabrication/` : `QuincaillerieFranck.exe` produit par PyInstaller (`construire.ps1`, un humain n'a besoin d'aucune connaissance de PyInstaller), 17,9 Mo, autonome. **Vérifié par exécution depuis un dossier totalement isolé du dépôt** : démarrage, config chargée, `/sante` répond, connexion + hachage bcrypt + jeton fonctionnent — aucune dépendance Python résiduelle. Garde-fous C11 (refus `postgres`, refus clé d'exemple) confirmés survivre à l'empaquetage. Reste : CI automatisée, outil de création du premier compte responsable (CDC §7, second exécutable), mode kiosque et écran réel une fois C9/C10 fait, dépendances encore installées manuellement (pas de lockfile figé au-delà de `requirements.txt`). |
 | C1 | Base de données et intégrité | **80 %** | Cycle 2. 9 migrations numérotées (`db/migrations/`) + inverses, appliquées et annulées par exécution réelle sur PostgreSQL 17.11. Corrigés et **prouvés** : contraintes de domaine, cohérence inter-tables, **écart d'inventaire calculé par la base** (et quantité attendue figée par déclencheur), historique non effaçable (`RESTRICT` + verrous de suppression + suppression logique), journaux de connexion et de comptes, annulation tracée et irréversible, table de paramètres avec sentinelle « à décider », index de recherche, **4 rôles non superutilisateurs à privilèges par colonne** + RLS par site. **100 contrôles, 0 échec** (`db/tests/DERNIER_RESULTAT.md`). Reste : décisions métier de l'addendum (points b, d, e, g), fonction d'authentification (C2), exploitation de la RLS (C3), reprise sur une base contenant de vraies données. |
 | C2 | Authentification et comptes | **65 %** | Cycle 3. Noyau serveur (`server/`, FastAPI) : connexion via `verifier_connexion()` (fonction PostgreSQL `SECURITY DEFINER`, migration 009, seule à lire le hachage, jamais restitué) ; verrouillage après 5 échecs, déverrouillage réservé au responsable, obligation de changement à la première connexion, libre-service limité à sa propre ligne, limitation de débit. **36/36 tests, 0 échec** (`server/tests/DERNIER_RESULTAT.md`). Reste : session à durée limitée = choix technique temporaire (`duree_session_minutes` reste `a_definir` en base — décision propriétaire) ; pas de révocation de jeton avant expiration (limite technique documentée) ; pas d'écran, pas de création de compte via API (hors périmètre du cycle). |
 | C3 | Habilitations et cloisonnement des rôles | **60 %** | Cycle 3. Habilitations appliquées **au niveau des requêtes SQL** (pas de vérification applicative dispersée) : privilèges par colonne + RLS par site posés au cycle 2, exploités par `BaseDeDonnees.connexion_pour()` (point de bascule de rôle unique). Prouvé par exécution en **contournant l'API** : `SELECT ... WHERE site_id=2` sous `qf_agent_stock` renvoie 0 ligne même en le demandant explicitement (`server/tests/test_cloisonnement_site.py`). Rôle « caissier » toujours non tranché (addendum h) — non traité ce cycle. Reste : cloisonnement RH/fournisseurs non testé par une route, pas encore d'écran. |
@@ -37,7 +37,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après cycle 3 : ≈ 22 %** (C0 10, C1 80, C2 65, C3 60, C9 25, C11 55, C14 40, autres 0).
+**Moyenne indicative après cycle 4 : ≈ 25 %** (C0 55, C1 80, C2 65, C3 60, C9 25, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -267,18 +267,74 @@ contrôle : la sortie d'exécution n'était pas archivée dans le dépôt →
   tranché (addendum h) ; aucun écran, aucune règle métier de vente/stock
   exposée par une route (volontairement hors périmètre de ce cycle).
 
+### Cycle 4 — Fabrication de l'exécutable (C0) — 2026-09-12
+
+- **Phase 1 — Diagnostic** : aucun script de fabrication n'existait ;
+  `pyinstaller` absent de l'environnement.
+- **Phase 2 — Objectif** : empaqueter le noyau serveur (cycle 3) en un `.exe`
+  Windows autonome via PyInstaller, avec un lanceur qui démarre le serveur
+  et ouvre un navigateur. Critère de sortie : l'exécutable, copié seul dans
+  un dossier sans lien avec le dépôt, démarre, sert `/sante`, et une route
+  qui touche réellement la base (connexion, hachage bcrypt) fonctionne.
+- **Phase 3 — Action** : branche `cycle-4-fabrication-exe`.
+  - `server/app/config.py` : résolution de `config.ini` adaptée au mode
+    "figé" (`sys.frozen`) — à côté de l'exécutable réel, jamais dans le
+    dossier temporaire d'extraction de PyInstaller.
+  - `server/fabrication/lanceur.py` : démarre le serveur (port 8000, ou un
+    port libre si occupé), attend qu'il réponde, ouvre le navigateur.
+    Message d'erreur lisible + pause si la configuration est invalide (une
+    fenêtre de console se ferme sinon instantanément sur Windows).
+  - `server/fabrication/quincaillerie_franck.spec` : configuration
+    PyInstaller (mode un seul fichier, hidden-imports pour uvicorn/psycopg).
+  - `server/fabrication/construire.ps1` : script humain, ASCII pur (même
+    discipline que `db/outils/*.ps1`).
+- **Phase 4 — Vérification par exécution réelle** :
+  - Construction : `QuincaillerieFranck.exe`, 17,9 Mo.
+  - **Exécuté depuis un dossier totalement isolé du dépôt** (Bureau, aucun
+    fichier du projet à proximité, seulement l'exe + `config.ini`) : démarrage,
+    `GET /sante` → `{"etat":"ok","base":"joignable"}`, `POST
+    /auth/connexion` → `200` avec jeton, `POST /auth/changer-mot-de-passe`
+    (hachage bcrypt réel) → `204`, reconnexion avec le nouveau mot de passe
+    → `200`. **Aucun Python résiduel nécessaire.**
+  - Garde-fous C11 testés dans l'exécutable : `config.ini` absent → message
+    clair ; `user = postgres` → refusé explicitement. Les deux survivent à
+    l'empaquetage.
+  - Non-régression : suite pytest du cycle 3 rejouée après les changements
+    de `config.py` — toujours **36/36**.
+- **Bugs trouvés PAR l'exécution et corrigés pendant le cycle** :
+  1. Le dossier de fabrication s'appelait d'abord `server/build/` —
+     `.gitignore` exclut tout dossier nommé `build/`, donc **Git ignorait
+     aussi mes fichiers sources**, sans le signaler (`git status` ne les
+     montre simplement jamais). Détecté par `git check-ignore -v`, pas par
+     relecture. Corrigé en renommant en `server/fabrication/`, en gardant
+     les noms `dist/`/`build/` uniquement pour les *sous-dossiers de
+     sortie* de PyInstaller (déjà couverts par les règles génériques
+     existantes — aucune nouvelle entrée `.gitignore`).
+  2. Messages d'erreur affichés avec des caractères accentués corrompus
+     dans la console Windows (« d�marr� ») — cosmétique, corrigé en forçant
+     l'UTF-8 sur la sortie standard (`sys.stdout.reconfigure`).
+  3. Deux avertissements de construction (`_cffi_backend`,
+     `psycopg_binary._uuid` introuvables) examinés et confirmés
+     **inoffensifs** par les tests ci-dessus, plutôt que supposés sans
+     vérifier : `bcrypt` 4.x n'utilise plus `cffi` (extension Rust), et
+     aucune colonne UUID n'existe dans ce projet.
+- **Phase 5 — Mémoire** : C0 **10 % → 55 %**. Commit, PR, fusion.
+- **Reste à faire (C0)** : CI automatisée ; outil de création du premier
+  compte responsable (CDC §7, second exécutable — chicken-and-egg du tout
+  premier compte, non traité ce cycle) ; mode kiosque et écran réel une
+  fois C9/C10 câblés (`CHEMIN_A_OUVRIR` dans `lanceur.py` pointe pour
+  l'instant sur `/docs`, un placeholder documenté) ; dépendances encore
+  installées à la main (`requirements.txt` figé, mais pas de lockfile avec
+  hachages).
+
 ---
 
 ## Prochain cycle — sélection
 
-1. **C0** — environnement reproductible + **script de fabrication du `.exe`**
-   (PyInstaller : serveur web + lanceur kiosque en un exécutable autonome),
-   dépendances figées, CI minimale : débloque la vérification automatisée et
-   la livraison réelle aux postes.
-2. **C4 (articles/stock) et C5 (ventes)** : nécessitent au préalable les
+1. **C4 (articles/stock) et C5 (ventes)** : nécessitent au préalable les
    décisions du propriétaire sur l'addendum, points b (créance client), d
    (fiscalité) et e (saisie a posteriori vs blocage) — sans elles, le
    décrément de stock exposé par une route inventerait une règle métier.
-3. **C9/C10** : câbler réellement les écrans de la maquette du cycle 1 sur
+2. **C9/C10** : câbler réellement les écrans de la maquette du cycle 1 sur
    le noyau serveur du cycle 3 (connexion, jeton, appels `/articles` etc.),
    puis faire remplir le tableau de mesures humaines de `UX_BASELINE.md`.
