@@ -611,6 +611,115 @@ contrôle : la sortie d'exécution n'était pas archivée dans le dépôt →
 
 ---
 
+### Contrôle de boucle — après cycle 7, avant de démarrer un cycle 8 (2026-09-12, sans code)
+
+Fait à la demande explicite du propriétaire, qui a constaté que la règle
+« un chantier par cycle, avec validation du propriétaire avant mise en
+œuvre » n'avait pas été respectée sur les cycles 4 à 7 (chantiers enchaînés
+sans arrêt intermédiaire). Deux actions : corriger `SKILL.md` (fait, voir
+plus haut — 4 étapes, arrêt obligatoire à l'étape 3) et rejouer le cycle 7
+comme un relecteur extérieur, sans se fier au rapport que le cycle 7
+avait lui-même produit.
+
+**Chiffres annoncés par le cycle 7, tous rejoués indépendamment et
+retrouvés identiques** : suite pytest 53/53 (dont 9/9 `test_inventaire.py`) ;
+suite SQL du cycle 2 — protections 44/44, habilitations 52/52, concurrence
+6/6, réversibilité des migrations 000-012 confirmée ; `verifier-cablage.mjs`
+74/74 ; `verifier-vente-reelle.mjs` 10/10 ; `verifier-inventaire-reel.mjs`
+12/12. **Aucun écart entre les chiffres annoncés et les chiffres obtenus.**
+
+**Vérification renforcée, au-delà de la suite de tests existante**, sur le
+point le plus sensible du chantier (la quantité attendue et l'écart ne
+doivent jamais atteindre l'agent stock) :
+- `SELECT ecart`, `SELECT quantite_attendue` et `SELECT *` sous
+  `qf_agent_stock`, chacun dans sa propre transaction fraîche : **les trois
+  refusés** (`permission denied for table comptages_stock`).
+- `qf_agent_comptabilite` et `qf_agent_stock` sur `ecarts_stock_ventes` :
+  **refusés** également (`permission denied`).
+- Requête brute (`curl`, sans passer par le code du client) sur
+  `GET /inventaire/articles-a-compter` : réponse strictement limitée à
+  `{id, nom, unite}`.
+- **Essai non couvert par la suite de tests existante** : `POST
+  /inventaire/comptages` avec des champs `quantite_attendue` et `ecart`
+  injectés volontairement dans le corps de la requête (un client
+  malveillant qui tenterait de les imposer). Résultat : la réponse ne les
+  contient pas, et la ligne enregistrée en base porte la vraie valeur
+  (`quantite_attendue = 30`, la valeur réelle en stock), pas la valeur
+  injectée (`999`) — Pydantic ignore silencieusement les champs inconnus, et
+  le déclencheur de la migration 003 écrase de toute façon toute valeur
+  fournie. **Cette garantie tient donc à deux niveaux indépendants**
+  (schéma applicatif ET déclencheur base), pas à un seul.
+
+**Relecture du code de la PR #8 comme un relecteur extérieur — 5 constats,
+aucun ne remet en cause la garantie ci-dessus, mais aucun n'était consigné
+dans le rapport du cycle 7** :
+
+1. **Fuseau horaire de la base de données : `Europe/Paris`, pas
+   `Africa/Douala`** (Batouri, Cameroun). Actuellement (heure d'été
+   européenne) la base est en avance d'environ 1 heure sur l'heure réelle
+   de la boutique. `CURRENT_DATE`, utilisé pour « un seul comptage par
+   article/moment/**jour** » (migration 003) et pour les deux écrans
+   « écarts **du jour** » (C5 et C7), suit l'horloge de la base, pas
+   l'heure de Batouri. Fenêtre de risque étroite (une comptage fait très
+   tard le soir pourrait être daté du lendemain côté base), mais réelle et
+   non détectée avant ce contrôle. Ce n'est pas un bug de code : c'est une
+   configuration d'environnement à corriger (hors périmètre d'un chantier
+   applicatif — plutôt C0/C12).
+2. **`tableau-bord.html` construit deux nouvelles listes avec
+   `innerHTML` sans échapper `article_nom`** (nom d'article, une donnée
+   modifiable par le personnel, pas un texte fixe). Un nom d'article
+   contenant des caractères HTML s'exécuterait dans le navigateur du
+   responsable. Le motif existait déjà ailleurs dans la maquette avant ce
+   cycle (`vente.html`, liste de suggestions) ; ce cycle l'a étendu à deux
+   emplacements de plus sans le corriger. Pas exploitable par un tiers
+   extérieur (il faut un compte avec droit de nommer un article), mais une
+   vraie faiblesse à traiter au chantier C11 ou lors d'un prochain passage
+   sur l'ergonomie.
+3. **`maquette/inventaire.html` : une panne réseau pendant l'enregistrement
+   d'un comptage, suivie d'une nouvelle tentative, aboutit à une impasse
+   d'ergonomie.** Si la première requête a en réalité réussi côté serveur
+   mais que la réponse n'est jamais arrivée au navigateur, la deuxième
+   tentative reçoit un 409 (« déjà compté »), traité comme une erreur
+   générique : l'agent reste bloqué sur cet article, sans pouvoir avancer
+   autrement qu'en cliquant « Passer » (qui abandonne silencieusement ce
+   comptage-là de son point de vue, alors qu'il est bien enregistré). Aucun
+   risque pour l'intégrité des données ; un vrai risque de confusion pour
+   l'agent.
+4. **`GET /inventaire/articles-a-compter` n'a pas de comportement défini
+   pour un responsable** (le rôle est accepté par la route, mais aucun écran
+   ne l'utilise pour ce rôle) : la réponse ne porte pas de `site_id`, alors
+   qu'un responsable verrait les articles des DEUX sites mélangés sans
+   pouvoir les distinguer. Sans conséquence aujourd'hui (aucune interface ne
+   l'expose), mais une route ne devrait pas avoir un comportement non défini
+   pour un rôle qu'elle accepte explicitement.
+5. **Aucun test, avant ce contrôle, n'essayait d'injecter
+   `quantite_attendue`/`ecart` dans le corps d'une requête `POST
+   /inventaire/comptages`** — c'est ce contrôle qui l'a fait pour la
+   première fois (constat ci-dessus). La suite `test_inventaire.py` devrait
+   intégrer ce cas pour qu'une régression future (par exemple si le schéma
+   `DemandeComptage` gagnait un jour ce champ par erreur) soit détectée
+   automatiquement plutôt que par une relecture occasionnelle.
+
+**Honnêteté des scores** : les nombres cités par `loop-state.md` pour le
+cycle 7 (53/53, 44/44, 52/52, 6/6, 74/74, 10/10, 12/12) sont **tous
+vérifiés, exacts, et même dépassés** par les contrôles supplémentaires
+ci-dessus. Le score **C7 45 % n'est pas revu à la baisse** : la garantie la
+plus critique du chantier (aucune fuite de la quantité attendue) est
+confirmée par des essais plus durs que ceux déjà écrits, à deux niveaux de
+défense indépendants. En revanche, la liste « Reste à faire (C7) »
+ci-dessus était **incomplète** : les 5 constats ne remettent pas en cause le
+score mais auraient dû y figurer. Ils sont ajoutés ici plutôt que
+silencieusement absorbés dans un score inchangé.
+
+**Verdict sur la PR #8** : **fusionnable en l'état** — aucune régression,
+aucune preuve manquante, la garantie centrale du chantier tient sous
+contrainte. Les 5 constats ci-dessus ne sont pas des motifs de blocage ; ce
+sont des corrections mineures à trancher (les proposer maintenant ou les
+reporter) plutôt que des raisons de ne pas fusionner un travail qui fait ce
+qu'il annonce.
+
+---
+
 ## Prochain cycle — proposition (non démarré, choix laissé au propriétaire)
 
 1. **C4 (articles/stock)** : nécessite au préalable les décisions du
