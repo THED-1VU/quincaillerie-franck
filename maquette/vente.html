@@ -9,12 +9,14 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Maquette — données simulées. Tapez dans la recherche, <kbd>Entrée</kbd> pour ajouter. Aucun stock retiré, aucune vente réelle.</div>
+<div class="simu">Écran câblé (cycle 5) : catalogue et prix réels via <code>GET /articles</code>, filtrés par votre rôle et votre site. La <strong>validation de la vente reste simulée</strong> — voir la note près du bouton.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Quincaillerie Franck</span>
-    <h1 class="bandeau__titre">Enregistrer une vente — Comptoir</h1>
-    <span class="bandeau__role bandeau__pousse">Facturier papier n° <strong id="num-facturier">—</strong></span>
+    <h1 class="bandeau__titre" id="titre-ecran">Enregistrer une vente</h1>
+    <span class="bandeau__role" id="badge-utilisateur">…</span>
+    <span class="bandeau__role bandeau__pousse">Facturier papier n° <strong id="num-facturier">—</strong> <span class="champ__aide" style="display:inline;">(simulation)</span></span>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
   </header>
 
   <main class="contenu">
@@ -31,6 +33,7 @@
             Tapez, puis <kbd>Entrée</kbd> pour ajouter au panier. <kbd>↑</kbd> <kbd>↓</kbd> pour choisir, <kbd>Échap</kbd> pour effacer.
           </p>
           <ul class="suggestions" id="suggestions" role="listbox" hidden></ul>
+          <div id="zone-erreur-catalogue" class="erreur-champ" hidden></div>
         </div>
 
         <div class="carte">
@@ -88,12 +91,20 @@
   </footer>
 </div>
 
+<script src="api.js"></script>
 <script src="donnees-simulees.js"></script>
 <script>
-(function () {
+(async function () {
   "use strict";
 
-  const TAUX_TVA = 0; // maquette : aucune TVA (cf. addendum d — doit fonctionner à 0)
+  // Écran réservé à la comptabilité (qui enregistre les ventes du facturier
+  // papier) et au responsable (qui encaisse). L'agent stock n'a d'ailleurs
+  // aucun droit sur /articles avec des prix, ni sur /ventes/synthese-jour :
+  // le rediriger ailleurs évite de lui montrer un écran cassé.
+  const session = await exigerSession(["responsable", "agent_comptabilite"]);
+  if (!session) return; // exigerSession a déjà redirigé.
+
+  const TAUX_TVA = 0; // aucune TVA appliquée pour l'instant (addendum, point d — décision du propriétaire en attente)
 
   const $ = (id) => document.getElementById(id);
   const recherche   = $("recherche");
@@ -101,24 +112,47 @@
   const panierEl    = $("panier");
   const paiementEl  = $("paiement");
 
+  // Identité réelle dans le bandeau.
+  document.getElementById("badge-utilisateur").textContent =
+    LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  document.getElementById("titre-ecran").textContent =
+    "Enregistrer une vente — " + (session.site_id ? LIBELLE_SITE[session.site_id] : "tous sites");
+  document.getElementById("bouton-deconnexion").addEventListener("click", deconnecter);
+
+  // Le panier de départ reste une donnée de démonstration (aucune vente en
+  // cours n'existe côté serveur pour cet écran) ; le CATALOGUE, lui, est réel.
   let panier = DONNEES.panierInitial.map((l) => ({ ...l }));
   let selIndex = -1;
   let resultats = [];
+  let catalogue = [];
 
   $("num-facturier").textContent = "CPT-" + (1040 + Math.floor(Math.random() * 20));
 
-  // --- Modes de paiement ---
+  // --- Modes de paiement (aucune route ne les expose : liste fixe du CDC) ---
   DONNEES.modesPaiement.forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m.code; opt.textContent = m.libelle;
     paiementEl.appendChild(opt);
   });
 
+  // --- Catalogue RÉEL, via /articles (filtré par rôle et par site côté serveur) ---
+  try {
+    const donnees = await appelApi("/articles");
+    // La comptabilité reçoit {id, nom, unite, prix_vente, site_id} ; le
+    // responsable reçoit en plus prix_achat/quantite_stock/seuil_alerte
+    // (ignorés ici, cet écran n'en a pas besoin).
+    catalogue = donnees.articles.map((a) => ({
+      id: a.id, nom: a.nom, unite: a.unite, prixCatalogue: a.prix_vente,
+    }));
+  } catch (erreur) {
+    afficherErreurServeur("zone-erreur-catalogue", erreur);
+  }
+
   // --- Recherche + suggestions ---
   function filtrer(q) {
     q = q.trim().toLowerCase();
     if (!q) return [];
-    return DONNEES.catalogue.filter((a) => a.nom.toLowerCase().includes(q)).slice(0, 6);
+    return catalogue.filter((a) => a.nom.toLowerCase().includes(q)).slice(0, 6);
   }
 
   function rendreSuggestions() {
@@ -243,7 +277,11 @@
     enAttenteConfirmation = false;
     zoneConfirmation.hidden = true;
     zoneSucces.hidden = false;
-    zoneSucces.textContent = "Vente enregistrée (maquette). L'impression du ticket sera traitée dans un cycle ultérieur.";
+    zoneSucces.textContent =
+      "SIMULATION — aucune vente n'a réellement été enregistrée : le serveur n'expose " +
+      "encore aucune route d'écriture des ventes (chantier C5), en attente des décisions " +
+      "du propriétaire (crédit client, fiscalité, gestion du stock insuffisant). " +
+      "Le catalogue et les prix affichés, eux, sont réels.";
     btnValider.innerHTML = 'Valider la vente <span class="btn__raccourci">F9</span>';
   }
 

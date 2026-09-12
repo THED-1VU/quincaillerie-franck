@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Maquette — données simulées. Testez : <code>awa</code> / <code>franck</code> pour entrer, ou un mauvais mot de passe pour voir l'erreur.</div>
+<div class="simu">Écran câblé sur le serveur réel (cycle 5). Comptes : voir <code>db/tests/00_jeu_essai.sql</code>.</div>
 <div class="page">
   <main class="contenu contenu--etroit" style="display:flex; align-items:center; justify-content:center;">
     <div class="carte" style="width:100%; max-width:420px;">
@@ -31,7 +31,7 @@
 
         <div id="zone-erreur" class="erreur-champ" hidden></div>
 
-        <button class="btn btn--primaire btn--large" type="submit" style="margin-top:var(--e-4);">
+        <button class="btn btn--primaire btn--large" id="bouton-connexion" type="submit" style="margin-top:var(--e-4);">
           Se connecter
         </button>
       </form>
@@ -43,10 +43,21 @@
   </main>
 </div>
 
-<script src="donnees-simulees.js"></script>
+<script src="api.js"></script>
 <script>
+(function () {
+  "use strict";
+
+  // Déjà connecté ? Inutile de repasser par cet écran.
+  const session = Session.lire();
+  if (session && session.jeton) {
+    window.location.href = PAGE_ACCUEIL_PAR_ROLE[session.role] || "vente.html";
+    return;
+  }
+
   const form = document.getElementById("form-connexion");
   const zoneErreur = document.getElementById("zone-erreur");
+  const boutonConnexion = document.getElementById("bouton-connexion");
 
   function montrerErreur(message) {
     zoneErreur.textContent = message;
@@ -55,23 +66,50 @@
     document.getElementById("motdepasse").select();
   }
 
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     zoneErreur.hidden = true;
-    const id = form.identifiant.value.trim();
-    const mdp = form.motdepasse.value;
+    const identifiant = form.identifiant.value.trim();
+    const motDePasse = form.motdepasse.value;
 
-    if (!id && !mdp) { montrerErreur("Saisissez votre identifiant et votre mot de passe."); return; }
-    if (!id)  { montrerErreur("L'identifiant est vide."); document.getElementById("identifiant").focus(); return; }
-    if (!mdp) { montrerErreur("Le mot de passe est vide."); return; }
+    if (!identifiant && !motDePasse) { montrerErreur("Saisissez votre identifiant et votre mot de passe."); return; }
+    if (!identifiant) { montrerErreur("L'identifiant est vide."); document.getElementById("identifiant").focus(); return; }
+    if (!motDePasse) { montrerErreur("Le mot de passe est vide."); return; }
 
-    // Maquette : un seul couple accepté, aucune vérification réelle.
-    if (id.toLowerCase() === "awa" && mdp === "franck") {
-      window.location.href = "vente.html";
-    } else {
-      montrerErreur("Identifiant ou mot de passe incorrect. Après 5 essais, le compte se bloque : voyez le responsable.");
+    boutonConnexion.disabled = true;
+    try {
+      const reponse = await fetch("/auth/connexion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifiant, mot_de_passe: motDePasse }),
+      });
+      const corps = await reponse.json().catch(() => null);
+
+      if (!reponse.ok) {
+        // Le serveur renvoie déjà un message clair, en français :
+        // "Identifiant ou mot de passe incorrect.", "Ce compte est désactivé...",
+        // "Compte verrouillé après plusieurs échecs...", ou (429) "Trop de
+        // tentatives de connexion...". On l'affiche tel quel, près du champ.
+        montrerErreur((corps && corps.detail) || "Connexion refusée.");
+        return;
+      }
+
+      Session.enregistrer({
+        jeton: corps.jeton,
+        utilisateur_id: corps.utilisateur_id,
+        nom_complet: corps.nom_complet,
+        role: corps.role,
+        site_id: corps.site_id,
+        doit_changer_mot_de_passe: corps.doit_changer_mot_de_passe,
+      });
+      window.location.href = PAGE_ACCUEIL_PAR_ROLE[corps.role] || "vente.html";
+    } catch {
+      montrerErreur(RESEAU_INACCESSIBLE);
+    } finally {
+      boutonConnexion.disabled = false;
     }
   });
+})();
 </script>
 </body>
 </html>

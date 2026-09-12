@@ -9,7 +9,19 @@ non câblée (`maquette/`).
 > testeur humain** sur la vraie application, **C9 ne peut pas dépasser 60 %**.
 > Les vérifications automatiques (`maquette/verification/`) prouvent l'absence de
 > débordement et le nombre d'actions, mais **pas** la vitesse ni la
-> compréhension : seul un test humain le fait.
+> compréhension : seul un test humain le fait. La même limite s'applique à
+> **C10** (mobile) pour le tableau de bord responsable et le comptage
+> d'inventaire, les deux écrans conçus mobile-first.
+
+> **Mise à jour cycle 5 :** les 4 écrans ne sont plus une maquette isolée —
+> ils parlent réellement au serveur (connexion, jeton, `/articles`,
+> `/ventes/synthese-jour`). Le protocole ci-dessous peut donc désormais
+> s'exécuter **pour de vrai**, avec de vrais comptes, et pas seulement sur
+> `maquette/` servie à part. Voir §1 bis pour le démarrage exact. Ce qui reste
+> simulé (validation d'une vente, alertes de stock, écarts d'inventaire,
+> liste d'articles à compter) est signalé explicitement à l'écran — le
+> testeur humain doit considérer ces messages « SIMULATION » ou « donnée
+> simulée » comme la confirmation attendue, pas comme un bug.
 
 ---
 
@@ -28,6 +40,48 @@ non câblée (`maquette/`).
 
 Un test est **accepté** seulement si l'objectif est atteint **sans contournement**
 et **sans erreur non expliquée**.
+
+---
+
+## 1 bis. Démarrage exact (depuis le cycle 5, écrans câblés)
+
+À faire une seule fois avant une campagne, dans l'ordre :
+
+1. **Démarrer PostgreSQL de développement** : `db/outils/demarrer_pg.ps1`.
+2. **Charger un jeu de données propre** :
+   ```
+   _pgdev\pgsql\bin\psql.exe -h 127.0.0.1 -p 5433 -U postgres -d quincaillerie_test -v ON_ERROR_STOP=1 -f db\tests\00_jeu_essai.sql
+   ```
+   (mot de passe PostgreSQL local : voir `PGPASSWORD` dans
+   `server/tests/conftest.py` ou `maquette/verification/verifier-cablage.mjs`,
+   jamais commité en clair ailleurs). Ce jeu d'essai pose des mots de passe
+   **factices** (`hash_factice`) : l'étape suivante est obligatoire.
+3. **Poser de vrais mots de passe** sur les comptes de test (mêmes valeurs que
+   les tests automatisés, pour rester cohérent) :
+   ```sql
+   UPDATE utilisateurs SET mot_de_passe_hash = crypt('ResponsableTest123', gen_salt('bf', 12)), tentatives_echouees = 0 WHERE identifiant = 'resp';
+   UPDATE utilisateurs SET mot_de_passe_hash = crypt('AgentStockTest123', gen_salt('bf', 12)), tentatives_echouees = 0 WHERE identifiant = 'magasin.stock';
+   UPDATE utilisateurs SET mot_de_passe_hash = crypt('AgentComptaTest123', gen_salt('bf', 12)), tentatives_echouees = 0 WHERE identifiant = 'magasin.compta';
+   ```
+4. **Démarrer le serveur** (sert l'API **et** les écrans, même origine) :
+   ```
+   server\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir server --port 8010
+   ```
+5. **Ouvrir** `http://127.0.0.1:8010/app/connexion.html` sur chaque poste/téléphone
+   de test (remplacer `127.0.0.1` par l'adresse IP du poste serveur sur le
+   réseau de la boutique pour tester depuis un téléphone séparé).
+
+**Comptes de test à utiliser pour le protocole ci-dessous :**
+
+| Rôle | Identifiant | Mot de passe | Écran d'accueil |
+|---|---|---|---|
+| Responsable | `resp` | `ResponsableTest123` | Tableau de bord (téléphone) |
+| Agent stock (magasin) | `magasin.stock` | `AgentStockTest123` | Comptage d'inventaire |
+| Agent comptabilité (magasin) | `magasin.compta` | `AgentComptaTest123` | Écran de vente |
+
+Ces comptes sont réservés aux campagnes de test : ne jamais les utiliser en
+exploitation réelle, et reposer un mot de passe factice (ou supprimer le
+compte) avant toute mise en service.
 
 ---
 
@@ -50,7 +104,11 @@ celle-ci câblée.
 4. Ajouter **article 3** de la même façon.
 5. Choisir un **mode de paiement**.
 6. **Valider** la vente (une seule confirmation).
-7. **Arrêt du chrono** quand la vente est enregistrée (message de succès).
+7. **Arrêt du chrono** quand le message de confirmation s'affiche. *(Au cycle 5,
+   ce message commence par « SIMULATION » : la vente n'est pas encore
+   réellement enregistrée côté serveur, faute de route d'écriture — voir
+   chantier C5 et l'addendum. C'est attendu ; le chrono mesure le parcours,
+   pas la persistance.)*
    → **Objectif : moins de 60 secondes**, à partir de l'écran de vente prêt.
 
 ### Étape C — Correction d'une quantité
@@ -101,6 +159,30 @@ Preuves : `maquette/verification/` (scripts `verifier-affichage.mjs` et
 la vitesse réelle (étapes A et B chronométrées), la compréhension des messages
 d'erreur par un utilisateur non formé (étape E), le confort sur appareils
 mobiles réels, et le parcours clavier complet sur un vrai clavier de caisse.
+
+---
+
+## 3 bis. Ce que le cycle 5 ajoute (câblage sur le noyau serveur, vérifié par exécution)
+
+Preuve : `maquette/verification/verifier-cablage.mjs` (73 contrôles, 0 échec),
+`maquette/captures/` (captures aux 5 largeurs sur les écrans réellement câblés).
+
+| Critère de sortie du cycle 5 | Résultat |
+|---|---|
+| Connexion réelle (`POST /auth/connexion`), jeton conservé, redirection par rôle | **OK** — 3 comptes testés |
+| Accès direct à l'écran d'un autre rôle → reredirigé | **OK** |
+| Accès sans session à un écran protégé → renvoyé à la connexion | **OK** — 3 écrans testés |
+| Agent stock : **aucun** champ de prix/montant dans les réponses serveur | **OK** — `/articles` inspecté champ par champ |
+| Agent comptabilité : **aucun** champ de quantité/seuil dans les réponses serveur | **OK** — `/articles` inspecté champ par champ |
+| Quantité attendue d'un comptage absente de la page, du réseau et du code source | **OK** — vérifié après rechargement de la page, réponses réseau interceptées |
+| Message d'erreur serveur toujours en français, près du champ (jamais brut) | **OK** — champ vide, mot de passe erroné, serveur injoignable (panne simulée) |
+| Cibles tactiles ≥ 44 px conservées après ajout des identités réelles/déconnexion | **OK** — régression détectée puis corrigée en cours de cycle (bouton de déconnexion) |
+| Aucune régression sur les 36 tests automatisés du serveur | **OK** — 36/36 |
+
+**Ce que le cycle 5 NE prouve toujours pas** : tout le §1 bis reste à exécuter
+par un humain, chronomètre en main — la vitesse, la compréhension des messages
+par une personne non formée, et le confort réel sur un téléphone physique.
+Le tableau du §4 reste donc la seule voie pour lever le plafond de 60 %.
 
 ---
 

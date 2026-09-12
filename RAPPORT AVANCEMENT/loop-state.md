@@ -4,7 +4,7 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 4 — fabrication de l'exécutable, C0**, 2026-09-12
+- Dernier cycle fusionné : **Cycle 5 — câblage de la maquette sur le noyau serveur, C9/C10**, 2026-09-12
 - Décision d'architecture (précisée 2026-09-11) : **un seul code applicatif web**,
   mais **livré et exécuté comme une application Windows (.exe)** sur les postes de
   la boutique — l'exécutable embarque le serveur local et ouvre l'interface web en
@@ -30,14 +30,14 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C6 | Comptabilité et RH | **0 %** | Non vérifié. `transactions`, `employes`, `absences_conges`, `avances_salaire` présents. Manquent : clôture de caisse (addendum g), contre-passation d'annulation, `transactions.vente_id` non unique, audit des corrections. |
 | C7 | Inventaire et écarts | **0 %** | Non vérifié. `comptages_stock` + comptage à l'aveugle modélisés. `ecart` stocké et non contraint (faille anti-vol) ; pas d'unicité par créneau ; pas de rattachement des écarts de survente au comptage (addendum e). |
 | C8 | Tableaux de bord et rapports | **0 %** | Non vérifié. Exigés au CDC (consolidé/par site, alertes, exports Excel/PDF avec gating du prix par rôle) ; aucune preuve d'exécution. |
-| C9 | Ergonomie et UI *(priorité 1)* | **25 %** | Cycle 1. Maquette non câblée des 4 écrans clés (`maquette/`), thème unique, données simulées isolées. Vérifié par exécution : 20/20 captures aux 5 largeurs sans débordement, 0 erreur console, cibles ≥ 44 px, ajout au panier en 2 actions, comptage à l'aveugle sans quantité attendue dans la page (`maquette/verification/`, 14/14). **Plafonné à 60 %** tant que le tableau de mesures humaines de `UX_BASELINE.md` §4 n'est pas rempli (vitesse, compréhension des erreurs, clavier réel). Reste : implémentation réelle des écrans, câblage, mesures chronométrées. |
-| C10 | Mobile et API web *(priorité 1)* | **0 %** | Diagnostic : « Web API or mobile interface : Not found ». Aucune interface mobile dans le livré. Cible : **la même application web** ouverte dans le navigateur d'un **Android / iPhone**, pour **utiliser** (recettes, dépenses, inventaire) **et suivre** (tableau de bord, alertes, écarts), via LAN ou tunnel — jamais PostgreSQL exposé. Priorité n°2 du propriétaire, non couverte à ce jour. |
+| C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
+| C10 | Mobile et API web *(priorité 1)* | **30 %** | Cycle 5. Les deux écrans mobile-first (tableau de bord responsable, comptage d'inventaire) sont désormais **la même application web**, session réelle, testée et capturée à 360/390/768 px avec de vrais comptes — première preuve d'exécution sur ce chantier (`verifier-cablage.mjs`). Reste : accès démontré depuis un **téléphone physique** sur le LAN ou via tunnel (seules des largeurs de navigateur ont été testées ici, pas un appareil réel), API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **55 %** | Cycle 3. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse (vérifié par expression régulière), erreurs SQL jamais renvoyées telles quelles au client. Reste : révocation de session, limiteur de débit partagé (multi-processus), audit de sécurité plus large (dépendances, en-têtes HTTP, TLS — hors périmètre local de dev). |
 | C12 | Sauvegarde et exploitation | **0 %** | Diagnostic : « Backup and restore procedure : Not found ». Aucun script, aucune procédure. Onduleur, RPO/RTO, mise à jour des postes : à définir (addendum i). |
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après cycle 4 : ≈ 25 %** (C0 55, C1 80, C2 65, C3 60, C9 25, C11 55, C14 40, autres 0).
+**Moyenne indicative après cycle 5 : ≈ 29 %** (C0 55, C1 80, C2 65, C3 60, C9 50, C10 30, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -327,14 +327,103 @@ contrôle : la sortie d'exécution n'était pas archivée dans le dépôt →
   installées à la main (`requirements.txt` figé, mais pas de lockfile avec
   hachages).
 
+### Cycle 5 — Câblage de la maquette sur le noyau serveur : C9, C10 — 2026-09-12
+
+- **Phase 1 — Diagnostic** : la maquette du cycle 1 (4 écrans) et le noyau
+  serveur du cycle 3 existaient séparément — aucun des deux ne parlait à
+  l'autre. Les décisions du propriétaire sur l'addendum (points b, d, e)
+  restant à prendre, aucune route métier de vente/stock n'existe encore côté
+  serveur.
+- **Phase 2 — Objectif** : les 4 écrans consomment de vraies données du
+  noyau serveur (connexion, jeton, `/articles`, `/ventes/synthese-jour`) là
+  où une route existe déjà ; là où elle n'existe pas, la donnée reste
+  simulée et **signalée explicitement à l'écran**, sans inventer de route
+  métier. Critère de sortie : les 3 rôles voient réellement des choses
+  différentes (prouvé par inspection du contenu des réponses, pas
+  seulement du code HTTP) ; la quantité attendue d'un comptage n'atteint
+  jamais le navigateur ; les erreurs serveur s'affichent toujours en
+  français près du champ ; 0 régression sur les 36 tests du cycle 3 ;
+  captures aux 5 largeurs ; `UX_BASELINE.md` mis à jour avec le protocole
+  exact à chronométrer par un humain.
+- **Phase 3 — Action** : branche `cycle-5-cablage-ux`.
+  - `server/app/main.py` : montage `StaticFiles(html=True)` sous `/app`,
+    pour servir `maquette/` **depuis le même serveur et la même origine**
+    que l'API — aucune configuration CORS à gérer.
+  - `maquette/api.js` (nouveau) : session (`sessionStorage`), `appelApi()`
+    (jeton, erreurs réseau en français), `exigerSession(rôles)` (vérifie la
+    session côté serveur via `/moi`, redirige vers l'écran du bon rôle).
+  - `connexion.html` : connexion réelle (`POST /auth/connexion`), plus de
+    couple identifiant/mot de passe en dur.
+  - `vente.html` : catalogue et prix réels (`GET /articles`, filtré par
+    rôle et par site) ; validation de vente **explicitement** annoncée
+    « SIMULATION » (aucune route d'écriture n'existe : chantier C5, en
+    attente des décisions du propriétaire).
+  - `tableau-bord.html` : ventes du jour réelles et consolidées
+    (`GET /ventes/synthese-jour`) ; alertes de stock et écarts d'inventaire
+    laissés simulés, marqués « donnée simulée » (chantiers C7/C8).
+  - `inventaire.html` : session réelle, mais liste d'articles à compter
+    **délibérément laissée simulée** — la route `/articles` existante
+    inclut la quantité en stock (légitime pour l'agent stock au quotidien),
+    ce qui violerait le comptage à l'aveugle si elle servait ici. Une route
+    dédiée sans cette colonne reste à construire (chantier C7).
+  - `maquette/verification/verifier-cablage.mjs` (nouveau) : script
+    Playwright auto-suffisant (réinitialise sa propre base de test),
+    couvrant les 3 parcours de rôle, l'inspection du **contenu** des
+    réponses réseau, et les captures aux 5 largeurs.
+- **Phase 4 — Vérification par exécution réelle** :
+  - `verifier-cablage.mjs` : **73/73**, 0 échec — détail complet dans
+    `maquette/verification/DERNIER_RESULTAT.md`. Notamment : agent stock
+    sans aucun champ de prix dans `/articles`, comptable sans aucun champ
+    de quantité ; après rechargement de la page d'inventaire, aucune trace
+    de « quantité attendue » dans la page, le réseau ou le code source ;
+    messages d'erreur (champ vide, mot de passe erroné, panne réseau
+    simulée) toujours en français, jamais bruts.
+  - Suite pytest du serveur rejouée après le montage `StaticFiles` :
+    **toujours 36/36**, 0 échec — aucune régression.
+  - Captures régénérées aux 5 largeurs (360/390/768/1366/1920) sur les 4
+    écrans réellement câblés, dans `maquette/captures/`.
+- **Bugs trouvés PAR l'exécution et corrigés pendant le cycle** :
+  1. Les boutons de déconnexion ajoutés aux 3 écrans protégés portaient un
+     style en ligne (`min-height:auto`) qui écrasait le minimum de 44 px
+     imposé par le thème sur `.btn` — cible tactile mesurée à 32 px sur
+     mobile. Supprimé (le thème suffit).
+  2. La bannière d'avertissement de l'écran d'inventaire contenait
+     elle-même, en toutes lettres, la phrase « la quantité attendue »
+     (en expliquant qu'elle n'existe pas...) — auto-déclenchait le contrôle
+     qu'elle décrivait. Reformulée sans cette phrase littérale, sens
+     inchangé ; confirmé par relecture du regex de contrôle contre le
+     fichier corrigé (aucune correspondance).
+  3. Une instabilité Playwright a d'abord fait échouer les 3 parcours de
+     connexion (`waitForLoadState("networkidle")` ne détectait pas de façon
+     fiable une redirection JS enchaînée après un `fetch` déjà attendu) —
+     remplacé par une attente explicite de la réponse HTTP puis de l'URL
+     finale (`waitForResponse` + `waitForURL`).
+- **Phase 5 — Mémoire** : C9 **25 % → 50 %** (plafond 60 % maintenu,
+  `UX_BASELINE.md` §4 toujours vide), C10 **0 % → 30 %**. Commit, PR,
+  fusion.
+- **Reste à faire (C9/C10)** : faire remplir le tableau de mesures humaines
+  de `UX_BASELINE.md` §4 (protocole de démarrage exact ajouté au §1 bis) ;
+  démontrer l'accès depuis un téléphone physique sur le réseau de la
+  boutique ; câbler les routes encore manquantes une fois les décisions du
+  propriétaire prises (addendum b, d, e) et les chantiers C5/C7/C8 ouverts.
+
 ---
 
-## Prochain cycle — sélection
+## Prochain cycle — proposition (non démarré, choix laissé au propriétaire)
 
 1. **C4 (articles/stock) et C5 (ventes)** : nécessitent au préalable les
    décisions du propriétaire sur l'addendum, points b (créance client), d
    (fiscalité) et e (saisie a posteriori vs blocage) — sans elles, le
-   décrément de stock exposé par une route inventerait une règle métier.
-2. **C9/C10** : câbler réellement les écrans de la maquette du cycle 1 sur
-   le noyau serveur du cycle 3 (connexion, jeton, appels `/articles` etc.),
-   puis faire remplir le tableau de mesures humaines de `UX_BASELINE.md`.
+   décrément de stock ou l'enregistrement d'une vente exposés par une route
+   inventeraient une règle métier. C'est aujourd'hui le principal chantier
+   qui **bloque** sur une décision externe plutôt que sur du travail
+   technique.
+2. **C7 (inventaire et écarts)** : indépendant des points b/d/e — pourrait
+   avancer dès maintenant. Permettrait notamment de construire la route
+   dédiée au comptage à l'aveugle (sans quantité en stock), que ce cycle a
+   identifiée comme manquante pour `inventaire.html`, et de brancher les
+   « écarts d'inventaire » du tableau de bord (aujourd'hui simulés).
+3. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
+   développement — un testeur humain, chronomètre en main, sur le serveur
+   maintenant réellement câblé (protocole exact au §1 bis). Lèverait le
+   plafond de 60 % sur C9 et C10 si les résultats sont conformes.
