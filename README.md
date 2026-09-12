@@ -3,7 +3,7 @@
 Dépôt de la reconstruction de l'application de gestion des **Ets Quincaillerie Franck**
 (Batouri, région de l'Est, Cameroun).
 
-> **État : reconstruction, cycle 3 fusionné.** L'application d'origine a été livrée
+> **État : reconstruction, cycle 4 fusionné.** L'application d'origine a été livrée
 > uniquement en exécutables Windows ; le code source est introuvable. Le dépôt a
 > commencé par une phase de cadrage (rétro-spécifications, addendum), puis les
 > cycles de finalisation.
@@ -25,6 +25,19 @@ Dépôt de la reconstruction de l'application de gestion des **Ets Quincaillerie
 | [`RAPPORT AVANCEMENT/loop-state.md`](RAPPORT%20AVANCEMENT/loop-state.md) | État des 15 chantiers `C0`–`C14` et journal des cycles de finalisation. |
 | [`RAPPORT AVANCEMENT/COMPARAISON_ARCHITECTURE.md`](RAPPORT%20AVANCEMENT/COMPARAISON_ARCHITECTURE.md) | Comparaison des deux architectures cibles (bureau+web vs web unique). |
 | [`.agents/skills/finalisation-loop/SKILL.md`](.agents/skills/finalisation-loop/SKILL.md) | Le cycle de finalisation en 5 phases utilisé sur ce projet. |
+
+## Cycle 4 — fabrication de l'exécutable Windows (chantier C0)
+
+| Élément | Contenu |
+|---|---|
+| [`server/fabrication/`](server/fabrication/) | `lanceur.py` (démarre le serveur + ouvre un navigateur), `quincaillerie_franck.spec` (PyInstaller), `construire.ps1` (script humain). |
+| [`server/fabrication/DERNIER_RESULTAT.md`](server/fabrication/DERNIER_RESULTAT.md) | Trace de la dernière construction : exécutable testé depuis un dossier **totalement isolé** du dépôt — démarrage, base de données, bcrypt, tout fonctionne sans Python installé. |
+
+`.\server\fabrication\construire.ps1` produit
+`server\fabrication\dist\QuincaillerieFranck.exe` (17,9 Mo, autonome). Le
+navigateur ouvert par le lanceur pointe pour l'instant sur `/docs`
+(placeholder documenté) : le câblage de l'interface réelle est le travail
+des chantiers C9/C10, à venir.
 
 ## Cycle 3 — noyau serveur : authentification et habilitations (chantiers C2, C3, C11)
 
