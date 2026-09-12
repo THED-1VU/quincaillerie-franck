@@ -1,0 +1,13 @@
+# Dépendances du noyau serveur (chantiers C2, C3, C11 — cycle 3).
+# Versions figées, testées avec Python 3.13 sur Windows.
+#
+# Installation :
+#   py -3.13 -m venv server/.venv
+#   server\.venv\Scripts\python.exe -m pip install -r server\requirements.txt
+
+fastapi==0.117.1
+uvicorn[standard]==0.35.0
+psycopg[binary]==3.2.4
+bcrypt==4.2.1
+pytest==8.3.5
+httpx==0.28.1

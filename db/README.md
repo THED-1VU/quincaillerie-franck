@@ -110,6 +110,8 @@ Puis reporter la valeur dans `config.ini` (fichier local, non versionné), avec
 | 006 | `parametres_applicatifs` | écrire un taux de TVA en dur ; **appliquer en silence une règle fiscale non tranchée** |
 | 007 | `index_recherche` | (performance) la recherche d'article par balayage complet |
 | 008 | `roles_applicatifs` | se connecter en superutilisateur ; qu'un agent stock LISE un prix ; qu'un comptable LISE une quantité en stock ; que quiconque modifie le seuil d'alerte à la main |
+| 009 | `authentification` | que quiconque (y compris le serveur applicatif) LISE un hachage de mot de passe ; vérifier un mot de passe ailleurs qu'à un seul endroit audité ; changer le mot de passe d'un tiers via le libre-service |
+| 010 | `correction_usage_qf_app` | corrige un oubli de 008 : `qf_app` ne pouvait exécuter AUCUNE fonction, faute d'accès au schéma (`USAGE ON SCHEMA public` manquant) |
 
 ---
 
@@ -268,15 +270,15 @@ Un test qui « passe » signifie le plus souvent : **la base a bien dit non**.
 ### Migrations inverses — différences attendues après aller-retour
 
 Le script compare le schéma d'origine à celui obtenu après *appliquer* puis
-*annuler*. Deux différences subsistent, connues et documentées :
+*annuler*. Ces différences subsistent, connues et documentées :
 
 1. **`comptages_stock.ecart` passe en dernière position.** La migration 003
    supprime la colonne pour la recréer en colonne générée ; l'inverse la
    reconstruit en colonne ordinaire, donc en fin de table. Le type, la
    contrainte `NOT NULL` et les valeurs sont identiques.
-2. **L'extension `pg_trgm` reste installée.** La migration 007 inverse ne la
-   retire volontairement pas : elle peut servir ailleurs et sa présence est sans
-   effet de bord.
+2. **Les extensions `pg_trgm` et `pgcrypto` restent installées.** Les
+   migrations 007 et 009 inverses ne les retirent volontairement pas : elles
+   peuvent servir ailleurs et leur présence est sans effet de bord.
 
 Un point d'exploitation à connaître : **les rôles PostgreSQL sont globaux au
 serveur**, pas propres à une base. Si les rôles `qf_*` servent à une autre base
