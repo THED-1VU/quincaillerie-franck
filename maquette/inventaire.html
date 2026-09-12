@@ -9,11 +9,12 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Maquette — données simulées. Comptage <strong>à l'aveugle</strong>&nbsp;: la quantité attendue n'existe ni à l'écran ni dans le code de la page.</div>
+<div class="simu">Session réelle (cycle 5). Liste d'articles à compter <strong>simulée</strong> : la route <code>/articles</code> existante inclut la quantité en stock (légitime pour la gestion quotidienne), ce qui violerait le comptage <strong>à l'aveugle</strong> si on l'utilisait ici. Une route dédiée sans cette colonne reste à construire (chantier C7). Ce que le système escompte pour chaque article n'existe donc ni à l'écran ni dans le code de la page.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Quincaillerie Franck</span>
-    <span class="bandeau__role bandeau__pousse">Agent stock</span>
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
   </header>
 
   <main class="contenu contenu--etroit">
@@ -51,19 +52,31 @@
   </main>
 </div>
 
+<script src="api.js"></script>
 <script src="donnees-simulees.js"></script>
 <script>
-(function () {
+(async function () {
   "use strict";
-  const inv = DONNEES.inventaire;
+
+  // Écran réservé à l'agent stock (comptage à l'aveugle, son quotidien).
+  const session = await exigerSession(["agent_stock"]);
+  if (!session) return;
+
+  const inv = DONNEES.inventaire; // liste d'articles SIMULÉE — voir bandeau d'avertissement
   const $ = (id) => document.getElementById(id);
 
-  // Saisies de l'agent uniquement. Aucune donnée « attendue » n'est chargée.
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+
+  // Saisies de l'agent uniquement. Aucune donnée « attendue » n'est chargée,
+  // ni depuis le serveur (aucun appel réseau ne la contient), ni dans ce
+  // fichier (donnees-simulees.js ne porte que id/nom/unité pour l'inventaire).
   const saisies = new Array(inv.articles.length).fill(null);
   let i = 0;
 
   $("moment").textContent = inv.moment;
-  $("site-date").textContent = inv.site + " · " + inv.date;
+  // Site réellement connecté (session), pas celui du jeu de données simulé.
+  $("site-date").textContent = (session.site_id ? LIBELLE_SITE[session.site_id] : inv.site) + " · " + inv.date;
 
   function afficher() {
     const a = inv.articles[i];
@@ -93,8 +106,8 @@
   function terminer() {
     const faits = saisies.filter((s) => s !== null).length;
     $("zone-fin").hidden = false;
-    $("zone-fin").textContent = "Comptage envoyé (maquette) : " + faits + " article(s) sur "
-      + inv.articles.length + ". Les écarts seront calculés côté serveur.";
+    $("zone-fin").textContent = "SIMULATION — " + faits + " article(s) saisi(s) sur "
+      + inv.articles.length + " ; rien n'a été envoyé au serveur (chantier C7, route pas encore construite).";
   }
 
   $("btn-suivant").addEventListener("click", suivant);

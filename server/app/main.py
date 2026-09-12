@@ -1,10 +1,14 @@
-"""Point d'entrée du noyau serveur (cycle 3 — chantiers C2, C3, C11).
+"""Point d'entrée du noyau serveur.
 
-Ce serveur ne construit AUCUN écran (pas de HTML, pas de gabarit) et
-n'implémente AUCUNE règle métier de vente ou de stock (le décrément de
-stock, le calcul de TVA, la composition d'un panier restent hors de ce
-cycle). Il pose la colonne vertébrale : authentification, habilitations
-appliquées au niveau des requêtes SQL, sécurité applicative de base.
+Cycle 3 (chantiers C2, C3, C11) a posé l'authentification, les habilitations
+au niveau des requêtes SQL et la sécurité applicative de base — sans écran,
+sans règle métier de vente ou de stock.
+
+Cycle 5 (chantiers C9/C10) y ajoute UNIQUEMENT le service des fichiers
+statiques de la maquette (`maquette/`, cycle 1) sous `/app` : même origine
+que l'API, donc aucun CORS à gérer, conforme à l'architecture actée
+(« un seul code applicatif web »). Aucune route métier n'est ajoutée ici —
+les écrans consomment les routes déjà existantes (`auth`, `demonstration`).
 
 Lancer en développement :
     server\\.venv\\Scripts\\uvicorn.exe app.main:app --reload --app-dir server
@@ -13,10 +17,12 @@ Lancer en développement :
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import psycopg
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import Config, ErreurConfiguration, charger_config
 from .database import BaseDeDonnees
@@ -24,6 +30,16 @@ from .routes import auth, demonstration
 from .securite import GestionnaireSessions, LimiteurDebit
 
 logger = logging.getLogger("quincaillerie")
+
+# maquette/ est à la racine du dépôt, deux niveaux au-dessus de server/app/.
+# NOTE (portée du cycle 5, C9/C10 uniquement — ne touche pas C0) : ce chemin
+# fonctionne en développement (uvicorn lancé depuis le dépôt). L'empaquetage
+# de ces fichiers DANS l'exécutable (server/fabrication/, chantier C0) n'a
+# pas été fait ce cycle — voir RAPPORT AVANCEMENT/loop-state.md, « reste à
+# faire ». Le montage est donc toléré manquant (avertissement, pas un crash)
+# pour ne pas casser l'exécutable déjà construit au cycle 4.
+RACINE_DEPOT = Path(__file__).resolve().parent.parent.parent
+MAQUETTE_DIR = RACINE_DEPOT / "maquette"
 
 
 def creer_application(config: Config | None = None) -> FastAPI:
@@ -49,6 +65,14 @@ def creer_application(config: Config | None = None) -> FastAPI:
     app.include_router(auth.routeur)
     app.include_router(auth.routeur_admin)
     app.include_router(demonstration.routeur)
+
+    if MAQUETTE_DIR.is_dir():
+        app.mount("/app", StaticFiles(directory=str(MAQUETTE_DIR), html=True), name="maquette")
+    else:
+        logger.warning(
+            "Dossier maquette introuvable (%s) : les écrans ne seront pas servis, "
+            "seule l'API répond.", MAQUETTE_DIR,
+        )
 
     @app.get("/sante", tags=["exploitation"])
     def sante():

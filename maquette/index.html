@@ -9,31 +9,31 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Maquette d'ergonomie — données simulées, aucune connexion à la base. Cycle 1 (chantier C9).</div>
+<div class="simu">Cycle 5 (chantiers C9/C10) : les 4 écrans sont câblés sur le noyau serveur (connexion réelle, jeton, données réelles là où une route existe). Voir la bannière de chaque écran pour ce qui reste simulé.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Ets Quincaillerie Franck</span>
-    <span class="bandeau__role bandeau__pousse">Maquette de parcours</span>
+    <span class="bandeau__role bandeau__pousse">Parcours câblé</span>
   </header>
   <main class="contenu contenu--etroit">
-    <h1>Écrans à valider</h1>
-    <p>Quatre écrans clés, non câblés, servant à mesurer l'ergonomie avant tout développement métier.</p>
+    <h1>Écrans</h1>
+    <p>Connexion réelle requise avant les trois autres écrans (chacun redirige vers <code>connexion.html</code> sans session valide).</p>
     <nav class="index-liste">
       <a href="connexion.html">
         <strong>1. Connexion</strong>
-        Identifiant, mot de passe, message d'erreur clair. Objectif&nbsp;: moins de 30&nbsp;secondes.
+        Identifiant, mot de passe réels (<code>POST /auth/connexion</code>). Objectif&nbsp;: moins de 30&nbsp;secondes.
       </a>
       <a href="vente.html">
         <strong>2. Écran de vente (PC de caisse)</strong>
-        Recherche, quantité, prix négocié, panier, total, paiement. Tout sur un écran, au clavier. Objectif&nbsp;: moins de 60&nbsp;secondes.
+        Catalogue et prix réels (<code>GET /articles</code>), filtrés par rôle et par site. Validation encore simulée. Objectif&nbsp;: moins de 60&nbsp;secondes.
       </a>
       <a href="tableau-bord.html">
         <strong>3. Tableau de bord responsable (téléphone)</strong>
-        Ventes du jour, alertes de stock, écarts d'inventaire, saisie recette/dépense. Conçu pour 390&nbsp;px.
+        Ventes du jour réelles (<code>GET /ventes/synthese-jour</code>). Alertes et écarts encore simulés. Conçu pour 390&nbsp;px.
       </a>
       <a href="inventaire.html">
         <strong>4. Comptage d'inventaire à l'aveugle</strong>
-        Saisie article par article, quantité attendue jamais visible. Utilisable au téléphone, une main.
+        Session réelle ; liste d'articles simulée à dessein (éviter toute fuite de la quantité attendue). Utilisable au téléphone, une main.
       </a>
     </nav>
   </main>

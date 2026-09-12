@@ -9,16 +9,19 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Maquette — données simulées. Vue responsable, conçue d'abord pour le téléphone (390&nbsp;px).</div>
+<div class="simu">Écran câblé (cycle 5) : « Ventes du jour » vient réellement de <code>GET /ventes/synthese-jour</code>. Les autres cartes marquées « donnée simulée » attendent une route serveur (chantiers C7/C8).</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Quincaillerie Franck</span>
-    <span class="bandeau__role bandeau__pousse" id="entete-role">Responsable</span>
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
   </header>
 
   <main class="contenu">
     <h1>Aujourd'hui</h1>
     <p style="color:var(--c-texte-doux); margin-top:calc(-1 * var(--e-2));" id="date-jour"></p>
+
+    <div id="zone-erreur-ventes" class="erreur-champ" hidden></div>
 
     <div class="tb-grille">
 
@@ -33,18 +36,19 @@
       <section class="carte">
         <div class="carte__titre">
           <h2>Alertes de stock faible</h2>
-          <span class="pastille pastille--alerte" id="nb-alertes"><span class="pastille__point"></span>0</span>
+          <span class="pastille pastille--neutre">donnée simulée</span>
         </div>
         <ul class="liste-nue" id="liste-alertes"></ul>
+        <p class="champ__aide">Route serveur pas encore construite (chantier C8) — voir <code>ADDENDUM_CAHIER_DES_CHARGES.md</code>.</p>
       </section>
 
       <section class="carte">
         <div class="carte__titre">
           <h2>Écarts d'inventaire du jour</h2>
-          <span class="pastille" id="etat-inventaire"></span>
+          <span class="pastille pastille--neutre">donnée simulée</span>
         </div>
         <ul class="liste-nue" id="liste-ecarts"></ul>
-        <p class="champ__aide">Le comptage est fait à l'aveugle par l'agent stock. L'écart est calculé après validation.</p>
+        <p class="champ__aide">Le comptage est fait à l'aveugle par l'agent stock. Route serveur pas encore construite (chantier C7).</p>
       </section>
 
       <section class="carte">
@@ -62,33 +66,49 @@
   </main>
 </div>
 
+<script src="api.js"></script>
 <script src="donnees-simulees.js"></script>
 <script>
-(function () {
+(async function () {
   "use strict";
-  const tb = DONNEES.tableauBord;
+
+  // Écran réservé au responsable (vue consolidée des deux sites).
+  const session = await exigerSession(["responsable"]);
+  if (!session) return;
+
+  const tb = DONNEES.tableauBord; // alertes + écarts : encore simulés, voir cartes ci-dessus
   const $ = (id) => document.getElementById(id);
 
-  $("entete-role").textContent = DONNEES.session.role + " · " + DONNEES.session.nom;
-  $("date-jour").textContent = tb.date;
-
-  // Ventes du jour par site
-  const kv = document.createElement("dl");
-  kv.className = "kv";
-  let total = 0;
-  tb.ventesJour.forEach((v) => {
-    total += v.total;
-    const dt = document.createElement("dt");
-    dt.textContent = v.site + " (" + v.nbVentes + ")";
-    const dd = document.createElement("dd");
-    dd.textContent = fcfa(v.total);
-    kv.append(dt, dd);
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("date-jour").textContent = new Date().toLocaleDateString("fr-FR", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
-  $("ventes-jour").appendChild(kv);
-  $("ventes-total").textContent = fcfa(total);
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
 
-  // Alertes de stock
-  $("nb-alertes").innerHTML = '<span class="pastille__point"></span>' + tb.alertesStock.length;
+  // --- Ventes du jour : RÉEL, via /ventes/synthese-jour ---
+  try {
+    const donnees = await appelApi("/ventes/synthese-jour");
+    const kv = document.createElement("dl");
+    kv.className = "kv";
+    let total = 0;
+    if (donnees.synthese_par_site.length === 0) {
+      kv.innerHTML = "<dt>Aucune vente encaissée aujourd'hui</dt>";
+    }
+    donnees.synthese_par_site.forEach((s) => {
+      total += Number(s.total_ttc);
+      const dt = document.createElement("dt");
+      dt.textContent = (LIBELLE_SITE[s.site_id] || "Site " + s.site_id) + " (" + s.nb_ventes + ")";
+      const dd = document.createElement("dd");
+      dd.textContent = fcfa(s.total_ttc);
+      kv.append(dt, dd);
+    });
+    $("ventes-jour").appendChild(kv);
+    $("ventes-total").textContent = fcfa(total);
+  } catch (erreur) {
+    afficherErreurServeur("zone-erreur-ventes", erreur);
+  }
+
+  // --- Alertes de stock (SIMULÉ — aucune route serveur pour l'instant) ---
   const ulA = $("liste-alertes");
   tb.alertesStock.forEach((a) => {
     const li = document.createElement("li");
@@ -97,17 +117,8 @@
     ulA.appendChild(li);
   });
 
-  // Écarts d'inventaire
+  // --- Écarts d'inventaire (SIMULÉ — aucune route serveur pour l'instant) ---
   const ulE = $("liste-ecarts");
-  const aucunEcart = tb.ecartsInventaire.every((e) => e.ecart === 0);
-  const etat = $("etat-inventaire");
-  if (aucunEcart) {
-    etat.className = "pastille pastille--ok";
-    etat.innerHTML = "<span class='pastille__point'></span>Tout concorde";
-  } else {
-    etat.className = "pastille pastille--alerte";
-    etat.innerHTML = "<span class='pastille__point'></span>Écarts à examiner";
-  }
   tb.ecartsInventaire.forEach((e) => {
     const li = document.createElement("li");
     const signe = e.ecart > 0 ? "+" + e.ecart : e.ecart;
