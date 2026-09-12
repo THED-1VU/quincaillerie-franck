@@ -3,7 +3,7 @@
 Dépôt de la reconstruction de l'application de gestion des **Ets Quincaillerie Franck**
 (Batouri, région de l'Est, Cameroun).
 
-> **État : reconstruction, cycle 1 fusionné.** L'application d'origine a été livrée
+> **État : reconstruction, cycle 3 fusionné.** L'application d'origine a été livrée
 > uniquement en exécutables Windows ; le code source est introuvable. Le dépôt a
 > commencé par une phase de cadrage (rétro-spécifications, addendum), puis les
 > cycles de finalisation.
@@ -25,6 +25,22 @@ Dépôt de la reconstruction de l'application de gestion des **Ets Quincaillerie
 | [`RAPPORT AVANCEMENT/loop-state.md`](RAPPORT%20AVANCEMENT/loop-state.md) | État des 15 chantiers `C0`–`C14` et journal des cycles de finalisation. |
 | [`RAPPORT AVANCEMENT/COMPARAISON_ARCHITECTURE.md`](RAPPORT%20AVANCEMENT/COMPARAISON_ARCHITECTURE.md) | Comparaison des deux architectures cibles (bureau+web vs web unique). |
 | [`.agents/skills/finalisation-loop/SKILL.md`](.agents/skills/finalisation-loop/SKILL.md) | Le cycle de finalisation en 5 phases utilisé sur ce projet. |
+
+## Cycle 3 — noyau serveur : authentification et habilitations (chantiers C2, C3, C11)
+
+| Élément | Contenu |
+|---|---|
+| [`server/README.md`](server/README.md) | Serveur FastAPI : authentification, habilitations au niveau des requêtes SQL, sécurité applicative. Aucun écran, aucune règle métier de vente/stock. |
+| [`server/app/`](server/app/) | Config (refuse `postgres` et les clés d'exemple), accès base (**seul** point de bascule de rôle PostgreSQL), sécurité (hachage `$2a$`, jetons signés, limiteur de débit), routes (`auth`, `demonstration`). |
+| [`server/tests/`](server/tests/) | Suite pytest, exécutée contre la vraie base PostgreSQL (aucun mock). |
+| [`server/tests/DERNIER_RESULTAT.md`](server/tests/DERNIER_RESULTAT.md) | Trace de la dernière exécution : **36/36**, plus preuve RLS en SQL direct hors API. |
+| [`db/migrations/009_authentification.sql`](db/migrations/009_authentification.sql) | `verifier_connexion()` — seule fonction à lire un hachage de mot de passe, ne le restitue jamais. |
+| [`db/migrations/010_correction_usage_qf_app.sql`](db/migrations/010_correction_usage_qf_app.sql) | Corrige un oubli de la migration 008 (`qf_app` sans accès au schéma). |
+
+Preuve la plus forte du cloisonnement par site : en SQL direct, **hors de
+toute route**, sous le rôle d'un agent avec son site positionné, une requête
+qui demande explicitement les données de l'*autre* site renvoie zéro ligne —
+la protection est dans PostgreSQL (RLS), pas dans le code applicatif.
 
 ## Cycle 2 — base de données durcie (chantier C1)
 

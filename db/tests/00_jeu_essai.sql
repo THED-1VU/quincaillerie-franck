@@ -8,15 +8,65 @@
 -- À exécuter sur une base de TEST uniquement.
 -- ============================================================================
 
--- CE FICHIER SUPPOSE UNE BASE NEUVE : créée à partir de
--- creation_base_donnees.sql puis migrée. Il n'efface rien lui-même, et c'est
--- volontaire :
---   * les journaux (ventes, mouvements, comptages, historiques) refusent toute
---     suppression de ligne depuis la migration 004 — un DELETE échouerait ;
---   * un TRUNCATE ... CASCADE, lui, emporterait au passage la table
---     « parametres » (elle référence « utilisateurs »), donc les réglages
---     amorcés par la migration 006.
--- db/tests/executer_tests.sh recrée donc la base avant chaque fichier de test.
+-- CE FICHIER SUPPOSE UNE BASE DÉJÀ MIGRÉE (000 à la plus récente). Il peut
+-- être rejoué PLUSIEURS FOIS de suite sur la même base (idempotent) : c'est
+-- ce que fait server/tests/conftest.py entre deux tests du cycle 3.
+--
+-- TRUNCATE, et non DELETE : les journaux (ventes, mouvements, comptages,
+-- historiques) refusent toute suppression ligne à ligne depuis la migration
+-- 004 (déclencheurs BEFORE DELETE) — mais TRUNCATE ne déclenche PAS ces
+-- déclencheurs (ce n'est pas un DELETE), et postgres, propriétaire des
+-- tables, l'exécute sans passer par les droits des rôles applicatifs.
+--
+-- « parametres » et « historique_parametres » sont INCLUSES dans le même
+-- TRUNCATE : elles référencent utilisateurs(id), PostgreSQL exigerait sinon
+-- un CASCADE qui les viderait de toute façon. On les re-amorce donc juste
+-- après, à l'identique de la migration 006 — SOURCE DE VÉRITÉ : si le jeu de
+-- paramètres change là-bas, le reporter ici.
+TRUNCATE TABLE
+    journal_comptes, journal_connexions,
+    comptages_stock_ecarts_declares, comptages_stock, mouvements_stock,
+    historique_modifications_articles, historique_prix_articles,
+    ventes_lignes, transactions, ventes,
+    avances_salaire, absences_conges, employes,
+    articles, fournisseurs,
+    historique_parametres, parametres,
+    utilisateurs
+RESTART IDENTITY CASCADE;
+
+-- Réamorçage de parametres — copie de la migration 006, voir ce commentaire.
+INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_decider, reference_decision) VALUES
+('boutique_nom', 'Ets Quincaillerie Franck', 'texte',
+ 'Raison sociale, imprimée sur les tickets et factures.', TRUE, FALSE, NULL),
+('boutique_ville', 'Batouri', 'texte',
+ 'Ville, imprimée sur les documents.', TRUE, FALSE, NULL),
+('boutique_telephone', 'a_definir', 'texte',
+ 'Téléphone imprimé sur les tickets et factures.', TRUE, TRUE, 'à fournir par le propriétaire'),
+('boutique_numero_contribuable', 'a_definir', 'texte',
+ 'Numéro de contribuable, si les mentions légales l''exigent.', TRUE, TRUE, 'addendum point d'),
+('regime_fiscal', 'a_definir', 'texte',
+ 'Régime fiscal réel : impot_liberatoire, simplifie ou reel (assujetti TVA). '
+ 'Tant que ce point n''est pas tranché, aucune TVA n''est appliquée.', TRUE, TRUE, 'addendum point d'),
+('taux_tva', '0', 'decimal',
+ 'Taux de TVA en pourcentage. 0 = aucune TVA appliquée, ce qui est le '
+ 'fonctionnement par défaut et parfaitement valide.', TRUE, TRUE, 'addendum point d'),
+('prix_saisis_ttc', 'a_definir', 'texte',
+ 'Les prix négociés avec le client sont-ils compris TTC (oui) ou HT (non) ?', TRUE, TRUE, 'addendum point d'),
+('arrondi_montants', 'a_definir', 'texte',
+ 'Méthode d''arrondi au franc CFA (le FCFA n''a pas de sous-unité).', TRUE, TRUE, 'addendum point d'),
+('devise', 'FCFA', 'texte',
+ 'Devise affichée.', FALSE, FALSE, NULL),
+('seuil_alerte_pourcentage', '20', 'entier',
+ 'Pourcentage de la quantité reçue servant de seuil d''alerte, recalculé '
+ 'UNIQUEMENT lors d''une entrée de stock (cahier des charges §3.2).', TRUE, FALSE, NULL),
+('seuil_alerte_plancher', '1', 'entier',
+ 'Seuil d''alerte minimal, quand 20 %% de la quantité reçue donnerait 0. '
+ 'Valeur proposée, à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
+('tentatives_max_connexion', '5', 'entier',
+ 'Nombre d''échecs consécutifs avant verrouillage du compte. Valeur proposée, '
+ 'à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
+('duree_session_minutes', 'a_definir', 'entier',
+ 'Durée d''inactivité au bout de laquelle la session se ferme.', TRUE, TRUE, 'dossier de recette §6, session inactive');
 
 INSERT INTO fournisseurs (id, nom, contact, telephone) VALUES
   (1, 'Cimenterie du Cameroun', 'M. Ateba', '+237 6 99 00 11 22');
