@@ -1,11 +1,14 @@
 ---
 name: finalisation-loop
 description: >-
-  Cycle de finalisation en 5 phases pour la reconstruction de l'application
-  Quincaillerie Franck. À invoquer à chaque itération : on choisit UN seul
-  chantier du référentiel fixe C0–C14, on mesure son état réel par exécution,
-  on l'implémente sur une branche dédiée, on prouve le résultat par exécution
-  réelle, puis on met à jour l'état, on committe et on fusionne.
+  Cycle de finalisation en 4 étapes pour la reconstruction de l'application
+  Quincaillerie Franck. À invoquer à chaque itération : on diagnostique par
+  exécution réelle le cycle précédent, on propose des chantiers candidats du
+  référentiel fixe C0–C14 sans en choisir aucun soi-même, on écrit l'objectif
+  et le plan du chantier retenu puis on S'ARRÊTE pour attendre la validation
+  explicite du propriétaire, et ce n'est qu'après cette validation qu'on
+  implémente sur une branche dédiée, qu'on prouve le résultat par exécution
+  réelle, puis qu'on met à jour l'état et qu'on committe.
 ---
 
 # Cycle de finalisation — Quincaillerie Franck
@@ -19,11 +22,19 @@ chantier à la fois, sans jamais se fier à la lecture du code ou à une intenti
 ## Règles permanentes
 
 - **Un seul chantier par cycle.** Pas de « pendant que j'y suis ».
+- **Aucun chantier n'est choisi par l'agent seul.** L'agent diagnostique et
+  propose ; c'est le propriétaire qui retient l'option. Cette règle n'a
+  **pas** été respectée sur les cycles 4 à 7 (chantiers enchaînés sans
+  validation intermédiaire) — elle est désormais obligatoire, voir l'Étape 3
+  ci-dessous.
 - **Mesure par exécution.** Lancer l'application / les tests / les requêtes.
-  Une correction non exécutée est réputée **non faite**.
+  Une correction non exécutée est réputée **non faite**. Ceci s'applique
+  aussi à la **vérification d'un cycle déjà livré** : ne jamais se fier au
+  rapport produit à sa propre fin de cycle, le rejouer.
 - **Ne jamais deviner une règle métier.** Si une décision manque, elle est posée
   dans `ADDENDUM_CAHIER_DES_CHARGES.md` et le cycle s'arrête sur ce point tant
-  que la réponse n'est pas là.
+  que la réponse n'est pas là. Un chantier qui obligerait à inventer une
+  règle métier à la place du propriétaire n'est **pas proposable**.
 - **Référentiel fixe, jamais renuméroté** (voir plus bas).
 - **Français** pour tous les livrables, messages, commits.
 - Ne pas committer : `config.ini` réel, mots de passe, clés, sauvegardes de
@@ -55,69 +66,97 @@ traite d'abord le chantier qui sert la priorité la plus haute.
 
 ---
 
-## Les 5 phases
+## Les 4 étapes, avec un arrêt obligatoire à l'étape 3
 
-### Phase 1 — Diagnostic / test
+Un cycle ne se déroule **jamais** en enchaînant directement diagnostic puis
+implémentation. Les étapes 1 à 3 se font **avant tout code applicatif**, et
+l'étape 3 se termine par un **arrêt obligatoire** : l'agent ne choisit pas
+lui-même le chantier du cycle, il le propose et attend.
 
-Mesurer l'**état réel** du candidat, par exécution, jamais par lecture seule.
+### Étape 1 — Test et diagnostic du cycle précédent
 
-- Lancer ce qui existe : application, API, migrations, suite de tests, requêtes
-  SQL de contrôle.
-- Rejouer les scénarios pertinents (`GUIDE_TESTEUR_POSTES_ET_SCENARIO`,
-  checklists du dossier de recette, tests transversaux).
-- Consigner : ce qui marche, ce qui casse, avec **la sortie réelle** (log,
-  message d'erreur, capture, résultat de requête).
-- En déduire le **score actuel** du chantier (0–100 %) et le justifier en une
-  phrase adossée à une preuve.
+**Avant toute chose**, par exécution réelle — jamais en se fiant au rapport
+produit à la fin du cycle précédent, jamais par lecture seule du code.
 
-Sortie de phase : une section « constat » horodatée dans `loop-state.md`.
+- Relancer **soi-même** la totalité des suites de tests annoncées par le
+  cycle précédent (tests automatisés, suites SQL, vérifications Playwright
+  ou autres) et comparer les résultats obtenus aux chiffres annoncés.
+  Signaler tout écart, même minime.
+- Relire le code de la pull request du cycle précédent comme le ferait un
+  relecteur extérieur : chercher ce qui a été oublié, les cas limites non
+  couverts, les protections qui ne tiennent que par une discipline de code
+  plutôt que par la base (grants, contraintes, RLS).
+- Vérifier **par exécution**, pas par lecture, les garanties critiques que
+  le cycle précédent affirme avoir établies (ex. une donnée qui ne doit
+  jamais fuiter, un rôle qui ne doit jamais accéder à une colonne) — y
+  compris en contournant l'API pour aller directement en SQL sous le rôle
+  concerné.
+- Vérifier l'honnêteté de `loop-state.md` : chaque score est-il adossé à une
+  preuve **vérifiable et rejouée** ? Corriger à la baisse tout score qui ne
+  l'est pas, et le dire explicitement.
+- Conclure clairement : la pull request du cycle précédent est-elle
+  fusionnable en l'état, ou faut-il corriger quelque chose avant ?
 
-### Phase 2 — Objectif
+Sortie de l'étape : une section « diagnostic » horodatée, avec les résultats
+réels obtenus (pas recopiés du rapport précédent), consignée pour l'étape 2.
 
-Choisir **UN seul chantier** et écrire un **critère de sortie vérifiable**.
+### Étape 2 — Propositions
 
-- Le critère est une phrase testable : « quand j'exécute X, j'obtiens Y ».
-  Exemples : « `pytest tests/test_stock.py` passe à 100 % », « deux ventes
-  concurrentes sur stock=1 laissent le stock à 0, jamais négatif, avec un seul
-  écart consigné », « la page de vente s'affiche sans débordement à 1366×768
-  (capture jointe) ».
-- Pas de critère vague (« améliorer », « nettoyer »).
-- Si le chantier dépend d'une décision métier non tranchée → **stop**, on
-  renvoie à l'addendum et on choisit un autre chantier.
+Lister les options du prochain cycle : d'un côté d'éventuelles corrections
+du cycle précédent (si l'étape 1 en a trouvé), de l'autre les chantiers
+candidats du référentiel fixe. **Ne rien choisir** : proposer.
 
-Sortie de phase : l'objectif du cycle N écrit dans `loop-state.md`.
+- Pour chaque option, en quelques lignes : ce qu'elle apporte au
+  propriétaire, ce qu'elle exige comme décision métier non encore prise
+  (le cas échéant), et ce qu'elle débloque pour la suite (ce qu'elle coûte
+  en termes de portée/risque).
+- Rappeler les blocages connus (décisions d'addendum non tranchées, mesures
+  humaines de `UX_BASELINE.md` non faites, etc.) plutôt que de les redécouvrir
+  à chaque fois.
+- **Aucun chantier qui obligerait à inventer une règle métier** à la place
+  du propriétaire ne doit être proposé.
 
-### Phase 3 — Action
+### Étape 3 — Objectif retenu et plan d'action, PUIS ARRÊT
 
-Implémenter sur une **branche dédiée** : `cycle-N-<chantier>`
-(ex. `cycle-3-C4-stock`, `cycle-7-C9-ecran-vente`).
+Pour **l'option recommandée, et pour elle seule** (l'agent peut recommander,
+il ne décide pas) :
 
-- Portée limitée au chantier choisi et à son critère de sortie.
-- Pas de code applicatif pendant un cycle de **cadrage** (comme celui-ci) ;
-  à partir des cycles de reconstruction, le code est autorisé sur la branche.
+- l'objectif en une phrase ;
+- des **critères de sortie mesurables et vérifiables par exécution** — une
+  phrase testable : « quand j'exécute X, j'obtiens Y » (jamais « améliorer »,
+  « nettoyer ») ;
+- un plan d'action détaillé, étape par étape ;
+- les risques, et ce dont l'agent a besoin de la part du propriétaire.
+
+> **>>> ARRÊT. Attente de validation explicite du propriétaire. <<<**
+> Ceci n'est pas une formalité : l'agent **ne crée aucune branche, n'écrit
+> aucun code applicatif, ne modifie aucune donnée** tant que le propriétaire
+> n'a pas validé explicitement l'objectif et le plan. Si l'agent se surprend
+> à commencer une implémentation avant cette validation, il s'arrête.
+
+### Étape 4 — Mise en œuvre, vérification, mémoire
+
+**Seulement après validation explicite du propriétaire** à l'étape 3.
+
+- Implémenter sur une **branche dédiée** : `cycle-N-<chantier>`
+  (ex. `cycle-3-C4-stock`, `cycle-7-C9-ecran-vente`), à la portée strictement
+  limitée au plan validé.
 - Migrations de schéma numérotées, jamais de modification manuelle de la base.
-
-### Phase 4 — Vérification
-
-**Prouver par exécution réelle** que le critère de sortie est atteint.
-
-- Rejouer exactement la commande / le scénario du critère.
-- Joindre la **preuve** : sortie de test, capture, journal, résultat de requête,
-  avant / après.
-- Rejouer aussi un **test de non-régression** minimal sur le chantier voisin le
-  plus exposé.
-- Si la preuve n'est pas concluante → retour en Phase 3. **Une correction non
-  exécutée est réputée non faite.**
-
-### Phase 5 — Mémoire
-
-- Mettre à jour `RAPPORT AVANCEMENT/loop-state.md` : nouveau score du chantier,
-  date, preuve, reste à faire.
-- **Committer** sur la branche (`git commit`), message en français décrivant le
-  chantier, le critère et la preuve.
-- **Ouvrir la PR** vers `main`.
-- **Fusionner après vérification** (la PR référence la preuve).
-- Choisir le chantier du cycle suivant (retour Phase 1).
+- **Prouver par exécution réelle** que chaque critère de sortie est atteint :
+  rejouer exactement la commande / le scénario, joindre la preuve (sortie de
+  test, capture, journal, résultat de requête, avant/après), et rejouer un
+  test de non-régression minimal sur le chantier voisin le plus exposé. Si
+  la preuve n'est pas concluante, revenir en arrière dans l'implémentation —
+  **une correction non exécutée est réputée non faite**.
+- Mettre à jour `RAPPORT AVANCEMENT/loop-state.md` : nouveau score du
+  chantier, date, preuve, reste à faire.
+- **Committer** sur la branche, message en français décrivant le chantier,
+  le critère et la preuve. **Ouvrir la PR** vers `main`.
+- Le **propriétaire** décide de la fusion (après relecture, ou après le
+  diagnostic du cycle suivant à l'étape 1) — l'agent ne fusionne pas de sa
+  propre initiative.
+- Retour à l'étape 1 pour le cycle suivant : diagnostic de CE cycle, avant
+  toute nouvelle proposition.
 
 ---
 
@@ -126,11 +165,17 @@ Implémenter sur une **branche dédiée** : `cycle-N-<chantier>`
 ```
 ## Cycle N — <Code chantier> <titre>
 - Date : AAAA-MM-JJ
-- Phase 1 — Constat : <état réel mesuré, preuve>
-- Phase 2 — Objectif : <critère de sortie vérifiable>
-- Phase 3 — Branche : cycle-N-<chantier>
-- Phase 4 — Vérification : <commande rejouée + résultat + preuve>
-- Phase 5 — Score : <ancien> % -> <nouveau> % | PR #<n> fusionnée le AAAA-MM-JJ
+- Étape 1 — Diagnostic du cycle précédent : <suites rejouées, écarts trouvés
+  vs. rapport précédent, honnêteté des scores corrigée le cas échéant,
+  verdict fusionnable ou non de la PR précédente>
+- Étape 2 — Propositions : <options envisagées, apport/coût/blocage de
+  chacune, blocages connus rappelés>
+- Étape 3 — Objectif retenu et plan : <critère de sortie vérifiable, plan
+  d'action> — VALIDÉ PAR LE PROPRIÉTAIRE le AAAA-MM-JJ (référence du message
+  ou de la décision)
+- Étape 4 — Branche : cycle-N-<chantier>
+  — Vérification : <commande rejouée + résultat + preuve>
+  — Score : <ancien> % -> <nouveau> % | PR #<n> ouverte le AAAA-MM-JJ
 - Reste à faire : <points ouverts, renvois addendum>
 ```
 
