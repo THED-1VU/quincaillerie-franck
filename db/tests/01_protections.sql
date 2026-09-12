@@ -257,11 +257,15 @@ SELECT t_valeur('005 · date d''annulation non antidatable',
 -- ============================================================================
 -- 6. Paramètres applicatifs (migration 006)
 -- ============================================================================
-SELECT t_refus('006 · lecture d''un paramètre non tranché (régime fiscal)',
-  $$SELECT parametre_texte('regime_fiscal')$$);
+-- Le régime fiscal et le taux de TVA (points d) sont désormais TRANCHÉS
+-- (cycle 6, migration 011) : ils ne sont plus des exemples valables de
+-- paramètre « a_definir ». La durée de session, elle, l'est toujours — voir
+-- ADDENDUM_CAHIER_DES_CHARGES.md, point k / dossier de recette §6.
+SELECT t_refus('006 · lecture d''un paramètre non tranché (durée de session)',
+  $$SELECT parametre_texte('duree_session_minutes')$$);
 
-SELECT t_valeur('006 · taux de TVA lisible et nul (appli sans TVA)',
-  $$SELECT parametre_numerique('taux_tva')::TEXT$$, '0');
+SELECT t_valeur('006 · taux de TVA lisible (régime du réel, décidé cycle 6)',
+  $$SELECT parametre_numerique('taux_tva')::TEXT$$, '19.25');
 
 SELECT t_valeur('006 · pourcentage du seuil d''alerte = 20 (cahier des charges)',
   $$SELECT parametre_numerique('seuil_alerte_pourcentage')::TEXT$$, '20');
@@ -269,12 +273,12 @@ SELECT t_valeur('006 · pourcentage du seuil d''alerte = 20 (cahier des charges)
 SELECT t_refus('006 · modification d''un paramètre verrouillé (devise)',
   $$UPDATE parametres SET valeur = 'EUR' WHERE cle = 'devise'$$);
 
-UPDATE parametres SET valeur = '19.25', utilisateur_id = 1 WHERE cle = 'taux_tva';
+UPDATE parametres SET valeur = '20', utilisateur_id = 1 WHERE cle = 'taux_tva';
 SELECT t_valeur('006 · changement de taux de TVA tracé dans l''historique',
   $$SELECT ancienne_valeur || ' -> ' || nouvelle_valeur FROM historique_parametres
      WHERE cle = 'taux_tva' ORDER BY id DESC LIMIT 1$$,
-  '0 -> 19.25');
-UPDATE parametres SET valeur = '0' WHERE cle = 'taux_tva';
+  '19.25 -> 20');
+UPDATE parametres SET valeur = '19.25' WHERE cle = 'taux_tva';
 
 -- ============================================================================
 -- Résultat

@@ -1,13 +1,10 @@
-# Noyau serveur — authentification, habilitations, sécurité, fabrication
+# Noyau serveur — authentification, habilitations, sécurité, ventes, fabrication
 
 Chantiers **C2** (authentification), **C3** (habilitations au niveau des
-requêtes SQL), **C11** (sécurité applicative) et **C0** (fabrication de
-l'exécutable Windows). Ce cycle **ne construit aucun écran** (pas de HTML,
-pas de gabarit) et **n'implémente aucune règle métier de vente ou de
-stock** — le décrément de stock, le calcul de TVA, la composition d'un
-panier existent déjà côté base (cycle 2) mais ne sont exposés par aucune
-route ici, sauf les deux/trois routes de démonstration prévues pour prouver
-le cloisonnement.
+requêtes SQL), **C11** (sécurité applicative), **C0** (fabrication de
+l'exécutable Windows) et, depuis le cycle 6, **C5** (première route de
+vente). Les écrans (`maquette/`, servis sous `/app`) sont câblés depuis le
+cycle 5 — voir `RAPPORT AVANCEMENT/loop-state.md`.
 
 ```
 server/
@@ -23,7 +20,8 @@ server/
 │   ├── main.py            fabrique l'application, gestion d'erreurs
 │   └── routes/
 │       ├── auth.py         connexion, changer-mot-de-passe, déverrouillage
-│       └── demonstration.py  articles, synthèse du jour, profil
+│       ├── demonstration.py  articles, synthèse du jour, profil
+│       └── ventes.py         POST /ventes (chantier C5, cycle 6) + taux de TVA en vigueur
 ├── fabrication/           empaquetage en .exe (chantier C0) — voir plus bas
 └── tests/                 pytest — exécution réelle contre PostgreSQL
 ```
@@ -157,6 +155,64 @@ fusionnée). Voir `db/migrations/010_correction_usage_qf_app.sql`.
 
 ---
 
+## Chantier C5 — ventes (cycle 6)
+
+`POST /ventes` (réservé `responsable`/`agent_comptabilite`) applique trois
+décisions du propriétaire obtenues ce cycle — voir
+`ADDENDUM_CAHIER_DES_CHARGES.md`, encarts « Décidé » sur les points b/d/e :
+
+| Route | Rôle requis | Ce qu'elle fait |
+|---|---|---|
+| `POST /ventes` | responsable, agent comptabilité | enregistre une vente **déjà** encaissée (`statut='payee'` dès la création) : calcule la TVA, décrémente le stock, crée une recette |
+| `GET /ventes/parametres` | responsable, agent comptabilité | taux de TVA en vigueur — la maquette le lit ici plutôt que de le coder en dur |
+
+- **Anti-survente (point e)** : la route n'échoue **jamais** pour stock
+  insuffisant — le circuit réel de la boutique fait encaisser avant la
+  saisie comptable, refuser n'aurait aucun sens. `decrementer_stock_vente()`
+  (migration 011) décrémente jusqu'à 0 et consigne l'écart dans
+  `ecarts_stock_ventes`, réservé au responsable (jamais l'agent stock, qui
+  compte à l'aveugle).
+- **Fiscalité (point d)** : régime du réel, TVA 19,25 %, prix négociés TTC.
+  Le taux **n'est jamais une constante du code** : il vient de
+  `parametres.taux_tva` (`parametre_numerique('taux_tva')`), lu à chaque
+  vente. L'arrondi (arithmétique) porte sur le TOTAL de TVA de la vente,
+  jamais ligne à ligne.
+- **Crédit client (point b)** : `mode_paiement = 'credit_client'` existe
+  dans le schéma d'origine mais est explicitement **refusé** par la route
+  (422, message clair) — statu quo tant que les 6 questions du point b ne
+  sont pas répondues, pas une décision sur le fond.
+- **Site du responsable** : un agent a toujours un site en session (jamais
+  pris dans le corps de la requête, qu'il pourrait manipuler) ; le
+  responsable, qui couvre les deux sites, doit le préciser explicitement
+  dans le corps — sinon 422 avant toute écriture.
+- **Point c (numéro facturier + vendeur) volontairement NON traité** :
+  l'objectif anti-vol (priorité n°3 du propriétaire) reste incomplet tant
+  que ce point n'est pas tranché — aucune colonne ajoutée à `ventes`.
+
+### Piège rencontré et corrigé — signature de fonction PL/pgSQL
+
+`decrementer_stock_vente()` (migration 008) devait gagner un paramètre
+(`p_vente_id`) et changer de type de retour (`INTEGER` → `TABLE(...)`).
+`CREATE OR REPLACE FUNCTION` **n'autorise ni l'un ni l'autre silencieusement** :
+plutôt que de risquer deux versions coexistantes avec des signatures
+différentes, la migration 011 fait un `DROP FUNCTION` explicite de l'ancienne
+signature à 4 arguments, puis `CREATE OR REPLACE` de la nouvelle à 5 — une
+seule version peut exister, jamais d'ambiguïté sur celle qui répond.
+
+### Tests — `server/tests/test_ventes.py`, 8/8
+
+TVA vérifiée par un calcul **indépendant** de la route (2000 FCFA TTC → 323
+FCFA de TVA, à la main) ; vente à découvert de stock jamais refusée, écart
+consigné ; crédit client refusé explicitement ; agent stock sans aucun droit
+sur la route ; un comptable ne peut pas vendre pour l'autre site, même en
+forçant `site_id` dans le corps ; un responsable doit préciser un site.
+Non-régression : suite complète **44/44** (36 héritées + 8 nouvelles), suite
+SQL du cycle 2 rejouée à jour (**44/44** protections, **52/52** habilitations,
+**6/6** concurrence — réécrite pour le nouveau comportement anti-survente,
+voir `db/tests/DERNIER_RESULTAT.md`).
+
+---
+
 ## Chantier C11 — sécurité applicative
 
 - **Jamais de connexion superutilisateur** : `config.py` refuse `user =
@@ -211,8 +267,9 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 | `test_habilitations.py` | contenu des réponses par rôle (colonnes interdites absentes, pas seulement code HTTP), 403 sur route non autorisée, aucune route sans jeton |
 | `test_cloisonnement_site.py` | un site fourni en paramètre est ignoré ; **RLS bloquée en SQL direct**, hors API |
 | `test_securite.py` | aucun hachage ne fuit, config refuse superutilisateur/clé d'exemple, injection SQL neutralisée, jetons expirés/falsifiés/mal signés refusés |
+| `test_ventes.py` | TVA calculée à la main et comparée, vente à découvert jamais refusée (écart consigné), crédit client refusé, cloisonnement par rôle/site sur une route d'ÉCRITURE |
 
-Dernier résultat : **36/36**, trace complète dans
+Dernier résultat : **44/44**, trace complète dans
 [`tests/DERNIER_RESULTAT.md`](tests/DERNIER_RESULTAT.md).
 
 ### Piège à éviter en écrivant un test (Windows)
@@ -281,13 +338,15 @@ depuis un dossier **totalement isolé** du dépôt, avec seulement lui-même et
 
 ### État actuel du lanceur — placeholder documenté
 
-Le navigateur ouvert par `lanceur.py` pointe aujourd'hui sur `/docs`
-(documentation interactive de l'API) : la maquette du cycle 1 n'est pas
-encore câblée sur ce serveur (chantiers C9/C10, cycle ultérieur). Le
-mécanisme de lancement (port, attente de démarrage, ouverture du
-navigateur) ne changera pas quand ce sera fait — seule la constante
-`CHEMIN_A_OUVRIR` dans `lanceur.py` sera mise à jour. Le mode kiosque
-(plein écran) n'a pas non plus été activé, faute d'écran réel à afficher.
+Le navigateur ouvert par `lanceur.py` pointe encore sur `/docs`
+(documentation interactive de l'API), pas sur `/app/connexion.html` : la
+maquette est câblée sur ce serveur depuis le cycle 5 (`main.py` la sert sous
+`/app`), mais l'exécutable, lui, n'a pas été reconstruit ni son
+`CHEMIN_A_OUVRIR` mis à jour depuis (fabrication = chantier C0, non rouvert
+aux cycles 5/6). Le mécanisme de lancement (port, attente de démarrage,
+ouverture du navigateur) ne changera pas quand ce sera fait — seule la
+constante `CHEMIN_A_OUVRIR` dans `lanceur.py` sera mise à jour. Le mode
+kiosque (plein écran) n'a pas non plus été activé.
 
 ### Piège rencontré et corrigé — nommage du dossier
 

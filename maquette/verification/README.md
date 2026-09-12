@@ -51,3 +51,28 @@ npm run flux        # parcours clés : connexion, ajout au panier en 2 actions, 
   s'incrémente.
 
 Sortie attendue au dernier lancement du cycle 1 : **affichage 20/20**, **flux 14/14**.
+
+## Scripts ajoutés depuis (cycles 5 et 6)
+
+Ces deux scripts ciblent le **noyau serveur réel** (`SERVEUR_URL`, par défaut
+`http://127.0.0.1:8010`), pas le serveur statique du cycle 1 — ils
+réinitialisent eux-mêmes la base de test (jeu d'essai + comptes réels).
+
+- **`verifier-cablage.mjs`** (cycle 5, C9/C10) : les 4 écrans câblés sur le
+  noyau serveur — connexion réelle, séparation des rôles prouvée sur le
+  CONTENU des réponses, quantité attendue absente du comptage à l'aveugle
+  (page/réseau/code source), erreurs toujours en français près du champ,
+  captures aux 5 largeurs. Dernier résultat : **74/74**.
+- **`verifier-vente-reelle.mjs`** (cycle 6, C5) : l'écran de vente enregistre
+  une VRAIE vente (`POST /ventes`) — crédit client absent des choix, vente à
+  découvert de stock acceptée avec écart affiché (jamais un refus), le
+  responsable doit choisir un site avant de valider, et l'aperçu affiché
+  AVANT validation correspond exactement à ce que le serveur confirme.
+  Dernier résultat : **10/10**.
+
+```
+node verifier-cablage.mjs
+node verifier-vente-reelle.mjs
+```
+
+Détail complet des deux dans `DERNIER_RESULTAT.md`.

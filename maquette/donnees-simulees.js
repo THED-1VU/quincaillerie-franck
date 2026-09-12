@@ -38,19 +38,17 @@ const DONNEES = {
     { id: "ART-084", nom: "Vis à bois 4x40 (boîte)", unite: "boîte", prixCatalogue: 2000 },
   ],
 
+  /* « credit_client » existe dans le schéma mais reste désactivé au niveau
+     applicatif (addendum, point b — décision du propriétaire, cycle 6) :
+     volontairement absent de cette liste, pour qu'il ne soit même pas
+     proposable à l'écran plutôt que proposé puis refusé par le serveur.
+     Cette liste reste simulée (aucune route ne l'expose), mais ses codes
+     doivent rester synchronisés avec server/app/routes/ventes.py. */
   modesPaiement: [
     { code: "especes",       libelle: "Espèces" },
     { code: "orange_money",  libelle: "Orange Money" },
     { code: "mtn_momo",      libelle: "MTN Mobile Money" },
-    { code: "credit_client", libelle: "Crédit client" },
     { code: "autre",         libelle: "Autre" },
-  ],
-
-  /* Panier pré-rempli pour que les captures montrent un écran « vivant ».
-     L'utilisateur peut tout modifier. */
-  panierInitial: [
-    { id: "ART-021", nom: "Ciment CIM II 50 kg", unite: "sac",   quantite: 8, prixUnitaire: 6500 },
-    { id: "ART-007", nom: "Fer à béton 8 mm",    unite: "barre", quantite: 10, prixUnitaire: 3300 },
   ],
 
   /* Tableau de bord responsable (mobile). Chiffres figés. */

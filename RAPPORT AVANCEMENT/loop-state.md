@@ -4,7 +4,7 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 5 — câblage de la maquette sur le noyau serveur, C9/C10**, 2026-09-12
+- Dernier cycle fusionné : **Cycle 6 — première route de vente, C5**, 2026-09-12
 - Décision d'architecture (précisée 2026-09-11) : **un seul code applicatif web**,
   mais **livré et exécuté comme une application Windows (.exe)** sur les postes de
   la boutique — l'exécutable embarque le serveur local et ouvre l'interface web en
@@ -26,7 +26,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C2 | Authentification et comptes | **65 %** | Cycle 3. Noyau serveur (`server/`, FastAPI) : connexion via `verifier_connexion()` (fonction PostgreSQL `SECURITY DEFINER`, migration 009, seule à lire le hachage, jamais restitué) ; verrouillage après 5 échecs, déverrouillage réservé au responsable, obligation de changement à la première connexion, libre-service limité à sa propre ligne, limitation de débit. **36/36 tests, 0 échec** (`server/tests/DERNIER_RESULTAT.md`). Reste : session à durée limitée = choix technique temporaire (`duree_session_minutes` reste `a_definir` en base — décision propriétaire) ; pas de révocation de jeton avant expiration (limite technique documentée) ; pas d'écran, pas de création de compte via API (hors périmètre du cycle). |
 | C3 | Habilitations et cloisonnement des rôles | **60 %** | Cycle 3. Habilitations appliquées **au niveau des requêtes SQL** (pas de vérification applicative dispersée) : privilèges par colonne + RLS par site posés au cycle 2, exploités par `BaseDeDonnees.connexion_pour()` (point de bascule de rôle unique). Prouvé par exécution en **contournant l'API** : `SELECT ... WHERE site_id=2` sous `qf_agent_stock` renvoie 0 ligne même en le demandant explicitement (`server/tests/test_cloisonnement_site.py`). Rôle « caissier » toujours non tranché (addendum h) — non traité ce cycle. Reste : cloisonnement RH/fournisseurs non testé par une route, pas encore d'écran. |
 | C4 | Articles et stock | **0 %** | Non vérifié. Règle des 20 %, seuil non modifiable, mouvements tracés : présents au CDC, absents de la base (défaut `seuil_alerte = 5`, aucun trigger). Pas de transfert inter-sites (addendum a), pas de retours/casse (addendum f). |
-| C5 | Ventes et facturation | **0 %** | Non vérifié. Workflow `en_attente/payee/annulee` modélisé. Manquent : n° facturier + vendeur (addendum c), créance client (addendum b), audit d'annulation, cohérence des montants, génération du n° de facture, arbitrage saisie a posteriori vs blocage (addendum e). |
+| C5 | Ventes et facturation | **40 %** | Cycle 6. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` (`server/app/routes/ventes.py`) enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. Vérifié par exécution : 8/8 tests pytest dédiés (44/44 au total, 0 régression), suite SQL du cycle 2 rejouée à jour (44/44 protections, 52/52 habilitations, **6/6 concurrence — réécrite pour le nouveau comportement anti-survente**, réversibilité des migrations confirmée), et 10/10 contrôles Playwright bout-en-bout sur l'écran de vente réellement câblé (`verifier-vente-reelle.mjs`) : vente normale (aperçu affiché AVANT validation identique à la confirmation serveur), vente à découvert acceptée avec écart affiché, crédit client absent des choix, responsable contraint de choisir un site. Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), annulation d'une vente, régularisation d'un écart, documents imprimés (ticket/facture), écarts de stock pas encore affichés au tableau de bord (prévu chantier C7). |
 | C6 | Comptabilité et RH | **0 %** | Non vérifié. `transactions`, `employes`, `absences_conges`, `avances_salaire` présents. Manquent : clôture de caisse (addendum g), contre-passation d'annulation, `transactions.vente_id` non unique, audit des corrections. |
 | C7 | Inventaire et écarts | **0 %** | Non vérifié. `comptages_stock` + comptage à l'aveugle modélisés. `ecart` stocké et non contraint (faille anti-vol) ; pas d'unicité par créneau ; pas de rattachement des écarts de survente au comptage (addendum e). |
 | C8 | Tableaux de bord et rapports | **0 %** | Non vérifié. Exigés au CDC (consolidé/par site, alertes, exports Excel/PDF avec gating du prix par rôle) ; aucune preuve d'exécution. |
@@ -37,7 +37,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après cycle 5 : ≈ 29 %** (C0 55, C1 80, C2 65, C3 60, C9 50, C10 30, C11 55, C14 40, autres 0).
+**Moyenne indicative après cycle 6 : ≈ 32 %** (C0 55, C1 80, C2 65, C3 60, C5 40, C9 50, C10 30, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -407,23 +407,129 @@ contrôle : la sortie d'exécution n'était pas archivée dans le dépôt →
   boutique ; câbler les routes encore manquantes une fois les décisions du
   propriétaire prises (addendum b, d, e) et les chantiers C5/C7/C8 ouverts.
 
+### Cycle 6 — Première route de vente : C5 — 2026-09-12
+
+- **Phase 1 — Diagnostic** : C5 était à 0 %, entièrement bloqué — aucune
+  route d'écriture des ventes n'existait, faute de décisions du propriétaire
+  sur l'addendum (points b, d, e). `decrementer_stock_vente()` (cycle 2)
+  existait déjà mais REFUSAIT explicitement toute vente à découvert de
+  stock, avec un `HINT` renvoyant justement au point e.
+- **Phase 2 — Objectif** : obtenir du propriétaire les décisions
+  structurantes de d et e (et le périmètre du b pour ce cycle), puis
+  construire `POST /ventes` sans inventer aucune règle non tranchée. Critère
+  de sortie : une vente s'enregistre réellement, décrémente le stock de
+  façon atomique et jamais bloquante, calcule une TVA faisant foi, et le
+  crédit client reste explicitement désactivé — prouvé par exécution, sans
+  régression sur l'existant (cycles 2, 3, 5).
+- **Décisions obtenues du propriétaire ce cycle** (voir
+  `ADDENDUM_CAHIER_DES_CHARGES.md`, encarts « Décidé ») :
+  - **d (fiscalité)** : régime du réel, TVA 19,25 %, prix négociés TTC,
+    arrondi arithmétique sur le total de la vente.
+  - **e (anti-survente)**, question 1 : une vente déjà encaissée n'est
+    **jamais** bloquée ; l'écart est consigné, réservé au responsable.
+  - **b (crédit client)** : reste désactivé ce cycle (statu quo explicite,
+    pas une décision sur le fond — les 6 questions restent posées).
+- **Phase 3 — Action** : branche `cycle-6-vente-fiscalite-antisurvente`.
+  - `db/migrations/011_ventes_fiscalite_anti_survente.sql` (+ inverse) :
+    paramètres fiscaux décidés (table `parametres`) ; nouvelle table
+    `ecarts_stock_ventes` (RLS, lecture réservée au responsable) ;
+    `decrementer_stock_vente()` réécrite (signature élargie avec
+    `p_vente_id`, ne lève plus jamais d'exception pour stock insuffisant).
+  - `server/app/routes/ventes.py` (nouveau) : `POST /ventes` (calcule TVA,
+    insère `ventes`/`ventes_lignes`/`transactions`, décrémente le stock ligne
+    par ligne, collecte les écarts) et `GET /ventes/parametres` (taux de TVA
+    en vigueur, jamais une constante côté écran).
+  - `maquette/vente.html` : câblé sur la vraie route — panier vide au
+    départ (un panier pré-rempli créerait une vraie vente), sélecteur de
+    site pour le responsable (qui couvre les deux sites), crédit client
+    retiré des choix de paiement, message de succès réel (numéro de vente,
+    TVA, écart éventuel signalé).
+  - `db/tests/00_jeu_essai.sql`, `01_protections.sql`, `03_concurrence.sh` :
+    mis à jour pour refléter les paramètres désormais décidés et le nouveau
+    comportement anti-survente (voir Phase 4).
+- **Phase 4 — Vérification par exécution réelle** :
+  - Fonction SQL testée isolément avant tout code Python (comme au cycle 3) :
+    vente de 5 sur un stock de 1 -> aucune exception, stock à 0, écart de 4
+    consigné ; vente de 5 sur un stock de 30 -> aucun écart créé.
+  - **8/8 tests pytest dédiés** (`test_ventes.py`) : TVA calculée à la main
+    et comparée (2000 FCFA TTC -> 323 FCFA de TVA, valeur indépendante de la
+    route) ; vente à découvert jamais refusée ; crédit client refusé avec
+    message explicite ; agent stock sans aucun droit sur la route ; un
+    comptable ne peut pas vendre pour l'autre site (même en forçant
+    `site_id` dans le corps) ; un responsable doit préciser un site.
+    **Suite complète : 44/44, 0 régression.**
+  - Suite SQL du cycle 2 rejouée en entier
+    (`db/tests/executer_tests.sh`) : protections **44/44**, habilitations
+    **52/52**, concurrence **6/6** (réécrite : les deux ventes concurrentes
+    réussissent désormais toutes les deux, une seule marchandise réelle
+    sort, un seul écart d'1 unité consigné — plus de « perdante »),
+    réversibilité des migrations 000-011 confirmée.
+  - **10/10 contrôles Playwright** sur l'écran réel (`verifier-vente-reelle.mjs`,
+    nouveau) : vente normale (message avec numéro de vente serveur, aucune
+    mention « SIMULATION », **aperçu affiché avant validation identique au
+    montant confirmé par le serveur** — un bug d'arrondi trouvé et corrigé
+    pendant ce cycle, voir ci-dessous), vente à découvert acceptée avec écart affiché à
+    l'écran, crédit client absent des options, responsable bloqué tant qu'il
+    n'a pas choisi de site.
+  - Non-régression du cycle 5 : `verifier-cablage.mjs` mis à jour (la
+    validation étant désormais réelle, plus « SIMULATION ») et rejoué —
+    **74/74**.
+- **Bugs trouvés PAR l'exécution et corrigés pendant le cycle** :
+  1. `db/tests/00_jeu_essai.sql` réamorçait `taux_tva`/`regime_fiscal`/... à
+     leurs valeurs « a_definir » d'origine à CHAQUE test (copie figée de la
+     migration 006) — les décisions du cycle 6 étaient invisibles côté tests
+     tant que ce fichier n'a pas été mis à jour en conséquence.
+  2. `db/tests/01_protections.sql` utilisait `regime_fiscal`/`taux_tva`
+     comme EXEMPLES d'un paramètre « non tranché » — désormais faux depuis
+     la décision d. Basculé sur `duree_session_minutes`, toujours réellement
+     indécis.
+  3. Capturer un `RETURNING id` avec `psql -At -c` inclut aussi la ligne de
+     statut `INSERT 0 1` dans la sortie capturée par `$(...)` en bash — sans
+     `-q`, la variable shell contenait les deux, cassant le SQL généré
+     ensuite.
+  4. `executer_tests.sh` supprime délibérément `quincaillerie_test` à
+     l'étape 7 (comparaison aller-retour) sans la recréer : après l'avoir
+     exécuté, il faut reconstruire la base avant de rejouer `pytest` —
+     comportement pré-existant du cycle 2, pas une régression de ce cycle,
+     mais qui a fait échouer 37 tests par « database does not exist » avant
+     d'être compris.
+  5. **Trouvé en relisant l'écran, avant même le contrôle Playwright** :
+     `vente.html` calculait l'aperçu du total en AJOUTANT la TVA par-dessus
+     le sous-total (`sous-total + TVA`), comme au temps où `TAUX_TVA` valait
+     0 (aucune différence visible alors). Or les prix saisis sont **TTC**
+     (décision d) : la TVA doit s'EXTRAIRE du total, pas s'y ajouter, sous
+     peine d'afficher au comptable un total supérieur à celui que le
+     serveur confirmera. Corrigé pour utiliser exactement la même formule
+     que `server/app/routes/ventes.py`. Un contrôle dédié a été ajouté à
+     `verifier-vente-reelle.mjs` (compare l'aperçu affiché avant validation
+     au montant renvoyé par `POST /ventes`) pour qu'une régression future
+     soit détectée par exécution, pas seulement par relecture.
+- **Phase 5 — Mémoire** : C5 **0 % → 40 %**. Commit, PR, fusion.
+- **Reste à faire (C5)** : numéro de facturier + vendeur obligatoires
+  (addendum point c, non tranché — l'objectif anti-vol reste volontairement
+  incomplet) ; annulation d'une vente ; régularisation d'un écart de stock ;
+  documents imprimés (ticket/facture) ; afficher les écarts de stock des
+  ventes au tableau de bord (chantier C7) ; le reste du point b si le crédit
+  client doit un jour être réellement proposé.
+
 ---
 
 ## Prochain cycle — proposition (non démarré, choix laissé au propriétaire)
 
-1. **C4 (articles/stock) et C5 (ventes)** : nécessitent au préalable les
-   décisions du propriétaire sur l'addendum, points b (créance client), d
-   (fiscalité) et e (saisie a posteriori vs blocage) — sans elles, le
-   décrément de stock ou l'enregistrement d'une vente exposés par une route
-   inventeraient une règle métier. C'est aujourd'hui le principal chantier
-   qui **bloque** sur une décision externe plutôt que sur du travail
-   technique.
-2. **C7 (inventaire et écarts)** : indépendant des points b/d/e — pourrait
-   avancer dès maintenant. Permettrait notamment de construire la route
-   dédiée au comptage à l'aveugle (sans quantité en stock), que ce cycle a
-   identifiée comme manquante pour `inventaire.html`, et de brancher les
-   « écarts d'inventaire » du tableau de bord (aujourd'hui simulés).
+1. **C7 (inventaire et écarts)** : indépendant des points a/c/f encore
+   ouverts. Permettrait de construire la route dédiée au comptage à
+   l'aveugle (sans quantité en stock, remplaçant les données simulées
+   d'`inventaire.html`), et de brancher au tableau de bord à la fois les
+   écarts de comptage ET les écarts de stock issus des ventes à découvert
+   (`ecarts_stock_ventes`, nouveau ce cycle) — aujourd'hui simulés ou
+   invisibles.
+2. **C4 (articles/stock)** : nécessite au préalable les décisions du
+   propriétaire sur les points a (transfert inter-sites) et f (retours,
+   casse, remises, unités) — sans elles, une route de mouvement de stock
+   exposée inventerait une règle métier.
 3. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
    développement — un testeur humain, chronomètre en main, sur le serveur
-   maintenant réellement câblé (protocole exact au §1 bis). Lèverait le
-   plafond de 60 % sur C9 et C10 si les résultats sont conformes.
+   désormais câblé pour de vrai jusqu'à l'enregistrement d'une vente
+   (protocole exact au §1 bis). Lèverait le plafond de 60 % sur C9 et C10 si
+   les résultats sont conformes. Peut se faire à tout moment, en parallèle
+   d'un autre cycle.

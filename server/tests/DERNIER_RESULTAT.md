@@ -1,8 +1,4 @@
-# Dernier résultat d'exécution — chantiers C2, C3, C11 (cycle 3)
-
-Exécuté le **2026-09-12** avec **Python 3.13.3**, contre **PostgreSQL 17.11**
-(`_pgdev/`, cycle 2 stabilisé), base `quincaillerie_test`, migrations 000 à
-010 appliquées.
+# Dernier résultat d'exécution — suite pytest du serveur
 
 Trace rejouable :
 
@@ -10,6 +6,76 @@ Trace rejouable :
 .\db\outils\demarrer_pg.ps1
 server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 ```
+
+---
+
+## Cycle 6 — chantier C5 (ventes), 2026-09-12
+
+Exécuté avec **Python 3.13.3**, contre **PostgreSQL 17.11** (`_pgdev/`), base
+`quincaillerie_test`, migrations 000 à **011** appliquées (nouvelle :
+`011_ventes_fiscalite_anti_survente.sql`).
+
+### `test_ventes.py` — nouveau, 8/8
+
+```
+test_parametres_vente_expose_le_taux_tva_en_vigueur PASSED
+test_vente_normale_decremente_le_stock_et_calcule_la_tva PASSED
+test_vente_a_decouvert_nest_jamais_refusee_et_consigne_lecart PASSED
+test_credit_client_reste_desactive PASSED
+test_agent_stock_ne_peut_pas_enregistrer_de_vente PASSED
+test_agent_comptabilite_ne_peut_pas_vendre_pour_lautre_site PASSED
+test_responsable_doit_preciser_le_site PASSED
+test_responsable_peut_vendre_pour_un_site_precise PASSED
+```
+
+Point le plus important, prouvé par exécution : une vente de 5 unités
+d'« Article rare » (stock réel : 1) est **acceptée** (201), le stock tombe à
+0 (jamais négatif), et un écart de 4 unités est consigné dans
+`ecarts_stock_ventes`, réservé au responsable — jamais un refus.
+
+### Suite complète — 44/44, 0 régression
+
+```
+44 passed in ~58s
+```
+
+### Non-régression SQL du cycle 2, rejouée à jour (`db/tests/executer_tests.sh`)
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 011) : OK
+>>> jeu d'essai chargé : OK
+>>> protections   : OK   (44/44)
+>>> habilitations : OK   (52/52)
+>>> concurrence   : OK   (6/6 — comportement anti-survente, voir 03_concurrence.sh)
+>>> aller / retour des migrations : OK
+```
+
+### Vérification bout-en-bout sur l'écran réel (Playwright, `verifier-vente-reelle.mjs`)
+
+```
+10/10 — vente normale (numéro de vente serveur, plus aucune mention
+SIMULATION, aperçu affiché AVANT validation identique au montant confirmé
+par le serveur), vente à découvert acceptée avec écart affiché à l'écran,
+crédit client absent des options de paiement, responsable bloqué tant qu'il
+n'a pas choisi de site.
+```
+
+Bug trouvé en écrivant ce contrôle : l'aperçu du total (`majTotaux()` dans
+`vente.html`) ajoutait encore la TVA par-dessus le sous-total au lieu de
+l'extraire d'un prix déjà TTC (décision d) — corrigé pour utiliser
+exactement la même formule que la route.
+
+Non-régression du cycle 5 (`verifier-cablage.mjs`, mis à jour car la
+validation de vente n'est plus une confirmation simulée) : **74/74**.
+
+---
+
+## Cycle 3 — chantiers C2, C3, C11
+
+Exécuté le **2026-09-12** avec **Python 3.13.3**, contre **PostgreSQL 17.11**
+(`_pgdev/`, cycle 2 stabilisé), base `quincaillerie_test`, migrations 000 à
+010 appliquées.
 
 ---
 

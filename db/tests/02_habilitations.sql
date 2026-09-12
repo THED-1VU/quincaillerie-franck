@@ -166,8 +166,11 @@ SELECT d_succes('rattacher une dépense à un employé (sans voir son salaire)',
   $$INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, employe_id)
     VALUES (1, 4, 'depense', 60000, 'Salaire', 1)$$);
 -- Le décrément de stock passe par la fonction de pont, jamais par un UPDATE.
+-- p_vente_id à NULL : cette ligne (quantité 1, stock 30) ne produit aucun
+-- écart, donc ecarts_stock_ventes n'est jamais touchée ici (voir migration
+-- 011) — seul le GRANT d'exécution est testé, pas le comportement métier.
 SELECT d_succes('décrémenter le stock via la fonction de pont',
-  $$SELECT decrementer_stock_vente(1, 1, 4, 'vente essai')$$);
+  $$SELECT decrementer_stock_vente(1, 1, 4, NULL, 'vente essai')$$);
 
 RESET ROLE;
 

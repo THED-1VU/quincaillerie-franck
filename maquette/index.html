@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Cycle 5 (chantiers C9/C10) : les 4 écrans sont câblés sur le noyau serveur (connexion réelle, jeton, données réelles là où une route existe). Voir la bannière de chaque écran pour ce qui reste simulé.</div>
+<div class="simu">Cycle 6 (chantier C5) : l'écran de vente enregistre désormais de vraies ventes (<code>POST /ventes</code>). Voir la bannière de chaque écran pour ce qui reste simulé.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Ets Quincaillerie Franck</span>
@@ -25,7 +25,7 @@
       </a>
       <a href="vente.html">
         <strong>2. Écran de vente (PC de caisse)</strong>
-        Catalogue et prix réels (<code>GET /articles</code>), filtrés par rôle et par site. Validation encore simulée. Objectif&nbsp;: moins de 60&nbsp;secondes.
+        Catalogue, prix, TVA et validation réels (<code>GET /articles</code>, <code>POST /ventes</code>), filtrés par rôle et par site. Numéro de facturier encore une note locale (addendum point c). Objectif&nbsp;: moins de 60&nbsp;secondes.
       </a>
       <a href="tableau-bord.html">
         <strong>3. Tableau de bord responsable (téléphone)</strong>
