@@ -4,9 +4,16 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 13 — correction des constats n°2 et
-  n°3, C4**, 2026-09-13 (PR #14, fast-forward, commit `d0c2ad5`) ; précédé
-  du **Cycle 12 — écran de rapports, C8** (PR #13, commit `75d461e`), du
+- Dernier cycle fusionné : **Cycle 16 — comptabilité et RH, C6**,
+  2026-09-13 (PR #17, fast-forward, commit `548995f`) ; précédé du
+  **Cycle 15 — accès réseau local, C10** (PR #18 — réouverture propre de
+  la PR #16, close automatiquement par GitHub après suppression de sa
+  branche de base ; leçon retenue : ne plus supprimer une branche de base
+  d'une PR empilée avant d'avoir retargé la suivante), du **Cycle 14 —
+  test cloisonnement exports, C8** (PR #15, commit `d7e3f44`), du
+  **Cycle 13 — correction des constats n°2 et n°3, C4** (PR #14, commit
+  `d0c2ad5`), du **Cycle 12 — écran de rapports, C8** (PR #13, commit
+  `75d461e`), du
   **Cycle 11 — écran des opérations de stock, C4** (PR #12, commit
   `4728683`), du **Cycle 10 — tableaux de bord et rapports, C8** (PR #11,
   commit `5aba09b`), du **Cycle 9 — articles et stock, C4** (PR #10, commit
@@ -1599,7 +1606,8 @@ Troisième et dernier chantier du lot validé après le cycle 13.
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
-terminé — 3 PR empilées (#15, #16, #17), aucune fusionnée par l'agent.
+terminé et fusionné (PR #15, #18, #17 — voir la note sur la PR #16, close
+automatiquement lors de l'empilage, dans l'en-tête de ce document).
 
 1. **Vérification C10 depuis un vrai téléphone physique** : la couche
    réseau est prouvée (cycle 15) — reste la dernière étape, qui doit être
