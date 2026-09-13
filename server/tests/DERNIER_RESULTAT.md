@@ -9,6 +9,47 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 19 — reçu de vente imprimable (chantier C5), 2026-09-13
+
+`GET /ventes/{id}/recu` (`reportlab`, PDF A4) — CDC §3.3/§7.1
+« imprimer / réimprimer le reçu ». Mêmes rôles que `POST /ventes`.
+Aucune migration.
+
+```
+test_recu_vente_pdf_contient_les_lignes_et_totaux PASSED
+test_recu_vente_annulee_porte_la_mention PASSED
+test_recu_vente_inexistante_refusee PASSED
+test_agent_stock_ne_peut_pas_obtenir_de_recu PASSED
+test_recu_vente_agent_comptabilite_limite_a_son_site PASSED
+
+======================= 140 passed, 31 warnings in 236.96s =======================
+```
+
+Contenu du PDF relu par `pypdf` (jamais une simple vérification du code
+HTTP) : nom de la boutique, nom d'article, total TTC présents pour une
+vente normale ; mention « VENTE ANNULÉE » + motif présents pour une vente
+annulée, absents sinon. Cloisonnement par site vérifié avec un nouveau
+compte de test (`comptoir.compta`, ajouté à `conftest.py` — jusqu'ici
+inutilisé dans la suite).
+
+### Écran (`maquette/vente.html`) — bouton « Imprimer le reçu »
+
+`verifier-vente-reelle.mjs` étendu : un VRAI téléchargement de navigateur
+est intercepté après le clic (en-tête `%PDF`), pas seulement la présence
+du bouton.
+
+```
+[ok] vente réelle : bouton « Imprimer le reçu » visible après la vente
+[ok] reçu réel : PDF réellement téléchargé (en-tête « %PDF» )
+
+Total : 12 contrôles, 0 échec(s).
+```
+
+`verifier-cablage.mjs` (77/77) et `verifier-echappement-html.mjs` (11/11)
+rejoués sans régression.
+
+---
+
 ## Cycle 18 — écran dédié pour la RH (chantier C6), 2026-09-13
 
 Aucune route ni migration nouvelle : `maquette/rh.html` câble les routes

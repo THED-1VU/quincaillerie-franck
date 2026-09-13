@@ -95,6 +95,9 @@
                style="background:var(--c-attention-clair); color:var(--c-attention); border-color:var(--c-attention);"></div>
           <div id="zone-succes" class="erreur-champ" hidden
                style="background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+          <button class="btn btn--secondaire" id="btn-imprimer-recu" type="button" hidden style="margin-top:var(--e-2);">
+            Imprimer le reçu
+          </button>
 
           <button class="btn btn--primaire btn--large btn--caisse" id="btn-valider" type="button" style="margin-top:var(--e-4);">
             Valider la vente <span class="btn__raccourci">F9</span>
@@ -343,6 +346,7 @@
   const btnValider = $("btn-valider");
   const zoneConfirmation = $("zone-confirmation");
   const zoneSucces = $("zone-succes");
+  const btnImprimerRecu = $("btn-imprimer-recu");
 
   function reinitialiserBoutonValider() {
     enAttenteConfirmation = false;
@@ -352,6 +356,7 @@
   async function valider() {
     if (envoiEnCours) return;
     zoneSucces.hidden = true;
+    btnImprimerRecu.hidden = true;
     if (panier.length === 0) {
       zoneConfirmation.hidden = false;
       zoneConfirmation.textContent = "Le panier est vide : rien à valider.";
@@ -395,6 +400,14 @@
           + " article(s) : la vente est quand même enregistrée, l'écart est remonté au responsable.";
       }
       zoneSucces.textContent = message;
+
+      // Reçu imprimable RÉEL (cycle 19, GET /ventes/{id}/recu) — un
+      // <a href> nu ne pourrait pas porter le jeton de session, d'où
+      // telechargerFichier() (api.js), déjà utilisée pour les exports C8.
+      btnImprimerRecu.hidden = false;
+      btnImprimerRecu.onclick = () => telechargerFichier(
+        "/ventes/" + corps.vente_id + "/recu", "recu-vente-" + corps.vente_id + ".pdf"
+      );
 
       panier = [];
       rendrePanier();

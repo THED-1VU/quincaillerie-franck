@@ -9,12 +9,16 @@
       acceptée, avec un écart signalé à l'écran (point e).
    4. Le responsable, qui couvre deux sites, doit choisir un site avant de
       valider (le champ apparaît, la validation sans site est refusée).
+   5. Le reçu PDF (cycle 19) apparaît après une vente réussie et se
+      télécharge réellement (en-tête %PDF, jamais une simple vérification
+      du code HTTP).
 
    Prérequis : serveur démarré sur SERVEUR_URL, servant /app (cycle 5).
    Réinitialise elle-même la base (jeu d'essai + mots de passe réels).
 */
 import { chromium } from "playwright";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -112,6 +116,16 @@ async function seConnecter(page, identifiant, motDePasse) {
   const messageSucces = await page.textContent("#zone-succes");
   verifier(/^Vente n°\d+ enregistrée/.test(messageSucces), `vente réelle : message avec numéro de vente ("${messageSucces}")`);
   verifier(!/SIMULATION/i.test(messageSucces), "vente réelle : plus aucune mention SIMULATION");
+
+  // Reçu PDF (cycle 19) : le bouton apparaît après la vente et déclenche un
+  // VRAI téléchargement de navigateur (telechargerFichier(), api.js).
+  verifier(await page.isVisible("#btn-imprimer-recu"), "vente réelle : bouton « Imprimer le reçu » visible après la vente");
+  const [telechargement] = await Promise.all([
+    page.waitForEvent("download", { timeout: 10000 }),
+    page.click("#btn-imprimer-recu"),
+  ]);
+  const enteteRecu = readFileSync(await telechargement.path()).subarray(0, 4).toString("latin1");
+  verifier(enteteRecu === "%PDF", `reçu réel : PDF réellement téléchargé (en-tête « ${enteteRecu}» )`);
 
   await contexte.close();
 }

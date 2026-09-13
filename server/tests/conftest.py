@@ -42,6 +42,7 @@ MOT_DE_PASSE_RESPONSABLE = "ResponsableTest123"
 MOT_DE_PASSE_AGENT_STOCK = "AgentStockTest123"
 MOT_DE_PASSE_AGENT_STOCK_COMPTOIR = "AgentStockCptTest123"
 MOT_DE_PASSE_AGENT_COMPTA = "AgentComptaTest123"
+MOT_DE_PASSE_AGENT_COMPTA_COMPTOIR = "AgentComptaCptTest123"
 
 
 def _executer_sql_admin(sql: str) -> None:
@@ -92,6 +93,9 @@ def base_reinitialisee():
         UPDATE utilisateurs SET tentatives_echouees = 0,
                mot_de_passe_hash = crypt('{MOT_DE_PASSE_AGENT_COMPTA}', gen_salt('bf', 12))
          WHERE identifiant = 'magasin.compta';
+        UPDATE utilisateurs SET tentatives_echouees = 0,
+               mot_de_passe_hash = crypt('{MOT_DE_PASSE_AGENT_COMPTA_COMPTOIR}', gen_salt('bf', 12))
+         WHERE identifiant = 'comptoir.compta';
         """
     )
     yield
