@@ -4,12 +4,13 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 10 — tableaux de bord et rapports, C8**,
-  2026-09-13 (PR #11, fast-forward, commit `5aba09b`) ; précédé du
-  **Cycle 9 — articles et stock, C4** (PR #10, commit `a0195be`), du
-  **Cycle 7 — inventaire et écarts, C7** et d'un **cycle de correction
-  transverse**, 2026-09-12 — voir le journal, après les contrôles de
-  boucle qui ont suivi chacun
+- Dernier cycle fusionné : **Cycle 11 — écran des opérations de stock,
+  C4**, 2026-09-13 (PR #12, fast-forward, commit `4728683`) ; précédé du
+  **Cycle 10 — tableaux de bord et rapports, C8** (PR #11, commit
+  `5aba09b`), du **Cycle 9 — articles et stock, C4** (PR #10, commit
+  `a0195be`), du **Cycle 7 — inventaire et écarts, C7** et d'un **cycle de
+  correction transverse**, 2026-09-12 — voir le journal, après les
+  contrôles de boucle qui ont suivi chacun
 - Décision d'architecture (précisée 2026-09-11) : **un seul code applicatif web**,
   mais **livré et exécuté comme une application Windows (.exe)** sur les postes de
   la boutique — l'exécutable embarque le serveur local et ouvre l'interface web en
