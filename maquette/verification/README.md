@@ -90,6 +90,14 @@ réinitialisent eux-mêmes la base de test (jeu d'essai + comptes réels).
   **aucune occurrence de « FCFA » ni de champ de prix dans la page ou les
   réponses réseau vues par l'agent stock**, aucun bouton « Casse » pour
   lui, layout aux 5 largeurs. Dernier résultat : **26/26**.
+- **`verifier-rapports-reel.mjs`** (cycle 12, C8) : `rapports.html` —
+  historique des comptages filtré par période avec un vrai écart affiché ;
+  sections gatées par rôle (l'agent stock ne voit que l'export du
+  catalogue, jamais l'historique ni l'export des ventes, ni aucune
+  occurrence de « FCFA ») ; un clic sur un bouton d'export déclenche un
+  **vrai téléchargement de navigateur** intercepté et dont les premiers
+  octets sont relus (`PK` pour un `.xlsx`, `%PDF` pour un `.pdf`) — pas
+  seulement un code HTTP 200. Dernier résultat : **29/29**.
 
 ```
 node verifier-cablage.mjs
@@ -97,6 +105,7 @@ node verifier-vente-reelle.mjs
 node verifier-inventaire-reel.mjs
 node verifier-echappement-html.mjs
 node verifier-stock-reel.mjs
+node verifier-rapports-reel.mjs
 ```
 
 Détail complet des deux dans `DERNIER_RESULTAT.md`.

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rapports — Quincaillerie Franck</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Écran câblé (cycle 12) : historique des comptages et exports Excel/PDF sont réels (<code>server/app/routes/inventaire.py</code>, <code>rapports.py</code>). Aucune bascule vue consolidée/par site, aucune clôture de caisse, aucune numérotation de facturier — hors périmètre de ce cycle.</div>
+<div class="page">
+  <header class="bandeau">
+    <span class="bandeau__marque">Quincaillerie Franck</span>
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <a class="btn btn--fantome" id="lien-retour" href="#">Retour</a>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
+  </header>
+
+  <main class="contenu">
+    <div class="tb-grille">
+
+      <section class="carte" id="carte-historique" hidden>
+        <h2>Historique des comptages</h2>
+        <p class="champ__aide">Tous les comptages de la période, tous sites — pas seulement les écarts (voir « Écarts d'inventaire du jour » sur le tableau de bord).</p>
+        <div style="display:flex; gap:var(--e-3); flex-wrap:wrap; margin:var(--e-4) 0;">
+          <div class="champ" style="flex:1; min-width:150px; margin-bottom:0;">
+            <label class="champ__label" for="hist-debut">Du</label>
+            <input class="champ__saisie" id="hist-debut" type="date">
+          </div>
+          <div class="champ" style="flex:1; min-width:150px; margin-bottom:0;">
+            <label class="champ__label" for="hist-fin">Au</label>
+            <input class="champ__saisie" id="hist-fin" type="date">
+          </div>
+        </div>
+        <button class="btn btn--secondaire" id="hist-chercher" type="button">Afficher</button>
+        <div id="zone-erreur-historique" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+        <ul class="liste-nue" id="liste-historique" style="margin-top:var(--e-4);"></ul>
+      </section>
+
+      <section class="carte" id="carte-export-articles" hidden>
+        <h2>Exporter le catalogue</h2>
+        <p class="champ__aide">Instantané des articles — jamais de période, ce n'est pas un historique.</p>
+        <div style="display:flex; gap:var(--e-3); margin-top:var(--e-4);">
+          <button class="btn btn--primaire" id="export-articles-xlsx" type="button">Excel (.xlsx)</button>
+          <button class="btn btn--primaire" id="export-articles-pdf" type="button">PDF</button>
+        </div>
+        <div id="zone-erreur-export-articles" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+      </section>
+
+      <section class="carte" id="carte-export-ventes" hidden>
+        <h2>Exporter les ventes</h2>
+        <div style="display:flex; gap:var(--e-3); flex-wrap:wrap; margin:var(--e-4) 0;">
+          <div class="champ" style="flex:1; min-width:150px; margin-bottom:0;">
+            <label class="champ__label" for="ventes-debut">Du</label>
+            <input class="champ__saisie" id="ventes-debut" type="date">
+          </div>
+          <div class="champ" style="flex:1; min-width:150px; margin-bottom:0;">
+            <label class="champ__label" for="ventes-fin">Au</label>
+            <input class="champ__saisie" id="ventes-fin" type="date">
+          </div>
+        </div>
+        <div style="display:flex; gap:var(--e-3);">
+          <button class="btn btn--primaire" id="export-ventes-xlsx" type="button">Excel (.xlsx)</button>
+          <button class="btn btn--primaire" id="export-ventes-pdf" type="button">PDF</button>
+        </div>
+        <div id="zone-erreur-export-ventes" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+(async function () {
+  "use strict";
+
+  // Écran réservé au responsable, à l'agent stock (catalogue seulement) et
+  // à l'agent comptabilité (catalogue + ventes) — jamais de quantité ni de
+  // prix montré ici : chaque section n'affiche qu'un bouton, le contenu du
+  // fichier est déjà gaté par rôle côté serveur (routes/rapports.py).
+  const session = await exigerSession(["responsable", "agent_stock", "agent_comptabilite"]);
+  if (!session) return;
+
+  const $ = (id) => document.getElementById(id);
+  const PAGE_RETOUR = { responsable: "tableau-bord.html", agent_stock: "stock.html", agent_comptabilite: "vente.html" };
+
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+  $("lien-retour").href = PAGE_RETOUR[session.role];
+
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+
+  // --- Historique des comptages : responsable seulement ---
+  if (session.role === "responsable") {
+    $("carte-historique").hidden = false;
+    $("hist-debut").value = aujourdhui;
+    $("hist-fin").value = aujourdhui;
+
+    async function chercherHistorique() {
+      $("zone-erreur-historique").hidden = true;
+      const ul = $("liste-historique");
+      ul.innerHTML = "";
+      try {
+        const donnees = await appelApi(
+          "/inventaire/historique-comptages?date_debut=" + $("hist-debut").value + "&date_fin=" + $("hist-fin").value
+        );
+        if (donnees.comptages.length === 0) {
+          ul.innerHTML = "<li><span>Aucun comptage sur cette période.</span></li>";
+        } else {
+          donnees.comptages.forEach((c) => {
+            const signe = c.ecart > 0 ? "+" + c.ecart : c.ecart;
+            ul.appendChild(creerLigneListe(
+              c.article_nom,
+              (LIBELLE_SITE[c.site_id] || "Site " + c.site_id) + " · " + c.moment + " · "
+                + new Date(c.date_comptage).toLocaleDateString("fr-FR"),
+              c.ecart === 0 ? "conforme" : "écart " + signe,
+              c.ecart === 0 ? "pastille--ok" : "pastille--alerte"
+            ));
+          });
+        }
+      } catch (erreur) {
+        afficherErreurServeur("zone-erreur-historique", erreur);
+      }
+    }
+
+    $("hist-chercher").addEventListener("click", chercherHistorique);
+    await chercherHistorique();
+  }
+
+  // --- Export du catalogue : les 3 rôles ---
+  $("carte-export-articles").hidden = false;
+  async function exporterArticles(format) {
+    $("zone-erreur-export-articles").hidden = true;
+    try {
+      await telechargerFichier("/rapports/articles?format=" + format, "articles." + format);
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-export-articles", erreur);
+    }
+  }
+  $("export-articles-xlsx").addEventListener("click", () => exporterArticles("xlsx"));
+  $("export-articles-pdf").addEventListener("click", () => exporterArticles("pdf"));
+
+  // --- Export des ventes : responsable et agent comptabilité ---
+  if (session.role === "responsable" || session.role === "agent_comptabilite") {
+    $("carte-export-ventes").hidden = false;
+    $("ventes-debut").value = aujourdhui;
+    $("ventes-fin").value = aujourdhui;
+
+    async function exporterVentes(format) {
+      $("zone-erreur-export-ventes").hidden = true;
+      const params = "format=" + format + "&date_debut=" + $("ventes-debut").value + "&date_fin=" + $("ventes-fin").value;
+      try {
+        await telechargerFichier("/rapports/ventes?" + params, "ventes." + format);
+      } catch (erreur) {
+        afficherErreurServeur("zone-erreur-export-ventes", erreur);
+      }
+    }
+    $("export-ventes-xlsx").addEventListener("click", () => exporterVentes("xlsx"));
+    $("export-ventes-pdf").addEventListener("click", () => exporterVentes("pdf"));
+  }
+})();
+</script>
+</body>
+</html>

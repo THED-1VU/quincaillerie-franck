@@ -256,12 +256,26 @@ deux ne puissent pas diverger.
 
 **Hors périmètre, volontairement** : clôture de caisse (point g, non
 tranché) ; aucune numérotation de facturier inventée (`numero_facture`
-restitué tel quel, y compris `NULL` — point c, non tranché) ; pas d'écran
-dédié pour l'historique des comptages ni pour les exports (seule la carte
-« Alertes de stock faible », déjà prévue par la maquette, est câblée cette
-fois) ; le paquet Windows (`fabrication/`) n'est pas re-fabriqué ni
-re-testé avec les 3 nouvelles dépendances (`openpyxl`, `reportlab`,
-`pypdf`) — un risque documenté dans `loop-state.md`, pas un fait vérifié.
+restitué tel quel, y compris `NULL` — point c, non tranché).
+
+### Cycle 12 — écran (`maquette/rapports.html`)
+
+Câble les trois routes ci-dessus, restées sans interface depuis le
+cycle 10 : historique des comptages (responsable, sélecteur de période),
+export du catalogue (les 3 rôles), export des ventes (responsable, agent
+comptabilité). Un seul écran, sections gatées par rôle — même principe
+que `stock.html` (cycle 11). Le téléchargement d'un fichier authentifié
+n'a pas de solution native en HTML (`<a href>` ne porte pas de jeton) :
+`maquette/api.js` gagne `telechargerFichier()`, qui lit la réponse en
+`blob()` et simule un clic sur une ancre temporaire.
+
+**Régression trouvée et corrigée en écrivant ce cycle** : ajouter un lien
+« Rapports » au bandeau déjà chargé de `vente.html` (titre + badge de rôle
++ note du facturier papier) faisait déborder l'écran horizontalement à
+768 px, juste en dessous du seuil de retour à la ligne commun (719 px,
+`styles.css`) — trouvé par `verifier-cablage.mjs`, corrigé par un repli
+scopé à cet écran seulement (`.bandeau--vente`), sans toucher au seuil
+partagé par les autres écrans.
 
 ### Tests — `server/tests/test_tableau_bord.py` + `test_rapports.py`, 17/17
 
