@@ -18,18 +18,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from ..colonnes import COLONNES_ARTICLES
 from ..deps import obtenir_bd, obtenir_session
 from ..roles import role_pg
 from ..securite import Session
 
 routeur = APIRouter(tags=["démonstration"])
-
-
-_COLONNES_ARTICLES = {
-    "agent_stock": "id, nom, unite, quantite_stock, seuil_alerte, site_id",
-    "agent_comptabilite": "id, nom, unite, prix_vente, site_id",
-    "responsable": "id, nom, unite, prix_achat, prix_vente, quantite_stock, seuil_alerte, site_id",
-}
 
 
 @routeur.get("/articles")
@@ -46,7 +40,7 @@ def liste_articles(request: Request, session: Session = Depends(obtenir_session)
     partir de la session — jamais d'un paramètre de la requête HTTP.
     """
     bd = obtenir_bd(request)
-    colonnes = _COLONNES_ARTICLES[session.role]
+    colonnes = COLONNES_ARTICLES[session.role]
 
     with bd.connexion_pour(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id

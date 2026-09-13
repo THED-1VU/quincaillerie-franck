@@ -25,6 +25,13 @@ inter-sites, casse, retours client/fournisseur (`routes/stock.py`) — voir
 `db/migrations/014_...` pour les décisions du propriétaire qu'ils
 appliquent (addendum, points a et f).
 
+Cycle 10 (chantier C8) y ajoute la dernière carte du tableau de bord
+encore simulée (`routes/tableau_bord.py`, alertes de stock faible), un
+historique des comptages filtrable par période (`routes/inventaire.py`),
+et deux exports de rapports (`routes/rapports.py`, Excel/PDF) dont le
+gating du prix par rôle est posé dans la clause SQL elle-même (voir
+`app/colonnes.py`) — jamais retiré du fichier après coup.
+
 Lancer en développement :
     server\\.venv\\Scripts\\uvicorn.exe app.main:app --reload --app-dir server
 """
@@ -41,7 +48,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import Config, ErreurConfiguration, charger_config
 from .database import BaseDeDonnees
-from .routes import articles, auth, demonstration, inventaire, stock, ventes
+from .routes import articles, auth, demonstration, inventaire, rapports, stock, tableau_bord, ventes
 from .securite import GestionnaireSessions, LimiteurDebit
 
 logger = logging.getLogger("quincaillerie")
@@ -84,6 +91,8 @@ def creer_application(config: Config | None = None) -> FastAPI:
     app.include_router(inventaire.routeur)
     app.include_router(articles.routeur)
     app.include_router(stock.routeur)
+    app.include_router(tableau_bord.routeur)
+    app.include_router(rapports.routeur)
 
     if MAQUETTE_DIR.is_dir():
         app.mount("/app", StaticFiles(directory=str(MAQUETTE_DIR), html=True), name="maquette")

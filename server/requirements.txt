@@ -11,3 +11,9 @@ psycopg[binary]==3.2.4
 bcrypt==4.2.1
 pytest==8.3.5
 httpx==0.28.1
+
+# Chantier C8 (cycle 10) : exports de rapports.
+openpyxl==3.1.5    # Excel — production ET tests (relit le classeur produit).
+reportlab==5.0.1   # PDF — production uniquement.
+pypdf==6.18.1      # PDF — TEST SEUL : relit le contenu texte du PDF produit
+                   # pour prouver l'absence de prix, jamais utilisé en production.

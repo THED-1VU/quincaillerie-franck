@@ -203,6 +203,50 @@ réception, refusé sur un mouvement qui n'en est pas une. Suite complète :
 
 ---
 
+## Chantier C8 — tableaux de bord et rapports (cycle 10)
+
+Trois briques, toutes construites sur des données déjà décidées : aucune
+nouvelle migration de schéma n'a été nécessaire.
+
+| Route | Rôle requis | Ce qu'elle fait |
+|---|---|---|
+| `GET /tableau-bord/alertes-stock` | responsable | articles au seuil d'alerte ou en dessous, tous sites (CDC §3.3) |
+| `GET /inventaire/historique-comptages` | responsable | tous les comptages (pas seulement les écarts) sur une période `date_debut`/`date_fin`, tous sites (CDC §3.3/§3.13) |
+| `GET /rapports/articles?format=xlsx\|pdf` | responsable, agent stock, agent comptabilité | catalogue articles/stock, colonnes gatées **en SQL** par la même liste blanche que `GET /articles` (`app/colonnes.py`) |
+| `GET /rapports/ventes?format=xlsx\|pdf&date_debut=&date_fin=` | responsable, agent comptabilité | ventes payées sur une période ; un agent stock est refusé avant même la base (comme `GET /ventes/synthese-jour`) |
+
+**Gating du prix à l'export (CDC §3.7)** : la colonne de prix n'est jamais
+lue par PostgreSQL pour un agent stock (`COLONNES_ARTICLES["agent_stock"]`
+ne contient ni `prix_achat` ni `prix_vente`) — il n'y a donc rien à
+masquer au moment d'écrire le fichier Excel ou PDF, parce que la valeur
+n'a jamais existé dans les lignes renvoyées par la base. Même liste que
+`GET /articles` (cycle 3), déplacée dans `app/colonnes.py` pour que les
+deux ne puissent pas diverger.
+
+**Hors périmètre, volontairement** : clôture de caisse (point g, non
+tranché) ; aucune numérotation de facturier inventée (`numero_facture`
+restitué tel quel, y compris `NULL` — point c, non tranché) ; pas d'écran
+dédié pour l'historique des comptages ni pour les exports (seule la carte
+« Alertes de stock faible », déjà prévue par la maquette, est câblée cette
+fois) ; le paquet Windows (`fabrication/`) n'est pas re-fabriqué ni
+re-testé avec les 3 nouvelles dépendances (`openpyxl`, `reportlab`,
+`pypdf`) — un risque documenté dans `loop-state.md`, pas un fait vérifié.
+
+### Tests — `server/tests/test_tableau_bord.py` + `test_rapports.py`, 17/17
+
+Alerte de stock présente pour l'article déjà sous son seuil dans le jeu
+d'essai, absente pour un article au-dessus ; historique de comptages
+filtré par période (un comptage hors période n'apparaît pas), date
+invalide refusée en 422 ; export articles relu (`openpyxl`, `pypdf`) pour
+**chacun des trois rôles** — absence physique des colonnes de prix pour
+l'agent stock (Excel ET PDF), colonnes complètes pour le responsable avec
+une valeur de prix réelle vérifiée dans le fichier, `prix_vente` seul pour
+l'agent comptabilité ; export ventes contenant le vrai total d'une vente
+réellement enregistrée, vide hors période, refusé à l'agent stock. Suite
+complète : **90/90** (73 héritées + 17 nouvelles).
+
+---
+
 ## Chantier C5 — ventes (cycle 6)
 
 `POST /ventes` (réservé `responsable`/`agent_comptabilite`) applique trois
@@ -405,8 +449,10 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 | `test_ventes.py` | TVA calculée à la main et comparée, vente à découvert jamais refusée (écart consigné), crédit client refusé, cloisonnement par rôle/site sur une route d'ÉCRITURE |
 | `test_inventaire.py` | liste à compter sans aucune quantité (site_id distingue les deux sites pour le responsable), réponse d'un comptage limitée à ce qui a été envoyé **même si le client injecte des champs interdits**, **lecture de `ecart` refusée en SQL direct**, article déjà compté exclu, écarts réservés au responsable et exacts |
 | `test_articles.py` / `test_stock.py` | article toujours créé sans stock, prix ignoré pour un agent stock ; réception recalculant le seuil et refusée hors site ; transfert atomique ne recalculant jamais le seuil ; casse réservée au responsable ; retours rattachés (vente ou réception d'origine), refusés hors site |
+| `test_tableau_bord.py` | alertes de stock réelles (article sous seuil, réservé au responsable), historique des comptages filtré par période |
+| `test_rapports.py` | contenu **réellement relu** (`openpyxl`, `pypdf`) des exports articles/ventes pour les 3 rôles — gating du prix en SQL, jamais après coup |
 
-Dernier résultat : **73/73**, trace complète dans
+Dernier résultat : **90/90**, trace complète dans
 [`tests/DERNIER_RESULTAT.md`](tests/DERNIER_RESULTAT.md).
 
 ### Piège à éviter en écrivant un test (Windows)

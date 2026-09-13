@@ -52,19 +52,9 @@ const DONNEES = {
     { code: "autre",         libelle: "Autre" },
   ],
 
-  /* Tableau de bord responsable (mobile). Seule "alertesStock" reste
-     simulée ici (chantier C8) : date et ventes du jour sont réelles depuis
-     le cycle 5, écarts réels depuis le cycle 7 — voir tableau-bord.html. */
-  tableauBord: {
-    alertesStock: [
-      { article: "Ciment CIM II 50 kg", site: "Magasin de stock", reste: 4, unite: "sac" },
-      { article: "Peinture blanche 4 L", site: "Comptoir", reste: 2, unite: "bidon" },
-      { article: "Disque à tronçonner 230", site: "Comptoir", reste: 3, unite: "pièce" },
-    ],
-    // Les écarts d'inventaire ET les écarts de stock issus des ventes sont
-    // réels depuis le cycle 7 (/inventaire/ecarts, /inventaire/ecarts-ventes)
-    // — plus de donnée simulée ici pour eux.
-  },
+  // Tableau de bord responsable (mobile) : plus aucune donnée simulée ici.
+  // Ventes du jour et alertes de stock réelles depuis les cycles 5 et 8,
+  // écarts réels depuis le cycle 7 — voir tableau-bord.html.
 
 };
 

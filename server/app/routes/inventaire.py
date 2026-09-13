@@ -16,6 +16,8 @@ par colonne, pas une simple discipline de code.
 
 from __future__ import annotations
 
+from datetime import date as _date
+
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -145,6 +147,60 @@ def ecarts_du_jour(
             lignes = cur.fetchall()
 
     return {"ecarts": lignes}
+
+
+@routeur.get("/historique-comptages")
+def historique_comptages(
+    date_debut: str,
+    date_fin: str,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Historique de TOUS les comptages (pas seulement ceux en écart) sur
+    une période, tous sites — chantier C8, CDC §3.3 et §3.13 : « Historique
+    des comptages d'inventaire, tous sites, filtre par période », « réservé
+    au responsable ». Distinct de ``/ecarts`` ci-dessus, qui ne montre que
+    les écarts du jour courant.
+
+    ``date_debut``/``date_fin`` au format AAAA-MM-JJ, bornes incluses. La
+    comparaison se fait sur ``date_comptage::date`` : comme pour
+    ``/ventes/synthese-jour`` (cycle 8), le fuseau qui compte est celui de
+    la CONNEXION (Africa/Douala, fixé par ``database.py``), jamais celui du
+    système d'exploitation.
+    """
+    try:
+        debut = _date.fromisoformat(date_debut)
+        fin = _date.fromisoformat(date_fin)
+    except ValueError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "date_debut et date_fin doivent être au format AAAA-MM-JJ.",
+        ) from exc
+    if debut > fin:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "date_debut ne peut pas être postérieure à date_fin.",
+        )
+
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT c.id, a.nom AS article_nom, a.site_id, c.moment,
+                       c.quantite_comptee, c.quantite_attendue, c.ecart, c.date_comptage
+                  FROM comptages_stock c
+                  JOIN articles a ON a.id = c.article_id
+                 WHERE c.date_comptage::date BETWEEN %s AND %s
+                 ORDER BY c.date_comptage DESC
+                """,
+                (debut, fin),
+            )
+            lignes = cur.fetchall()
+
+    return {"comptages": lignes}
 
 
 @routeur.get("/ecarts-ventes")

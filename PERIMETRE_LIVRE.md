@@ -85,9 +85,9 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
 |---|---|---|---|
 | Vue consolidée **ou** par site | Bascule deux sites / un site | CDC §3.7 ; GS §7 | Spécifié |
 | Recettes du jour | Total du jour = somme des ventes payées | GS §7 ; DR Resp. E3 | Confirmé |
-| Alertes de stock faible | Articles sous le seuil d'alerte | CDC §3.7 ; GS §7 | Spécifié |
+| Alertes de stock faible | Articles sous le seuil d'alerte | CDC §3.7 ; GS §7 | Confirmé (test) — cycle 10, `GET /tableau-bord/alertes-stock`, câblée sur l'écran |
 | Accès rapide aux autres modules | Navigation | CDC §3.7 | Spécifié |
-| Historique des comptages d'inventaire | Tous sites, filtre par période | CDC §3.6–3.7 ; GS §7 | Confirmé |
+| Historique des comptages d'inventaire | Tous sites, filtre par période | CDC §3.6–3.7 ; GS §7 | Confirmé (test) — cycle 10, `GET /inventaire/historique-comptages`, pas encore d'écran dédié |
 
 ### 3.4 Tableau de bord — Agent stock
 
@@ -187,8 +187,8 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
 
 | Fonction | Détail | Source | Confiance |
 |---|---|---|---|
-| Export Excel (openpyxl) et PDF (reportlab) | Filtre de période | CDC §3.7 ; DR Resp. E2 | Spécifié |
-| **Gating du prix de vente selon le rôle de l'exportateur** | L'export d'un agent stock ne contient ni prix ni recette | CDC §3.7 ; DR Stock B3 | Confirmé (test) |
+| Export Excel (openpyxl) et PDF (reportlab) | Filtre de période | CDC §3.7 ; DR Resp. E2 | Confirmé (test) — cycle 10, `GET /rapports/ventes` (filtre de période) et `GET /rapports/articles` (instantané, sans période — un catalogue n'a pas d'historique) |
+| **Gating du prix de vente selon le rôle de l'exportateur** | L'export d'un agent stock ne contient ni prix ni recette | CDC §3.7 ; DR Stock B3 | Confirmé (test) — cycle 10, absence physique des colonnes de prix relue dans le fichier produit (Excel et PDF), pas seulement filtrée à l'écriture |
 | Rapport : total du jour = somme des ventes | Vérification croisée avec le tableau de bord | GS §7 | Confirmé (test) |
 
 ### 3.15 Impression (reportlab)
