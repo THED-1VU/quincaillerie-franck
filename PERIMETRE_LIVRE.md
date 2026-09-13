@@ -223,7 +223,7 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
 | Annulation contrôlée | Agent refusé ; responsable autorisé ; 2e annulation refusée | Confirmé |
 | Coupure réseau pendant validation | Message clair ; aucune double vente ; état final cohérent | À tester |
 | Imprimante indisponible | Vente traçable ; erreur claire ; réimpression possible | À tester |
-| Sauvegarde / restauration sur base séparée | Données + droits restaurés ; preuve conservée | **Non couvert** (aucun script détecté) |
+| Sauvegarde / restauration sur base séparée | Données + droits restaurés ; preuve conservée | Confirmé (test) — cycle 21, `db/outils/sauvegarder.ps1`/`restaurer.ps1` : comptes de lignes et droits par colonne identiques avant/après, sur une base séparée. Fréquence, conservation et RPO/RTO restent à trancher (point i). |
 | Session inactive | Déconnexion / verrouillage conforme à la règle | À tester (règle à définir) |
 
 ---
@@ -248,10 +248,15 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
 6. **Numéro du facturier papier + vendeur.** Absents du schéma et des écrans. Sans eux, la
    saisie a posteriori par le comptable ne peut être reliée à un vendeur ni à une pièce
    papier. → **Addendum, point c.**
-7. **Sauvegarde / restauration.** Exigée au CDC §4.3 et testée au DR §6, mais **aucun script
-   ni procédure détectable** dans le livré. → **Addendum, point i ; chantier C12.**
-8. **Livrables manquants** (CDC §7) : code source (dépôt Git), scripts de fabrication des
-   exécutables, scripts + guide de sauvegarde / restauration. → **Addendum, point l ; chantiers C0, C12, C14.**
+7. **Sauvegarde / restauration.** Exigée au CDC §4.3 et testée au DR §6. Le **mécanisme**
+   existe désormais (`db/outils/sauvegarder.ps1`/`restaurer.ps1`, cycle 21, vérifié par
+   exécution sur une base séparée). Reste tranché par le propriétaire : fréquence, durée de
+   conservation, RPO/RTO. → **Addendum, point i.**
+8. **Livrables manquants** (CDC §7) : code source (dépôt Git, livré), scripts de fabrication
+   des exécutables (livrés, chantier C0), scripts de sauvegarde / restauration (livrés,
+   chantier C12, cycle 21) — reste un **guide** utilisateur pour ces deux derniers (quand et
+   comment les lancer sur un poste réel), pas seulement les scripts. → **Addendum, point l ;
+   chantier C14.**
 
 ---
 
