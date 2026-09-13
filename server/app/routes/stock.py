@@ -20,6 +20,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..deps import exiger_role, obtenir_bd
+from ..erreurs import erreur_metier as _erreur_metier
 from ..roles import role_pg
 from ..schemas import (
     DemandeCasse,
@@ -33,16 +34,6 @@ from ..schemas import (
 from ..securite import Session
 
 routeur = APIRouter(prefix="/stock", tags=["stock"])
-
-
-def _erreur_metier(exc: psycopg.Error) -> HTTPException:
-    """Traduit un refus métier de la base (CHECK ou clé étrangère levés par
-    nos fonctions) en 422 avec le message même de la fonction — toujours en
-    français, jamais un message brut, puisque c'est nous qui l'avons écrit.
-    ``InsufficientPrivilege`` n'est PAS traitée ici : le gestionnaire global
-    (main.py) répond déjà "Accès refusé." pour cette classe d'erreur."""
-    message = (exc.diag.message_primary or "Opération refusée.").strip()
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, message)
 
 
 @routeur.post("/entrees", response_model=ReponseMouvementStock, status_code=status.HTTP_201_CREATED)

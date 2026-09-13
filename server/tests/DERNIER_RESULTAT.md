@@ -9,6 +9,61 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 11 — écran de stock (chantier C4), 2026-09-13
+
+Aucune nouvelle table : migration 015 (une seule fonction,
+`articles_autre_site()`). Correctif du constat n°1 du contrôle de boucle
+après le cycle 9 (`POST /articles` ne traduisait aucune erreur de la
+base) et nouvelle route `PUT /articles/{id}` (modification, tracée dans
+`historique_modifications_articles`/`historique_prix_articles`).
+
+### `test_articles.py` — 10 nouveaux tests (5 → 15)
+
+```
+test_responsable_cree_un_article_avec_prix PASSED
+test_agent_stock_cree_un_article_sans_prix PASSED
+test_agent_stock_ne_peut_pas_choisir_un_autre_site PASSED
+test_responsable_doit_preciser_un_site PASSED
+test_agent_comptabilite_ne_peut_pas_creer_darticle PASSED
+test_site_invalide_refuse_proprement PASSED
+test_responsable_modifie_le_nom_et_le_prix PASSED
+test_agent_stock_modifie_le_nom_mais_pas_le_prix PASSED
+test_agent_stock_ne_modifie_pas_un_article_de_lautre_site PASSED
+test_modification_article_inexistant_refusee PASSED
+test_modification_sans_aucun_champ_refusee PASSED
+test_modification_fournisseur_invalide_refusee_proprement PASSED
+test_agent_stock_voit_les_articles_de_lautre_site_sans_prix PASSED
+test_agent_stock_ne_voit_pas_son_propre_site_dans_lautre_site PASSED
+test_responsable_ne_peut_pas_appeler_articles_autre_site PASSED
+
+======================= 15 passed, 5 warnings in 22.54s =======================
+```
+
+### Écran (`maquette/stock.html`) — `verifier-stock-reel.mjs`, 26/26
+
+Les 6 opérations exécutées réellement par un agent stock (création,
+réception, transfert vers le Comptoir avec le nouveau sélecteur
+inter-site, retour client contre une vraie vente, retour fournisseur
+contre la réception faite plus haut dans le même script — chaque montant
+de stock revérifié en base après chaque étape) et par un responsable
+(modification de prix tracée, casse) ; aucun bouton « Casse » pour
+l'agent stock ; **aucune occurrence de « FCFA » dans la page de l'agent
+stock, avant et après les opérations** ; aucun champ de prix dans les
+réponses réseau de `/articles` et `/articles/autre-site` vues par la
+page ; layout aux 5 largeurs, cibles ≥ 44 px.
+
+### Suite complète
+
+```powershell
+server\.venv\Scripts\python.exe -m pytest server\tests\ -v
+```
+
+**100 passed** (90 hérités + 10 nouveaux), 0 régression. Les 5 suites
+Playwright (`cablage`, `vente`, `inventaire`, `echappement`, **`stock`
+nouveau**) : 76/76, 10/10, 17/17, 11/11, 26/26 — 0 régression.
+
+---
+
 ## Cycle 10 — chantier C8 (tableaux de bord et rapports), 2026-09-13
 
 Aucune nouvelle migration : les trois briques de ce cycle s'appuient sur

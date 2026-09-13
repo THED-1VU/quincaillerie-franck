@@ -335,3 +335,32 @@ Trois failles trouvées par exécution en écrivant les fonctions de ce cycle
 `enregistrer_retour_client()` et `enregistrer_retour_fournisseur()` (ce
 cycle) ne vérifiaient aucun site avant d'agir sur le stock — jamais
 exploitable tant qu'aucune route ne les appelait, corrigé en les exposant.
+
+---
+
+## Cycle 11 — écran de stock (chantier C4), 2026-09-13
+
+Migration 000 à **015** (`015_articles_autre_site.sql`) : une seule
+fonction, `articles_autre_site()`, pour que l'écran `stock.html` permette
+à un agent stock de choisir la destination d'un transfert sans jamais lui
+montrer le prix ni la quantité de l'autre site — vérifié par exécution
+directe avant tout code applicatif (agent du Magasin ne voit que « Clou
+5 cm », Comptoir ; agent du Comptoir ne voit que les 3 articles du
+Magasin ; un responsable, sans site, est refusé au niveau du `GRANT`).
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 015) : OK
+>>> jeu d'essai chargé             : OK
+>>> protections                    : OK   (44/44)
+>>> habilitations                  : OK   (52/52)
+>>> concurrence                    : OK   (6/6)
+>>> aller / retour des migrations  : OK
+Toutes les étapes sont passées.
+```
+
+**100 contrôles exécutés, 0 échec** — inchangé (aucun nouveau contrôle
+ajouté à ces fichiers ; les 10 nouveaux contrôles vivent dans
+`server/tests/test_articles.py`, voir `server/tests/DERNIER_RESULTAT.md`).
+Réversibilité de la migration 015 confirmée : aucune trace résiduelle
+au-delà des 2 écarts déjà documentés et pré-existants.

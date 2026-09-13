@@ -58,7 +58,6 @@ const DONNEES = {
 
 };
 
-/* Petit utilitaire d'affichage des montants en francs CFA (pas de sous-unité). */
-function fcfa(montant) {
-  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(montant)) + " FCFA";
-}
+// fcfa() a déménagé dans api.js (cycle 11) : un utilitaire d'affichage
+// partagé n'est pas une donnée simulée, et stock.html (nouveau, cycle 11)
+// en a besoin pour le responsable sans charger ce fichier.
