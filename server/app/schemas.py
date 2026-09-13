@@ -80,6 +80,29 @@ class ReponseVente(BaseModel):
     ecarts: List[LigneEcartReponse]
 
 
+class DemandeAnnulationVente(BaseModel):
+    """Motif obligatoire — annuler_vente() (cycle 17) le refuse de toute
+    façon, mais Pydantic bloque déjà une chaîne vide en amont."""
+
+    motif: str = Field(min_length=1, max_length=200)
+
+
+class ReponseAnnulationVente(BaseModel):
+    vente_id: int
+    montant_ttc: float
+    articles_restitues: int
+
+
+class ReponseRegularisationEcart(BaseModel):
+    """Réponse à la régularisation d'un écart de vente à découvert
+    (chantier C5, cycle 17) — ``regulariser_ecart_vente()`` ne renvoie rien
+    (VOID) : la route relit l'écart après coup pour confirmer son nouvel
+    état, plutôt que de renvoyer un simple 204 muet."""
+
+    ecart_id: int
+    regularise: bool
+
+
 class DemandeComptage(BaseModel):
     """Un comptage à l'aveugle : SEULE la quantité comptée vient du client.
 

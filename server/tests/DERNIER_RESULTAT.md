@@ -9,6 +9,63 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 17 — annulation de vente, régularisation d'écart (chantier C5), 2026-09-13
+
+Migration 017 (`annulation_vente_regularisation_ecart`) : `annuler_vente()`
+et `regulariser_ecart_vente()` — CDC §3.3 (« Annulation d'une vente —
+responsable uniquement : restitue le stock et retire la recette
+associée »), et `ecarts_stock_ventes.regularise` (cycle 6, jamais posé par
+aucune fonction jusqu'ici). Aucune règle nouvelle inventée : les deux
+mécanismes complètent une trace déjà décidée par le propriétaire.
+
+### `test_ventes.py` (7) et `test_inventaire.py` (6) — nouveaux, 13/13
+
+```
+test_annuler_vente_restitue_le_stock_et_contre_passe_la_recette PASSED
+test_annuler_vente_a_decouvert_ne_restitue_que_le_stock_reellement_decremente PASSED
+test_annuler_vente_deja_annulee_refusee PASSED
+test_annuler_vente_inexistante_refusee PASSED
+test_annuler_vente_motif_blanc_refuse PASSED
+test_agent_stock_et_agent_comptabilite_ne_peuvent_pas_annuler_une_vente PASSED
+test_regulariser_ecart_vente_marque_traite PASSED
+test_regulariser_ecart_vente_deja_regularise_refuse PASSED
+test_regulariser_ecart_vente_inexistant_refuse PASSED
+test_regulariser_ecart_vente_reserve_au_responsable PASSED
+test_annulation_vente_regularise_automatiquement_lecart PASSED
+
+======================= 135 passed, 31 warnings in 200.72s =======================
+```
+
+Faille trouvée par exécution en écrivant ce cycle, **avant tout code
+Python** (détail complet dans `db/tests/DERNIER_RESULTAT.md` et
+`db/README.md`) : `decrementer_stock_vente()` (cycle 6) ne renseignait
+jamais `mouvements_stock.vente_id` — corrigé dans la migration 017 même,
+sans quoi `annuler_vente()` n'aurait rien trouvé à restituer pour aucune
+vente réelle.
+
+### Écran (`maquette/tableau-bord.html`) — bouton « Régulariser »
+
+La carte « Écarts de stock (ventes) », réelle depuis le cycle 8, expose
+désormais un bouton « Régulariser » par ligne non régularisée
+(`POST /inventaire/ecarts-ventes/{id}/regulariser`) — vérifié par
+exécution via `verifier-inventaire-reel.mjs` (le texte du bouton apparaît
+bien dans la ligne rendue) et `verifier-echappement-html.mjs` (un nom
+d'article malveillant reste échappé y compris avec le bouton ajouté).
+
+### Suite complète
+
+```powershell
+server\.venv\Scripts\python.exe -m pytest server\tests\ -v
+```
+
+**135 passed** (124 hérités + 11 nouveaux), 0 régression. Les 6 suites
+Playwright rejouées : `cablage` 77/77, `inventaire` 17/17, `vente` 10/10,
+`stock` 26/26, `rapports` 29/29, `echappement` 11/11 — 0 régression.
+(`affichage` et `flux` nécessitent un serveur statique séparé sur le port
+8080, non lancé cette fois — sans lien avec ce chantier.)
+
+---
+
 ## Cycle 16 — comptabilité et RH (chantier C6), 2026-09-13
 
 Aucune nouvelle migration : `transactions`, `employes`, `absences_conges`,

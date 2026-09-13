@@ -407,6 +407,62 @@ SQL du cycle 2 rejouée à jour (**44/44** protections, **52/52** habilitations,
 **6/6** concurrence — réécrite pour le nouveau comportement anti-survente,
 voir `db/tests/DERNIER_RESULTAT.md`).
 
+### Cycle 17 — annulation de vente, régularisation d'écart
+
+CDC §3.3 : « Annulation d'une vente — responsable uniquement : restitue le
+stock et retire la recette associée. » La mécanique de statut existait
+depuis la migration 005 (cycle 2), mais rien ne restituait le stock ni ne
+contre-passait la recette — comblé par la migration 017.
+
+| Route | Rôle requis | Ce qu'elle fait |
+|---|---|---|
+| `POST /ventes/{vente_id}/annuler` | responsable seul | annule une vente : restitue le stock **réellement décrémenté** (pas la quantité vendue), contre-passe la recette par une dépense de même montant, régularise d'office tout écart de vente à découvert devenu sans objet |
+| `POST /inventaire/ecarts-ventes/{ecart_id}/regulariser` | responsable seul | marque un écart de vente à découvert comme traité (`ecarts_stock_ventes.regularise`, posé sans jamais avoir de fonction depuis le cycle 6) |
+
+- **Restitution exacte, pas la quantité facturée (point e)** : une vente
+  acceptée à découvert n'avait pas tout décrémenté — `annuler_vente()`
+  regroupe les mouvements `categorie='vente'` réellement associés à la
+  vente (`GROUP BY article_id, SUM(quantite)`) et ne restitue que cela.
+- **Irréversible, comme prévu depuis la migration 005** : une vente déjà
+  `annulee`, ou introuvable, est refusée par la fonction elle-même — jamais
+  une seconde fois. `date_annulation` reste posée par le déclencheur
+  existant, jamais par ce code (non antidatable).
+- **Motif obligatoire** : bloqué en amont par Pydantic (chaîne vide), et
+  par la base (`btrim`) pour un motif fait uniquement d'espaces.
+- **Régularisation jamais dans l'autre sens** : `regulariser_ecart_vente()`
+  ne fait aucun `UPDATE` direct exposé (aucun `GRANT UPDATE` sur
+  `ecarts_stock_ventes` pour `qf_responsable`) — refuse un écart déjà
+  régularisé, comme un remboursement d'avance.
+
+### Faille trouvée par exécution en écrivant ce cycle, avant tout code Python
+
+`decrementer_stock_vente()` (cycle 6) recevait `p_vente_id` en paramètre
+mais ne l'écrivait **jamais** dans `mouvements_stock.vente_id` — seul un
+motif texte (« vente #123 ») portait ce lien, jamais une vraie clé
+étrangère. Sans correction, `annuler_vente()` n'aurait rien trouvé à
+restituer pour aucune vente réelle. Corrigée dans la migration 017 même
+(`CREATE OR REPLACE`, comportement inchangé sinon) ; la colonne reste
+NULLABLE pour la catégorie « vente » — les mouvements d'avant ce cycle
+n'ont pas ce lien et aucun moyen fiable de le reconstruire n'existe (le
+motif texte n'est pas structuré de façon garantie).
+
+### Tests — `server/tests/test_ventes.py` + `test_inventaire.py`, 11 nouveaux
+
+Vente normale annulée (stock restitué intégralement, recette contre-passée) ;
+vente à découvert annulée (seule la quantité réellement décrémentée est
+restituée, écart régularisé d'office) ; double annulation, vente
+introuvable, motif blanc — tous refusés ; agent stock et agent
+comptabilité sans aucun droit sur les deux routes ; régularisation
+manuelle marquant l'écart traité, refusée si déjà fait ou introuvable.
+Non-régression : suite complète **135/135** (124 héritées + 11 nouvelles),
+suite SQL rejouée à jour (**44/44** / **52/52** / **6/6**), 6 suites
+Playwright rejouées sans régression — voir
+`server/tests/DERNIER_RESULTAT.md`.
+
+Écran : la carte « Écarts de stock (ventes) » de `maquette/tableau-bord.html`
+(réelle depuis le cycle 8) gagne un bouton « Régulariser » par ligne non
+régularisée.
+
 ---
 
 ## Chantier C6 — comptabilité et RH (cycle 16)

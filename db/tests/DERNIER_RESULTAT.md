@@ -401,3 +401,52 @@ deuxième retour cumulé qui dépasse après un premier retour valide
 retour client comme pour le retour fournisseur ; les vérifications
 préexistantes (site, existence, nature du mouvement, stock suffisant)
 revérifiées intactes.
+
+---
+
+## Cycle 17 — chantier C5 (annulation de vente, régularisation d'écart), 2026-09-13
+
+Migration 000 à **017** (`017_annulation_vente_regularisation_ecart.sql`) :
+`annuler_vente()` et `regulariser_ecart_vente()` — la mécanique de statut
+« annulée » existait depuis la migration 005 (cycle 2), mais rien ne
+restituait le stock ni ne contre-passait la recette ; `regularise`
+existait depuis le cycle 6 sans qu'aucune fonction ne l'ait jamais posé.
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 017) : OK
+>>> jeu d'essai chargé             : OK
+>>> protections                    : OK   (44/44)
+>>> habilitations                  : OK   (52/52)
+>>> concurrence                    : OK   (6/6)
+>>> aller / retour des migrations  : OK
+Toutes les étapes sont passées.
+```
+
+**100 contrôles exécutés, 0 échec** — inchangé (aucun nouveau contrôle
+ajouté à ces fichiers ; les 11 nouveaux contrôles vivent dans
+`server/tests/test_ventes.py`/`test_inventaire.py`, voir
+`server/tests/DERNIER_RESULTAT.md`). Réversibilité de la migration 017
+confirmée : aucune trace résiduelle au-delà des 2 écarts déjà documentés
+et pré-existants.
+
+**Faille trouvée par exécution en écrivant ce cycle, avant tout code
+applicatif** : `decrementer_stock_vente()` (cycle 6) recevait bien
+`p_vente_id` en paramètre mais ne l'écrivait JAMAIS dans
+`mouvements_stock.vente_id` — seul un motif texte (« vente #123 ») portait
+ce lien, jamais une vraie clé étrangère. Sans correction, `annuler_vente()`
+n'aurait rien trouvé à restituer pour AUCUNE vente réelle. Corrigée dans
+cette même migration (`CREATE OR REPLACE`, comportement inchangé sinon) ;
+colonne laissée NULLABLE pour la catégorie « vente » — les mouvements
+d'avant ce cycle n'ont pas ce lien et aucun moyen fiable de le reconstruire
+n'existe (le motif texte n'est pas structuré de façon garantie).
+
+Vérifié en SQL direct avant tout code Python : annulation d'une vente
+normale (stock restitué intégralement, recette contre-passée par une
+dépense de même montant) ; annulation d'une vente à découvert (seule la
+quantité RÉELLEMENT décrémentée est restituée — jamais la quantité
+facturée — et l'écart devenu sans objet est régularisé d'office) ; double
+annulation refusée ; vente introuvable refusée ; motif vide ou blanc
+refusé ; régularisation manuelle d'un écart déjà régularisé refusée ;
+permissions vérifiées (`GRANT EXECUTE` réservé à `qf_responsable` pour les
+deux fonctions, aucun `GRANT UPDATE` direct sur `ecarts_stock_ventes`).

@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Écran câblé (cycles 7, 8 et 16) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour », « Écarts de stock (ventes) » et « Saisie rapide » (recette/dépense) sont toutes réelles.</div>
+<div class="simu">Écran câblé (cycles 7, 8, 16 et 17) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour », « Écarts de stock (ventes) » (avec régularisation) et « Saisie rapide » (recette/dépense) sont toutes réelles.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Quincaillerie Franck</span>
@@ -177,24 +177,50 @@
   }
 
   // --- Écarts de stock issus d'une vente à découvert : RÉEL (chantier C5) ---
-  try {
-    const donnees = await appelApi("/inventaire/ecarts-ventes");
-    const ulV = $("liste-ecarts-ventes");
-    if (donnees.ecarts.length === 0) {
-      ulV.innerHTML = "<li><span>Aucune vente à découvert de stock aujourd'hui.</span></li>";
-    } else {
-      donnees.ecarts.forEach((e) => {
-        ulV.appendChild(creerLigneListe(
-          e.article_nom,
-          (LIBELLE_SITE[e.site_id] || "Site " + e.site_id) + " · vente n°" + e.vente_id,
-          "manque " + e.quantite_manquante,
-          "pastille--alerte"
-        ));
-      });
+  // Régularisation RÉELLE (chantier C5, cycle 17) : POST /inventaire/ecarts-ventes/{id}/regulariser.
+  async function chargerEcartsVentes() {
+    $("zone-erreur-ecarts-ventes").hidden = true;
+    try {
+      const donnees = await appelApi("/inventaire/ecarts-ventes");
+      const ulV = $("liste-ecarts-ventes");
+      ulV.innerHTML = "";
+      const nonRegularises = donnees.ecarts.filter((e) => !e.regularise);
+      if (donnees.ecarts.length === 0) {
+        ulV.innerHTML = "<li><span>Aucune vente à découvert de stock aujourd'hui.</span></li>";
+      } else if (nonRegularises.length === 0) {
+        ulV.innerHTML = "<li><span>Tous les écarts du jour sont régularisés.</span></li>";
+      } else {
+        nonRegularises.forEach((e) => {
+          const li = creerLigneListe(
+            e.article_nom,
+            (LIBELLE_SITE[e.site_id] || "Site " + e.site_id) + " · vente n°" + e.vente_id,
+            "manque " + e.quantite_manquante,
+            "pastille--alerte"
+          );
+          const bouton = document.createElement("button");
+          bouton.type = "button";
+          bouton.className = "btn btn--fantome";
+          bouton.style.marginLeft = "var(--e-2)";
+          bouton.textContent = "Régulariser";
+          bouton.addEventListener("click", async () => {
+            bouton.disabled = true;
+            try {
+              await appelApi("/inventaire/ecarts-ventes/" + e.id + "/regulariser", { method: "POST" });
+              await chargerEcartsVentes();
+            } catch (erreur) {
+              bouton.disabled = false;
+              afficherErreurServeur("zone-erreur-ecarts-ventes", erreur);
+            }
+          });
+          li.appendChild(bouton);
+          ulV.appendChild(li);
+        });
+      }
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-ecarts-ventes", erreur);
     }
-  } catch (erreur) {
-    afficherErreurServeur("zone-erreur-ecarts-ventes", erreur);
   }
+  await chargerEcartsVentes();
 
   // --- Saisie rapide (recette/dépense hors vente) : RÉEL, via POST /transactions ---
   // (chantier C6, cycle 16 ; la clôture de caisse — addendum point g —

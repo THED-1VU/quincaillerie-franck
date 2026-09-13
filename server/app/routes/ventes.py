@@ -36,8 +36,15 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..deps import exiger_role, obtenir_bd
+from ..erreurs import erreur_metier
 from ..roles import role_pg
-from ..schemas import DemandeVente, LigneEcartReponse, ReponseVente
+from ..schemas import (
+    DemandeAnnulationVente,
+    DemandeVente,
+    LigneEcartReponse,
+    ReponseAnnulationVente,
+    ReponseVente,
+)
 from ..securite import Session
 
 routeur = APIRouter(prefix="/ventes", tags=["ventes"])
@@ -202,4 +209,42 @@ def enregistrer_vente(
         montant_tva=float(montant_tva),
         total_ttc=float(total_ttc),
         ecarts=ecarts,
+    )
+
+
+@routeur.post("/{vente_id}/annuler", response_model=ReponseAnnulationVente)
+def annuler_vente(
+    vente_id: int,
+    demande: DemandeAnnulationVente,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Annulation d'une vente (chantier C5, cycle 17) — **responsable
+    seul** (CDC §3.3) : restitue exactement le stock réellement décrémenté
+    (``annuler_vente()``, migration 017 — pas la quantité vendue, une
+    vente acceptée à découvert n'avait pas tout décrémenté, point e),
+    contre-passe la recette par une dépense de même montant, et
+    régularise d'office tout écart de vente à découvert devenu sans objet.
+    Une vente déjà annulée, ou introuvable, est refusée par la fonction
+    elle-même — jamais une seconde fois, jamais réversible (migration 005,
+    cycle 2)."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT * FROM annuler_vente(%s, %s, %s)",
+                    (vente_id, session.utilisateur_id, demande.motif),
+                )
+            except (psycopg.errors.ForeignKeyViolation, psycopg.errors.CheckViolation,
+                    psycopg.errors.RestrictViolation) as exc:
+                raise erreur_metier(exc) from exc
+            ligne = cur.fetchone()
+
+    return ReponseAnnulationVente(
+        vente_id=vente_id,
+        montant_ttc=float(ligne["montant_ttc"]),
+        articles_restitues=ligne["articles_restitues"],
     )
