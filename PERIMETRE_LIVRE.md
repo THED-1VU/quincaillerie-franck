@@ -123,12 +123,12 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
 |---|---|---|---|
 | Fiche article | nom, catégorie, unité, prix achat, prix vente, quantité, fournisseur, site | CDC §3.2 ; DR Resp. C1 | Confirmé |
 | Prix (achat + vente) et fournisseur **réservés au responsable** | Agent stock : formulaire **sans champ prix** ; modification prix impossible pour lui | CDC §3.2 ; GS §4 ; DR Stock C1, C3 | Confirmé (test) |
-| Création / modification d'article par l'agent stock | nom, quantité, unité uniquement | CDC §2 ; GS §4 ; DR Stock C1–C2 | Confirmé |
+| Création / modification d'article par l'agent stock | nom, catégorie, unité — **jamais la quantité**, décision de ce cycle : le CDC l'évoque, mais l'accepter en modification de fiche contournerait l'audit des mouvements de stock (cycle 9) ; toute quantité passe par une réception, un transfert, une casse ou un retour | CDC §2 ; GS §4 ; DR Stock C1–C2 | Confirmé (test) — cycle 11, `PUT /articles/{id}`, écran `stock.html` |
 | Seuil d'alerte **calculé automatiquement** | 20 % de la quantité reçue ; recalculé **uniquement** à une entrée de stock ; jamais à une sortie ni à une modification de fiche ; non saisissable | CDC §3.2, §4.2 ; DR Resp. C3–C4 | Confirmé (test) |
 | Fixer le prix catalogue (responsable) | Onglet Articles → modifier ; scénario : 6 prix fixés | GS §4 | Confirmé |
 | Mouvements de stock — entrée / sortie | **Motif obligatoire**, utilisateur + horodatage tracés | CDC §3.2 ; DR Resp. C3–C4, Stock C4 | Confirmé (test) |
 | Sortie supérieure au stock refusée | Le stock ne devient jamais négatif | DR Stock C5 | Confirmé (test) |
-| Historique prix + historique modifications **sur la fiche article** | Ancien / nouveau, auteur, date | CDC §3.2 ; DR Resp. C2 | Confirmé (test) |
+| Historique prix + historique modifications **sur la fiche article** | Ancien / nouveau, auteur, date | CDC §3.2 ; DR Resp. C2 | Confirmé (test) — cycle 11 : ces deux tables existaient depuis le cycle 1 sans jamais avoir reçu une ligne, faute de route |
 
 ### 3.9 Enregistrer une vente (agent comptabilité + responsable)
 

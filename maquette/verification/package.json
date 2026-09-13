@@ -9,7 +9,8 @@
     "cablage": "node verifier-cablage.mjs",
     "vente": "node verifier-vente-reelle.mjs",
     "inventaire": "node verifier-inventaire-reel.mjs",
-    "echappement": "node verifier-echappement-html.mjs"
+    "echappement": "node verifier-echappement-html.mjs",
+    "stock": "node verifier-stock-reel.mjs"
   },
   "devDependencies": {
     "playwright": "^1.63.0"

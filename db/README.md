@@ -116,6 +116,7 @@ Puis reporter la valeur dans `config.ini` (fichier local, non versionné), avec
 | 012 | `comptage_aveugle_colonnes` | qu'un agent stock LISE `ecart` ou `quantite_attendue` d'un comptage, y compris après coup, y compris en SQL direct |
 | 013 | `fuseau_horaire_boutique` | que le « jour » vu par `CURRENT_DATE`/`NOW()` dépende du fuseau du système d'exploitation du poste serveur plutôt que de l'heure réelle de la boutique (Africa/Douala) |
 | 014 | `articles_stock_transferts_retours` | confondre un transfert, une casse ou un retour avec une correction de quantité ; qu'un transfert ou un retour recalcule le seuil d'alerte ; qu'un agent stock agisse sur le stock d'un **autre** site via une réception, un transfert ou un retour (trois failles latentes trouvées par exécution en exposant des fonctions du cycle 2 par une route pour la première fois) |
+| 015 | `articles_autre_site` | qu'un agent stock lise un prix ou une quantité de l'AUTRE site pour choisir la destination d'un transfert (cycle 11, écran de stock) — une fenêtre volontairement étroite : id, nom, unité, site seulement |
 
 ---
 

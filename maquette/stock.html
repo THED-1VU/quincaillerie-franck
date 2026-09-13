@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Articles et stock — Quincaillerie Franck</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Écran câblé (cycle 11) : création, modification, réception, transfert, casse et retours sont réels (<code>server/app/routes/articles.py</code>, <code>stock.py</code>). La reprise d'un stock initial (point j) et la sélection d'une réception d'origine par une liste (plutôt qu'un identifiant) restent hors périmètre.</div>
+<div class="page">
+  <header class="bandeau">
+    <span class="bandeau__marque">Quincaillerie Franck</span>
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <a class="btn btn--fantome" id="lien-retour" href="#">Retour</a>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
+  </header>
+
+  <main class="contenu">
+    <div class="carte">
+      <div class="carte__titre">
+        <h2><label for="recherche">Chercher un article</label></h2>
+        <button class="btn btn--secondaire" id="lien-nouvel-article" type="button">+ Nouvel article</button>
+      </div>
+      <input class="champ__saisie" id="recherche" type="text" placeholder="Nom de l'article…" autocomplete="off">
+      <div id="zone-erreur-liste" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-articles" style="margin-top:var(--e-4);"></ul>
+    </div>
+
+    <div class="carte" id="carte-panneau" hidden style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2 id="panneau-titre">—</h2>
+        <button class="btn btn--fantome" id="panneau-fermer" type="button">Fermer</button>
+      </div>
+      <div id="panneau-contenu"></div>
+      <div id="zone-erreur-panneau" class="erreur-champ" hidden></div>
+      <div id="zone-succes-panneau" class="erreur-champ" hidden
+           style="background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+(async function () {
+  "use strict";
+
+  // Écran réservé au responsable et à l'agent stock (les deux gèrent le
+  // catalogue et le stock, cycle 9) — jamais l'agent comptabilité.
+  const session = await exigerSession(["responsable", "agent_stock"]);
+  if (!session) return;
+
+  const $ = (id) => document.getElementById(id);
+  const estResponsable = session.role === "responsable";
+
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+  $("lien-retour").href = estResponsable ? "tableau-bord.html" : "inventaire.html";
+
+  let articles = [];
+
+  // --- Liste des articles : RÉEL, via GET /articles (colonnes déjà gatées
+  // par rôle côté serveur, cycle 3 — jamais de prix pour l'agent stock). ---
+  async function chargerArticles() {
+    try {
+      const donnees = await appelApi("/articles");
+      articles = donnees.articles;
+      rendreListe(articles);
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-liste", erreur);
+    }
+  }
+
+  function rendreListe(liste) {
+    const ul = $("liste-articles");
+    ul.innerHTML = "";
+    if (liste.length === 0) {
+      ul.innerHTML = "<li><span>Aucun article.</span></li>";
+      return;
+    }
+    liste.forEach((a) => {
+      const li = document.createElement("li");
+      li.style.flexDirection = "column";
+      li.style.alignItems = "stretch";
+      li.style.gap = "var(--e-2)";
+
+      const ligneHaut = document.createElement("div");
+      ligneHaut.style.display = "flex";
+      ligneHaut.style.justifyContent = "space-between";
+      ligneHaut.style.width = "100%";
+
+      const infos = document.createElement("span");
+      const sousTexte = estResponsable
+        ? (LIBELLE_SITE[a.site_id] || "Site " + a.site_id) + " · stock " + a.quantite_stock + " " + a.unite
+        : "stock " + a.quantite_stock + " " + a.unite + " · seuil " + a.seuil_alerte;
+      infos.appendChild(document.createTextNode(a.nom));
+      infos.appendChild(document.createElement("br"));
+      const petit = document.createElement("span");
+      petit.style.color = "var(--c-texte-doux)";
+      petit.style.fontSize = "var(--t-xs)";
+      petit.textContent = sousTexte;
+      infos.appendChild(petit);
+      ligneHaut.appendChild(infos);
+
+      if (a.quantite_stock <= a.seuil_alerte) {
+        const pastille = document.createElement("span");
+        pastille.className = "pastille pastille--alerte";
+        pastille.textContent = "seuil";
+        ligneHaut.appendChild(pastille);
+      }
+      li.appendChild(ligneHaut);
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.flexWrap = "wrap";
+      actions.style.gap = "var(--e-2)";
+
+      const bouton = (libelle, action) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn btn--secondaire";
+        b.textContent = libelle;
+        b.addEventListener("click", () => ouvrirPanneau(action, a));
+        return b;
+      };
+      actions.appendChild(bouton("Modifier", "modifier"));
+      actions.appendChild(bouton("+ Réception", "reception"));
+      actions.appendChild(bouton("Transférer", "transfert"));
+      if (estResponsable) actions.appendChild(bouton("Casse", "casse"));
+      actions.appendChild(bouton("Retour client", "retour-client"));
+      actions.appendChild(bouton("Retour fournisseur", "retour-fournisseur"));
+      li.appendChild(actions);
+
+      ul.appendChild(li);
+    });
+  }
+
+  $("recherche").addEventListener("input", () => {
+    const q = $("recherche").value.trim().toLowerCase();
+    rendreListe(q ? articles.filter((a) => a.nom.toLowerCase().includes(q)) : articles);
+  });
+
+  // --- Panneau unique : une seule action à la fois (un agent stock travaille
+  // debout, une main — jamais plusieurs formulaires ouverts en même temps). ---
+  function ouvrirPanneau(action, article) {
+    $("carte-panneau").hidden = false;
+    $("zone-erreur-panneau").hidden = true;
+    $("zone-succes-panneau").hidden = true;
+    const contenu = $("panneau-contenu");
+    contenu.innerHTML = "";
+
+    const champ = (id, libelle, type, aide) => {
+      const div = document.createElement("div");
+      div.className = "champ";
+      const label = document.createElement("label");
+      label.className = "champ__label";
+      label.htmlFor = id;
+      label.textContent = libelle;
+      const input = document.createElement("input");
+      input.className = "champ__saisie";
+      input.id = id;
+      input.type = type || "text";
+      if (type === "number") { input.min = "0"; input.step = "1"; }
+      div.appendChild(label);
+      div.appendChild(input);
+      if (aide) {
+        const p = document.createElement("p");
+        p.className = "champ__aide";
+        p.textContent = aide;
+        div.appendChild(p);
+      }
+      contenu.appendChild(div);
+      return input;
+    };
+
+    const boutonValider = document.createElement("button");
+    boutonValider.type = "button";
+    boutonValider.className = "btn btn--primaire btn--large";
+
+    if (action === "creer") {
+      $("panneau-titre").textContent = "Nouvel article";
+      const nom = champ("f-nom", "Nom");
+      const unite = champ("f-unite", "Unité (ex. sac, kg, pièce)");
+      const categorie = champ("f-categorie", "Catégorie (optionnel)");
+      let prixAchat, prixVente, siteSel;
+      if (estResponsable) {
+        prixAchat = champ("f-prix-achat", "Prix d'achat", "number");
+        prixVente = champ("f-prix-vente", "Prix de vente", "number");
+        const divSite = document.createElement("div");
+        divSite.className = "champ";
+        const label = document.createElement("label");
+        label.className = "champ__label"; label.textContent = "Site";
+        siteSel = document.createElement("select");
+        siteSel.className = "champ__select";
+        siteSel.innerHTML = '<option value="">— Choisir —</option><option value="1">Magasin de stock</option><option value="2">Comptoir</option>';
+        divSite.appendChild(label); divSite.appendChild(siteSel);
+        contenu.appendChild(divSite);
+      }
+      boutonValider.textContent = "Créer l'article";
+      boutonValider.addEventListener("click", async () => {
+        const corps = { nom: nom.value.trim(), unite: unite.value.trim() };
+        if (categorie.value.trim()) corps.categorie = categorie.value.trim();
+        if (estResponsable) {
+          if (siteSel.value) corps.site_id = Number(siteSel.value);
+          if (prixAchat.value) corps.prix_achat = Number(prixAchat.value);
+          if (prixVente.value) corps.prix_vente = Number(prixVente.value);
+        }
+        await appeler("/articles", "POST", corps, "Article créé.");
+      });
+    }
+
+    if (action === "modifier") {
+      $("panneau-titre").textContent = "Modifier — " + article.nom;
+      const nom = champ("f-nom", "Nom"); nom.value = article.nom;
+      const unite = champ("f-unite", "Unité"); unite.value = article.unite;
+      const categorie = champ("f-categorie", "Catégorie");
+      let prixAchat, prixVente;
+      if (estResponsable) {
+        prixAchat = champ("f-prix-achat", "Prix d'achat", "number");
+        if (article.prix_achat !== undefined) prixAchat.value = article.prix_achat;
+        prixVente = champ("f-prix-vente", "Prix de vente", "number");
+        if (article.prix_vente !== undefined) prixVente.value = article.prix_vente;
+      }
+      boutonValider.textContent = "Enregistrer les modifications";
+      boutonValider.addEventListener("click", async () => {
+        const corps = {};
+        if (nom.value.trim()) corps.nom = nom.value.trim();
+        if (unite.value.trim()) corps.unite = unite.value.trim();
+        if (categorie.value.trim()) corps.categorie = categorie.value.trim();
+        if (estResponsable) {
+          if (prixAchat.value) corps.prix_achat = Number(prixAchat.value);
+          if (prixVente.value) corps.prix_vente = Number(prixVente.value);
+        }
+        await appeler("/articles/" + article.id, "PUT", corps, "Article modifié.");
+      });
+    }
+
+    if (action === "reception") {
+      $("panneau-titre").textContent = "Réception — " + article.nom;
+      const quantite = champ("f-quantite", "Quantité reçue", "number",
+        "Recalcule automatiquement le seuil d'alerte (20 % de la quantité reçue).");
+      const motif = champ("f-motif", "Motif (optionnel)");
+      boutonValider.textContent = "Enregistrer la réception";
+      boutonValider.addEventListener("click", async () => {
+        const corps = { article_id: article.id, quantite: Number(quantite.value) };
+        if (motif.value.trim()) corps.motif = motif.value.trim();
+        await appeler("/stock/entrees", "POST", corps, "Réception enregistrée.");
+      });
+    }
+
+    if (action === "transfert") {
+      $("panneau-titre").textContent = "Transférer — " + article.nom;
+      const quantite = champ("f-quantite", "Quantité à transférer", "number");
+      const divDest = document.createElement("div");
+      divDest.className = "champ";
+      const labelDest = document.createElement("label");
+      labelDest.className = "champ__label"; labelDest.textContent = "Article de destination (autre site)";
+      const selDest = document.createElement("select");
+      selDest.className = "champ__select";
+      selDest.innerHTML = '<option value="">— Chargement… —</option>';
+      divDest.appendChild(labelDest); divDest.appendChild(selDest);
+      contenu.appendChild(divDest);
+      const motif = champ("f-motif", "Motif (obligatoire)", "text",
+        "Ne recalcule jamais le seuil d'alerte : ce n'est pas une réception.");
+
+      (async () => {
+        try {
+          const cible = estResponsable
+            ? { articles: (await appelApi("/articles")).articles.filter((a) => a.site_id !== article.site_id) }
+            : { articles: await appelApi("/articles/autre-site") };
+          selDest.innerHTML = '<option value="">— Choisir —</option>';
+          cible.articles.forEach((a) => {
+            const opt = document.createElement("option");
+            opt.value = a.id; opt.textContent = a.nom + (a.site_id ? " (" + (LIBELLE_SITE[a.site_id] || a.site_id) + ")" : "");
+            selDest.appendChild(opt);
+          });
+        } catch (erreur) {
+          afficherErreurServeur("zone-erreur-panneau", erreur);
+        }
+      })();
+
+      boutonValider.textContent = "Transférer";
+      boutonValider.addEventListener("click", async () => {
+        const corps = {
+          article_id_origine: article.id,
+          article_id_destination: Number(selDest.value),
+          quantite: Number(quantite.value),
+          motif: motif.value.trim(),
+        };
+        await appeler("/stock/transferts", "POST", corps, "Transfert enregistré.");
+      });
+    }
+
+    if (action === "casse") {
+      $("panneau-titre").textContent = "Casse / avarie — " + article.nom;
+      const quantite = champ("f-quantite", "Quantité", "number");
+      const motif = champ("f-motif", "Motif (obligatoire)");
+      boutonValider.textContent = "Enregistrer la casse";
+      boutonValider.addEventListener("click", async () => {
+        const corps = { article_id: article.id, quantite: Number(quantite.value), motif: motif.value.trim() };
+        await appeler("/stock/casse", "POST", corps, "Casse enregistrée.");
+      });
+    }
+
+    if (action === "retour-client") {
+      $("panneau-titre").textContent = "Retour client — " + article.nom;
+      const quantite = champ("f-quantite", "Quantité rendue", "number");
+      const venteId = champ("f-vente-id", "Numéro de la vente d'origine", "number");
+      const motif = champ("f-motif", "Motif (optionnel)");
+      boutonValider.textContent = "Enregistrer le retour";
+      boutonValider.addEventListener("click", async () => {
+        const corps = { article_id: article.id, vente_id: Number(venteId.value), quantite: Number(quantite.value) };
+        if (motif.value.trim()) corps.motif = motif.value.trim();
+        await appeler("/stock/retours-client", "POST", corps, "Retour client enregistré.");
+      });
+    }
+
+    if (action === "retour-fournisseur") {
+      $("panneau-titre").textContent = "Retour fournisseur — " + article.nom;
+      const quantite = champ("f-quantite", "Quantité rendue", "number");
+      const mouvementId = champ("f-mouvement-id", "Numéro du mouvement de réception d'origine", "number",
+        "Identifiant technique, en attendant un historique consultable (prévu à un cycle ultérieur).");
+      const motif = champ("f-motif", "Motif (optionnel)");
+      boutonValider.textContent = "Enregistrer le retour";
+      boutonValider.addEventListener("click", async () => {
+        const corps = { mouvement_origine_id: Number(mouvementId.value), quantite: Number(quantite.value) };
+        if (motif.value.trim()) corps.motif = motif.value.trim();
+        await appeler("/stock/retours-fournisseur", "POST", corps, "Retour fournisseur enregistré.");
+      });
+    }
+
+    contenu.appendChild(boutonValider);
+  }
+
+  async function appeler(chemin, methode, corps, messageSucces) {
+    $("zone-erreur-panneau").hidden = true;
+    $("zone-succes-panneau").hidden = true;
+    try {
+      await appelApi(chemin, { method: methode, body: JSON.stringify(corps) });
+      $("zone-succes-panneau").hidden = false;
+      $("zone-succes-panneau").textContent = messageSucces;
+      await chargerArticles();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-panneau", erreur);
+    }
+  }
+
+  function fermerPanneau() {
+    $("carte-panneau").hidden = true;
+  }
+
+  $("panneau-fermer").addEventListener("click", fermerPanneau);
+  $("lien-nouvel-article").addEventListener("click", () => ouvrirPanneau("creer", null));
+
+  await chargerArticles();
+})();
+</script>
+</body>
+</html>

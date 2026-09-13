@@ -58,11 +58,12 @@ Ces deux scripts ciblent le **noyau serveur réel** (`SERVEUR_URL`, par défaut
 `http://127.0.0.1:8010`), pas le serveur statique du cycle 1 — ils
 réinitialisent eux-mêmes la base de test (jeu d'essai + comptes réels).
 
-- **`verifier-cablage.mjs`** (cycle 5, C9/C10) : les 4 écrans câblés sur le
-  noyau serveur — connexion réelle, séparation des rôles prouvée sur le
-  CONTENU des réponses, quantité attendue absente du comptage à l'aveugle
-  (page/réseau/code source), erreurs toujours en français près du champ,
-  captures aux 5 largeurs. Dernier résultat : **74/74**.
+- **`verifier-cablage.mjs`** (cycle 5, C9/C10 ; complété au cycle 10, C8) :
+  les 4 écrans câblés sur le noyau serveur — connexion réelle, séparation
+  des rôles prouvée sur le CONTENU des réponses, quantité attendue absente
+  du comptage à l'aveugle (page/réseau/code source), erreurs toujours en
+  français près du champ, alertes de stock réelles (cycle 10), captures
+  aux 5 largeurs. Dernier résultat : **76/76**.
 - **`verifier-vente-reelle.mjs`** (cycle 6, C5) : l'écran de vente enregistre
   une VRAIE vente (`POST /ventes`) — crédit client absent des choix, vente à
   découvert de stock acceptée avec écart affiché (jamais un refus), le
@@ -83,12 +84,19 @@ réinitialisent eux-mêmes la base de test (jeu d'essai + comptes réels).
   JAMAIS — vérifié sur les suggestions et le panier de `vente.html`, et sur
   les deux listes d'écarts de `tableau-bord.html` — et s'affiche partout
   comme texte brut. Dernier résultat : **11/11**.
+- **`verifier-stock-reel.mjs`** (cycle 11, C4) : `stock.html` — les 6
+  opérations d'articles et de stock exécutées réellement (création,
+  modification, réception, transfert inter-sites, casse, retours),
+  **aucune occurrence de « FCFA » ni de champ de prix dans la page ou les
+  réponses réseau vues par l'agent stock**, aucun bouton « Casse » pour
+  lui, layout aux 5 largeurs. Dernier résultat : **26/26**.
 
 ```
 node verifier-cablage.mjs
 node verifier-vente-reelle.mjs
 node verifier-inventaire-reel.mjs
 node verifier-echappement-html.mjs
+node verifier-stock-reel.mjs
 ```
 
 Détail complet des deux dans `DERNIER_RESULTAT.md`.

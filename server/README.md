@@ -173,8 +173,39 @@ Décisions du propriétaire (addendum, points a et f) appliquées par
 
 **Hors périmètre, volontairement** : remises, unités/conversions décimales
 (point f, non demandées) ; chargement du stock initial (point j, non
-tranché — d'où l'absence de quantité à la création d'un article) ; aucun
-écran maquette pour ces opérations ce cycle.
+tranché — d'où l'absence de quantité à la création d'un article).
+
+### Cycle 11 — écran de stock, modification d'article, correctif d'erreur
+
+| Route | Rôle requis | Ce qu'elle fait |
+|---|---|---|
+| `PUT /articles/{id}` | responsable, agent stock | modifie un article (nom/catégorie/unité pour les deux ; + prix/fournisseur pour le responsable) — **jamais** `quantite_stock` ni `seuil_alerte`, même si le `GRANT` du cycle 2 le permettrait techniquement à un agent stock : toute quantité passe par les fonctions de mouvement ci-dessus. Chaque champ changé est tracé dans `historique_modifications_articles`/`historique_prix_articles` (cycle 1) — première utilisation réelle de ces deux tables. |
+| `GET /articles/autre-site` | agent stock seul | articles de l'AUTRE site (nom/unité seulement) pour choisir la destination d'un transfert, sans exposer le stock de l'autre site (`articles_autre_site()`, migration 015) |
+
+Correctif du **constat n°1** trouvé au contrôle de boucle après le
+cycle 9 : `POST /articles` intercepte désormais `ForeignKeyViolation`
+(`site_id`/`fournisseur_id` invalide) via `app/erreurs.py`, un module
+partagé avec `stock.py` — 422 clair au lieu d'une 500 générique.
+
+`maquette/stock.html` (nouveau) câble les six opérations ci-dessus pour
+le responsable et l'agent stock (jamais l'agent comptabilité) : liste et
+recherche d'articles, un panneau unique par action (jamais deux
+formulaires ouverts en même temps — ergonomie mobile, agent stock debout
+une main). Conçu 390 px d'abord. **Aucun montant FCFA, aucun champ de
+prix n'atteint la page ni les réponses réseau de l'agent stock** — vérifié
+par capture et par inspection du DOM/réseau, pas seulement par lecture du
+code.
+
+Le **constat n°2** (cohérence article/quantité d'un retour avec le
+document d'origine réellement référencé) n'est **pas** traité ce cycle —
+voir `loop-state.md`, il reste un candidat pour un cycle de correction
+dédié.
+
+`server/tests/test_articles.py` : +10 tests (5 → 15) pour la modification,
+le correctif d'erreur et la sélection inter-site. Suite complète :
+**100/100** (90 héritées + 10 nouvelles) ; `verifier-stock-reel.mjs`
+(nouveau) : **26/26** — les 6 opérations réellement exécutées, layout aux
+5 largeurs, aucune régression sur les 4 autres suites Playwright.
 
 ### Trois failles latentes trouvées en exposant des fonctions par une route
 
@@ -448,11 +479,11 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 | `test_securite.py` | aucun hachage ne fuit, config refuse superutilisateur/clé d'exemple, injection SQL neutralisée, jetons expirés/falsifiés/mal signés refusés |
 | `test_ventes.py` | TVA calculée à la main et comparée, vente à découvert jamais refusée (écart consigné), crédit client refusé, cloisonnement par rôle/site sur une route d'ÉCRITURE |
 | `test_inventaire.py` | liste à compter sans aucune quantité (site_id distingue les deux sites pour le responsable), réponse d'un comptage limitée à ce qui a été envoyé **même si le client injecte des champs interdits**, **lecture de `ecart` refusée en SQL direct**, article déjà compté exclu, écarts réservés au responsable et exacts |
-| `test_articles.py` / `test_stock.py` | article toujours créé sans stock, prix ignoré pour un agent stock ; réception recalculant le seuil et refusée hors site ; transfert atomique ne recalculant jamais le seuil ; casse réservée au responsable ; retours rattachés (vente ou réception d'origine), refusés hors site |
+| `test_articles.py` / `test_stock.py` | article toujours créé sans stock, prix ignoré pour un agent stock ; **modification tracée dans l'historique, `quantite_stock` jamais acceptée** ; **articles de l'autre site sans prix ni quantité** ; réception recalculant le seuil et refusée hors site ; transfert atomique ne recalculant jamais le seuil ; casse réservée au responsable ; retours rattachés (vente ou réception d'origine), refusés hors site |
 | `test_tableau_bord.py` | alertes de stock réelles (article sous seuil, réservé au responsable), historique des comptages filtré par période |
 | `test_rapports.py` | contenu **réellement relu** (`openpyxl`, `pypdf`) des exports articles/ventes pour les 3 rôles — gating du prix en SQL, jamais après coup |
 
-Dernier résultat : **90/90**, trace complète dans
+Dernier résultat : **100/100**, trace complète dans
 [`tests/DERNIER_RESULTAT.md`](tests/DERNIER_RESULTAT.md).
 
 ### Piège à éviter en écrivant un test (Windows)

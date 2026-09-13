@@ -136,6 +136,14 @@ function deconnecter() {
   window.location.href = "connexion.html";
 }
 
+/** Affichage des montants en francs CFA (pas de sous-unité). Partagé par
+ * les écrans qui affichent un prix (vente.html, tableau-bord.html,
+ * stock.html pour un responsable) — jamais chargé côté logique de
+ * l'agent stock. */
+function fcfa(montant) {
+  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(montant)) + " FCFA";
+}
+
 /**
  * Construit un <li> "libellé + sous-texte + pastille" (alertes, écarts...)
  * SANS jamais passer par innerHTML : un nom d'article vient du serveur et
