@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Écran câblé (cycle 7) : « Ventes du jour », « Écarts d'inventaire du jour » et « Écarts de stock (ventes) » sont réels. Seule « Alertes de stock faible » reste simulée (chantier C8).</div>
+<div class="simu">Écran câblé (cycles 7 et 8) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour » et « Écarts de stock (ventes) » sont toutes réelles.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Quincaillerie Franck</span>
@@ -34,12 +34,10 @@
       </section>
 
       <section class="carte">
-        <div class="carte__titre">
-          <h2>Alertes de stock faible</h2>
-          <span class="pastille pastille--neutre">donnée simulée</span>
-        </div>
+        <h2>Alertes de stock faible</h2>
+        <div id="zone-erreur-alertes" class="erreur-champ" hidden></div>
         <ul class="liste-nue" id="liste-alertes"></ul>
-        <p class="champ__aide">Route serveur pas encore construite (chantier C8) — voir <code>ADDENDUM_CAHIER_DES_CHARGES.md</code>.</p>
+        <p class="champ__aide">Article dont le stock est descendu à son seuil d'alerte ou en dessous — seuil recalculé à chaque réception (chantier C4).</p>
       </section>
 
       <section class="carte">
@@ -81,7 +79,6 @@
   const session = await exigerSession(["responsable"]);
   if (!session) return;
 
-  const tb = DONNEES.tableauBord; // alertes de stock : encore simulées (chantier C8), voir carte ci-dessous
   const $ = (id) => document.getElementById(id);
 
   $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
@@ -113,11 +110,27 @@
     afficherErreurServeur("zone-erreur-ventes", erreur);
   }
 
-  // --- Alertes de stock (SIMULÉ — aucune route serveur pour l'instant) ---
-  const ulA = $("liste-alertes");
-  tb.alertesStock.forEach((a) => {
-    ulA.appendChild(creerLigneListe(a.article, a.site, "reste " + a.reste + " " + a.unite, "pastille--alerte"));
-  });
+  // --- Alertes de stock faible : RÉEL, via /tableau-bord/alertes-stock ---
+  // (chantier C8 ; seuil déjà recalculé à chaque réception depuis le
+  // cycle 2 — voir server/app/routes/tableau_bord.py)
+  try {
+    const donnees = await appelApi("/tableau-bord/alertes-stock");
+    const ulA = $("liste-alertes");
+    if (donnees.alertes.length === 0) {
+      ulA.innerHTML = "<li><span>Aucun article sous son seuil d'alerte.</span></li>";
+    } else {
+      donnees.alertes.forEach((a) => {
+        ulA.appendChild(creerLigneListe(
+          a.nom,
+          LIBELLE_SITE[a.site_id] || "Site " + a.site_id,
+          "reste " + a.quantite_stock + " " + a.unite,
+          "pastille--alerte"
+        ));
+      });
+    }
+  } catch (erreur) {
+    afficherErreurServeur("zone-erreur-alertes", erreur);
+  }
 
   // --- Écarts d'inventaire du jour : RÉEL, via /inventaire/ecarts ---
   // (chantier C7 ; ne renvoie que des comptages où l'écart est non nul —

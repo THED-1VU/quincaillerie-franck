@@ -9,6 +9,53 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 10 — chantier C8 (tableaux de bord et rapports), 2026-09-13
+
+Aucune nouvelle migration : les trois briques de ce cycle s'appuient sur
+des colonnes déjà en base depuis les cycles 2 et 4.
+
+### `test_tableau_bord.py` (6) + `test_rapports.py` (11) — nouveaux, 17/17
+
+```
+test_alertes_stock_liste_larticle_sous_seuil PASSED
+test_alertes_stock_narticle_au_dessus_du_seuil_absent PASSED
+test_alertes_stock_reservee_au_responsable PASSED
+test_historique_comptages_filtre_par_periode PASSED
+test_historique_comptages_date_invalide_refusee PASSED
+test_historique_comptages_reserve_au_responsable PASSED
+test_export_articles_agent_stock_xlsx_sans_prix PASSED
+test_export_articles_agent_stock_pdf_sans_prix PASSED
+test_export_articles_responsable_xlsx_avec_prix PASSED
+test_export_articles_responsable_pdf_avec_prix PASSED
+test_export_articles_agent_comptabilite_prix_vente_seulement PASSED
+test_export_articles_format_invalide_refuse PASSED
+test_export_ventes_responsable_xlsx_contient_le_total PASSED
+test_export_ventes_hors_periode_est_vide PASSED
+test_export_ventes_agent_comptabilite_autorise PASSED
+test_export_ventes_agent_stock_refuse PASSED
+test_export_ventes_date_invalide_refusee PASSED
+
+======================= 17 passed, 4 warnings in 25.31s =======================
+```
+
+Les tests d'export relisent le contenu **réel** du fichier produit
+(`openpyxl.load_workbook`, `pypdf.PdfReader`) plutôt que le seul code HTTP :
+`test_export_articles_agent_stock_xlsx_sans_prix` et son équivalent PDF
+vérifient l'absence physique de `prix_achat`/`prix_vente` dans les en-têtes
+et dans le texte extrait ; les tests « responsable » vérifient au contraire
+la présence d'une valeur de prix réelle du jeu d'essai (`5000`) dans le
+fichier.
+
+### Suite complète
+
+```powershell
+server\.venv\Scripts\python.exe -m pytest server\tests\ -v
+```
+
+**90 passed** (73 hérités des cycles précédents + 17 nouveaux), 0 régression.
+
+---
+
 ## Cycle 9 — chantier C4 (articles et stock), 2026-09-13
 
 Décisions du propriétaire (addendum, points a et f) appliquées : migration

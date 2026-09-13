@@ -323,11 +323,20 @@ for (const largeur of LARGEURS) {
   const totalTexte = await page.textContent("#ventes-total");
   verifier(totalTexte.includes("11") && totalTexte.includes("700"), `responsable : total consolidé correct (lu : "${totalTexte}")`);
 
-  // Depuis le cycle 7, seule « Alertes de stock faible » reste simulée (C8) :
-  // les écarts d'inventaire et de vente sont désormais réels (C7).
+  // Depuis le cycle 8, « Alertes de stock faible » est câblée pour de vrai
+  // (chantier C8) : plus aucune carte du tableau de bord n'est simulée.
   const cartesSimulees = await page.$$eval(".pastille--neutre", (els) => els.map((e) => e.textContent));
-  verifier(cartesSimulees.length === 1 && cartesSimulees.every((t) => t.includes("simulée")),
-    "tableau de bord : la seule carte non câblée restante est explicitement marquée « donnée simulée »");
+  verifier(cartesSimulees.length === 0,
+    "tableau de bord : plus aucune carte marquée « donnée simulée » (C8 câblé)");
+
+  // « Article rare » (jeu d'essai, quantité 1 pour un seuil de 1) doit
+  // apparaître dans les alertes de stock, réellement lues via
+  // /tableau-bord/alertes-stock — pas la donnée simulée d'avant le cycle 8
+  // (qui citait "Ciment CIM II 50 kg", "Peinture blanche 4 L"...).
+  await page.waitForSelector("#liste-alertes li", { timeout: 5000 });
+  const texteAlertes = await page.textContent("#liste-alertes");
+  verifier(texteAlertes.includes("Article rare"), "responsable : alerte de stock réelle -> « Article rare » présent");
+  verifier(!texteAlertes.includes("Peinture blanche"), "responsable : alerte de stock réelle -> ancienne donnée simulée absente");
 
   // Un agent qui tenterait cet écran est redirigé ailleurs (déjà prouvé pour
   // agent_stock plus haut) — ici on vérifie le sens inverse : le responsable
