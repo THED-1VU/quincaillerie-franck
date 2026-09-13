@@ -337,6 +337,25 @@ bash db/tests/executer_tests.sh
 (sous Git Bash / WSL ; `PSQL` et `PG_DUMP` ne sont utiles que si les binaires ne
 sont pas dans le `PATH`, ce qui est le cas par défaut avec `_pgdev\`.)
 
+### Vérifier TOUT le projet en une seule commande (chantier C13, cycle 20)
+
+`db/tests/executer_tests.sh` ne couvre que la couche SQL. Enchaîner en plus
+la suite pytest du serveur et les suites Playwright de la maquette se
+faisait jusqu'ici à la main, cycle après cycle. `db/outils/verifier_tout.sh`
+automatise l'enchaînement complet (mêmes variables d'environnement que
+ci-dessus) :
+
+```bash
+bash db/outils/verifier_tout.sh
+```
+
+Reconstruit la base, rejoue la suite SQL, la suite pytest, puis démarre un
+serveur temporaire pour les 7 suites Playwright qui n'exigent qu'un serveur
+réel (`cablage`, `vente`, `inventaire`, `stock`, `rapports`, `echappement`,
+`rh` — pas `affichage`/`flux`, qui exigent un second serveur **statique**
+séparé, `py -m http.server 8080`, jamais automatisé). Laisse la base dans
+un état propre (jeu d'essai) à la fin, que le résultat soit bon ou pas.
+
 Le script recrée une base de test à partir du schéma d'origine, applique les
 migrations, puis enchaîne :
 

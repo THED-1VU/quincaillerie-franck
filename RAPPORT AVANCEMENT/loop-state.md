@@ -56,10 +56,10 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C10 | Mobile et API web *(priorité 1)* | **38 %** | Cycle 5, complété au cycle 15. Les deux écrans mobile-first sont **la même application web**, testée à 360/390/768 px. **Cycle 15** : trouvé par exécution — le serveur (dev ET paquet Windows) n'écoutait que sur `127.0.0.1`, **injoignable depuis n'importe quel autre appareil**, téléphone compris, même sur le même réseau. Corrigé (`--host 0.0.0.0` en dev, `server/fabrication/lanceur.py` pour le paquet, qui affiche désormais sa propre adresse réseau locale à l'utilisateur). Vérifié par exécution, dev et paquet Windows reconstruit : requête réelle vers l'adresse réseau locale de la machine (pas `127.0.0.1`) répondant correctement sur `/sante` et `/app/connexion.html`. **Non fermé** : la preuve manquante reste un **véritable téléphone physique** — ce que l'agent n'a pas — la couche réseau est prouvée, pas le rendu sur un vrai appareil. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **55 %** | Cycle 3. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse (vérifié par expression régulière), erreurs SQL jamais renvoyées telles quelles au client. Reste : révocation de session, limiteur de débit partagé (multi-processus), audit de sécurité plus large (dépendances, en-têtes HTTP, TLS — hors périmètre local de dev). |
 | C12 | Sauvegarde et exploitation | **0 %** | Diagnostic : « Backup and restore procedure : Not found ». Aucun script, aucune procédure. Onduleur, RPO/RTO, mise à jour des postes : à définir (addendum i). |
-| C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
+| C13 | Tests automatisés et qualité | **55 %** | Cycle 20 — correction d'une inexactitude du diagnostic d'origine (comme pour C6 au cycle 16) : le score restait à 0 % alors que **140 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **7 suites Playwright** (193 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant — jamais reflété dans le score. `db/outils/verifier_tout.sh` (nouveau) enchaîne les trois couches en une seule commande, vérifié par exécution (exit code 0, 0 échec). Deux pièges trouvés en l'écrivant : la limite de connexion de `config.ini` (10/min) fait échouer les suites en cascade au-delà de la première ; l'étape de réversibilité SQL recrée `qf_app` sans mot de passe. Manquent : CI automatisée sur chaque push (`server/tests/conftest.py` appelle un chemin Windows en dur, non portable vers un runner Linux sans correction dédiée — chantier à part), couverture des parcours nécessitant une imprimante ou un téléphone réels. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 19 : ≈ 50 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 62, C9 50, C10 38, C11 55, C14 40, autres 0).
+**Moyenne indicative après le cycle 20 : ≈ 53 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 62, C9 50, C10 38, C11 55, C13 55, C14 40, C12 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -1784,6 +1784,77 @@ Troisième et dernier des trois chantiers de ce lot.
   tranché), impression physique sur une imprimante réelle (non
   vérifiable par l'agent), ticket thermique / code-barres (non demandés
   explicitement, non ajoutés).
+
+---
+
+### Cycle 20 — Correction du diagnostic C13 + suite de vérification unifiée — 2026-09-13
+
+Premier des quatre chantiers choisis par le propriétaire pour ce nouveau
+lot (C12, C11, C8, C13) — traité en premier car il ne touche aucun code
+applicatif, juste la documentation et l'outillage de test.
+
+- **Constat** : le score C13 (« Tests automatisés et qualité ») restait à
+  **0 %** dans le tableau depuis l'initialisation du projet — évalué
+  uniquement sur le diagnostic d'ORIGINE (« aucune suite exécutable »).
+  C'était déjà faux dès le cycle 2 : **140 tests pytest, une suite SQL
+  complète (44+52+6 contrôles + réversibilité), et 7 suites Playwright
+  (193 contrôles)** existent et sont rejoués à chaque cycle qui touche le
+  code qu'ils couvrent — jamais reflété dans le score. Aggravé par un vrai
+  trou documentaire trouvé en creusant : `maquette/verification/
+  DERNIER_RESULTAT.md` n'avait plus été mis à jour depuis le **cycle 5**
+  (2026-09-12), silencieux sur 6 suites entières écrites depuis.
+- **Mise en œuvre** : branche `cycle-20-c13-suite-verification-unifiee`.
+  - `db/outils/verifier_tout.sh` (nouveau) : enchaîne, en une seule
+    commande, la suite SQL, la suite pytest, puis 7 des 8 suites
+    Playwright (toutes sauf `affichage`/`flux`, qui exigent un second
+    serveur **statique** séparé, jamais automatisé) contre un serveur
+    temporaire — jusqu'ici, cet enchaînement se faisait à la main,
+    cycle après cycle, jamais écrit nulle part comme UNE procédure.
+  - `maquette/verification/DERNIER_RESULTAT.md` : section « État actuel »
+    ajoutée en tête, récapitulant les 7 suites vivantes et leur dernier
+    résultat connu, sans réécrire l'historique existant.
+  - `db/README.md` : section dédiée à la nouvelle commande unique.
+- **Deux pièges trouvés EN ÉCRIVANT ce script, avant de le considérer
+  fini** :
+  1. `config.ini` de dev limite à 10 connexions/minute (anti-force-brute,
+     `securite.py`) — largement dépassé en enchaînant 7 suites qui se
+     reconnectent chacune plusieurs fois en quelques minutes ; les suites
+     suivant la première échouaient TOUTES avec une session nulle, sans
+     aucun message explicite. Corrigé par une copie **temporaire** de
+     `config.ini` (limite relevée à 1000/min, comme `conftest.py` pour
+     pytest), jamais le vrai fichier.
+  2. L'étape 7 de la suite SQL (réversibilité) `DROP` puis recrée les
+     rôles applicatifs — **globaux au serveur**, pas propres à une base —
+     et `qf_app` retrouve un mot de passe VIDE après recréation
+     (`CREATE ROLE ... LOGIN`, sans `PASSWORD`). Sans correction, pytest
+     ET Playwright échouent en cascade juste après, pour une raison
+     invisible dans leurs propres messages (« authentification
+     refusée »). Corrigé : le mot de passe (relu dans `config.ini`, jamais
+     dupliqué en dur) est reposé après reconstruction de la base — exactement
+     le piège qui m'avait forcé à une correction manuelle identique en
+     tout début du cycle 17, jamais consigné comme un problème récurrent
+     jusqu'à devoir l'automatiser ici.
+- **Vérification par exécution** : `bash db/outils/verifier_tout.sh`
+  rejoué en entier, propre, **exit code 0** — suite SQL (44/44 + 52/52 +
+  6/6 + réversibilité), pytest **140/140**, 7 suites Playwright
+  **193/193** (77+12+17+26+29+11+21). Base laissée dans l'état du jeu
+  d'essai à la fin.
+- **Documentation** : `db/README.md`, `maquette/verification/
+  DERNIER_RESULTAT.md`, `loop-state.md`.
+- **Score** : C13 **0 % → 55 %** — corrige une inexactitude du diagnostic
+  d'origine (comme pour C6 au cycle 16), ne prétend pas à un chiffre plus
+  haut : rien de nouveau n'a été TESTÉ ce cycle, seule la trace existante
+  a été consolidée et outillée d'une commande unique.
+- **Reste ouvert** : **CI automatisée sur chaque push/PR** (mentionnée de
+  longue date comme un manque de C0) — délibérément **pas** tentée ce
+  cycle : `server/tests/conftest.py` appelle un chemin Windows en dur
+  (`_pgdev/pgsql/bin/psql.exe`) pour recharger le jeu d'essai entre deux
+  tests, ce qui rend la suite non portable telle quelle vers un runner
+  Linux sans une correction dédiée (rendre ce chemin résolu par variable
+  d'environnement, avec repli sur `psql` du `PATH`) — un vrai chantier en
+  soi, pas glissé ici sans validation séparée. Couverture manuelle des
+  parcours nécessitant une vraie imprimante ou un vrai téléphone,
+  toujours hors de portée de l'agent.
 
 ---
 

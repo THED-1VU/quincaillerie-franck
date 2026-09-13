@@ -4,6 +4,48 @@ Ce fichier est une **trace**. Les preuves restent rejouables depuis
 `maquette/verification/` (`npm run affichage`, `npm run flux`, ou directement
 `node verifier-cablage.mjs`).
 
+## État actuel (2026-09-13, cycle 20 — chantier C13)
+
+**Ce fichier n'avait plus été mis à jour depuis le cycle 5** (2026-09-12) —
+un vrai trou dans la documentation, alors que 6 nouvelles suites ont été
+écrites depuis (cycles 6 à 18) et sont rejouées à chaque cycle touchant
+l'écran ou la route qu'elles couvrent. Section corrigée ici, pas pour
+ajouter du nouveau code mais pour que ce fichier reflète enfin l'état réel
+du projet — voir aussi `db/outils/verifier_tout.sh` (nouveau, cycle 20),
+qui enchaîne les 7 suites ci-dessous en une seule commande.
+
+| Suite (`npm run …`) | Depuis | Dernier résultat connu |
+|---|---|---|
+| `cablage` | cycle 5, étendue à chaque écran câblé depuis | **77/77** (cycle 16) |
+| `vente` | cycle 6 | **12/12** (cycle 19 — reçu PDF ajouté) |
+| `inventaire` | cycle 7 | **17/17** (cycle 7) |
+| `stock` | cycle 11 | **26/26** (cycle 13) |
+| `rapports` | cycle 12 | **29/29** (cycle 14) |
+| `echappement` | cycle 7 (contrôle de boucle) | **11/11** (cycle 7) |
+| `rh` | cycle 18 | **21/21** (cycle 18) |
+| `affichage`, `flux` | cycle 1 | inchangées depuis (voir plus bas) — nécessitent un **second serveur statique séparé** (`py -m http.server 8080`, jamais automatisé), donc **non incluses** dans `verifier_tout.sh` |
+
+Rejoué en bloc le 2026-09-13 (`bash db/outils/verifier_tout.sh`, sans le
+couple `affichage`/`flux`) : **193 contrôles Playwright, 0 échec**, en plus
+de la suite SQL (44/44 + 52/52 + 6/6 + réversibilité) et de la suite
+pytest (**140/140**) — voir `db/tests/DERNIER_RESULTAT.md` et
+`server/tests/DERNIER_RESULTAT.md` pour le détail de ces deux couches.
+
+**Piège trouvé en écrivant `verifier_tout.sh`** : enchaîner plusieurs
+suites contre le même serveur en quelques minutes dépasse la limite de
+connexion de `config.ini` (10/minute, anti-force-brute) — les suites
+suivantes échouaient silencieusement (session jamais créée). Le script
+utilise une copie temporaire de `config.ini` avec cette limite relevée,
+jamais le vrai fichier. Un second piège, plus sournois : la suite SQL
+(étape 7, réversibilité) supprime puis recrée les rôles applicatifs
+**globaux au serveur** — `qf_app` retrouve un mot de passe vide, différent
+de celui de `config.ini`, et pytest ET Playwright échouent en cascade
+juste après pour une raison invisible dans leurs propres messages
+d'erreur. Corrigé dans le script (mot de passe reposé après
+reconstruction de la base).
+
+---
+
 ## Cycle 5 — câblage sur le noyau serveur (2026-09-12)
 
 Exécuté le **2026-09-12** sur `http://127.0.0.1:8010/app/` (serveur réel
