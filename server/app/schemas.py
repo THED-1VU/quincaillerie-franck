@@ -100,3 +100,74 @@ class ReponseComptage(BaseModel):
     article_id: int
     moment: str
     quantite_comptee: int
+
+
+class DemandeArticle(BaseModel):
+    """``site_id`` n'est utilisé QUE pour un compte responsable (deux
+    sites) : pour un agent stock, le site vient toujours de sa session.
+    ``prix_achat``/``prix_vente`` sont ignorés s'ils sont envoyés par un
+    agent stock (la base le refuserait de toute façon — GRANT par colonne,
+    migration 008) — la route ne les inclut simplement pas dans l'INSERT
+    pour ce rôle, plutôt que de laisser PostgreSQL renvoyer une erreur brute."""
+
+    nom: str = Field(min_length=1, max_length=150)
+    unite: str = Field(min_length=1, max_length=30)
+    categorie: Optional[str] = Field(default=None, max_length=80)
+    fournisseur_id: Optional[int] = None
+    site_id: Optional[int] = None
+    prix_achat: Optional[float] = Field(default=None, ge=0)
+    prix_vente: Optional[float] = Field(default=None, ge=0)
+
+
+class ReponseArticle(BaseModel):
+    article_id: int
+    nom: str
+    unite: str
+    site_id: int
+
+
+class DemandeEntreeStock(BaseModel):
+    article_id: int
+    quantite: int = Field(gt=0)
+    motif: Optional[str] = Field(default=None, max_length=200)
+
+
+class ReponseMouvementStock(BaseModel):
+    """Réponse générique à un mouvement de stock : le nouveau stock, jamais
+    plus (pas de fuite d'autres colonnes d'articles)."""
+
+    article_id: int
+    quantite_stock: int
+
+
+class DemandeTransfert(BaseModel):
+    article_id_origine: int
+    article_id_destination: int
+    quantite: int = Field(gt=0)
+    motif: str = Field(min_length=1, max_length=200)
+
+
+class ReponseTransfert(BaseModel):
+    article_id_origine: int
+    article_id_destination: int
+    quantite_stock_origine: int
+    quantite_stock_destination: int
+
+
+class DemandeCasse(BaseModel):
+    article_id: int
+    quantite: int = Field(gt=0)
+    motif: str = Field(min_length=1, max_length=200)
+
+
+class DemandeRetourClient(BaseModel):
+    article_id: int
+    vente_id: int
+    quantite: int = Field(gt=0)
+    motif: Optional[str] = Field(default=None, max_length=200)
+
+
+class DemandeRetourFournisseur(BaseModel):
+    mouvement_origine_id: int
+    quantite: int = Field(gt=0)
+    motif: Optional[str] = Field(default=None, max_length=200)

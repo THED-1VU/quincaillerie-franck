@@ -18,6 +18,20 @@ Rappel des priorités du propriétaire, dans l'ordre : **1. rendu / ergonomie / 
 
 ## a) Transfert de stock entre le magasin et le comptoir
 
+> **Décidé (cycle 9, 2026-09-13), questions 2 et 3.** Opération **unique et
+> atomique** produisant une sortie du site d'origine et une entrée au site
+> de destination, même horodatage, même auteur, motif obligatoire —
+> **jamais** d'état intermédiaire « en transit ». Ne recalcule **pas** le
+> seuil d'alerte (ce n'est pas une réception fournisseur). Déclenché par le
+> responsable, ou par l'agent stock **du site d'origine seulement**.
+> Appliqué dans `db/migrations/014_articles_stock_transferts_retours.sql`
+> (`transferer_stock`). Question 4 **non retranchée** : un transfert vise
+> deux articles déjà existants, un par site — aucune fiche miroir n'est
+> créée automatiquement côté destination ; si elle n'existe pas encore, le
+> transfert est refusé plutôt que d'inventer sa création. Questions 1 et 5
+> (réapprovisionnement exclusivement interne ? fréquence/volume) restent
+> sans réponse, sans effet sur ce qui est construit.
+
 **Contexte.** Le modèle a deux sites (magasin de stock, comptoir de vente) et un article
 appartient à un seul site (`articles.site_id`). Le réapprovisionnement du comptoir depuis le
 magasin est une opération quotidienne, absente du cahier des charges et du schéma
@@ -294,6 +308,21 @@ son rôle est d'empêcher la **corruption concurrente**, pas de rejeter une vent
 ---
 
 ## f) Retours, casse, avaries, remises ; conversion d'unités
+
+> **Décidé (cycle 9, 2026-09-13), volet « retours et casse » seulement.**
+> Trois opérations distinctes, jamais confondues avec une correction de
+> quantité : **casse ou avarie** (sortie à motif obligatoire, validée par
+> le responsable seul — un agent stock ne peut pas l'enregistrer) ;
+> **retour client** (entrée rattachée à la vente d'origine, refusée si la
+> vente n'existe pas ou n'est pas du même site) ; **retour fournisseur**
+> (sortie rattachée à la réception d'origine, refusée si le mouvement
+> visé n'est pas une réception fournisseur). Chacune tracée, horodatée,
+> attribuée. Appliqué dans
+> `db/migrations/014_articles_stock_transferts_retours.sql`
+> (`enregistrer_casse`, `enregistrer_retour_client`,
+> `enregistrer_retour_fournisseur`). Les **remises** et la **conversion
+> d'unités** ne sont pas traitées par cette décision et restent
+> entièrement ouvertes.
 
 **Contexte.** Aucun de ces éléments n'est modélisé. `mouvements_stock.type` ne connaît que
 `entree` / `sortie`. Les remises sont noyées dans `ventes_lignes.prix_unitaire`. `unite` est
@@ -635,12 +664,12 @@ prestataire et **incapable de reconstruire, corriger ou reprendre** l'outil.
 
 | Point | Décision structurante | État |
 |---|---|---|
-| a | Modèle de transfert inter-sites | Bloque C4, réappro quotidien — non tranché |
+| a | **Modèle de transfert inter-sites** | **Décidé cycle 9** (questions 2-3) : opération atomique sortie+entrée, sans recalcul de seuil — questions 1, 4, 5 restent ouvertes, sans effet bloquant |
 | b | Créance client / vente à crédit | Statu quo confirmé cycle 6 : **désactivé**, C5/C6 attendent toujours les 6 questions |
 | c | Numéro facturier + vendeur obligatoires | Bloque l'objectif anti-vol de C5 — non tranché |
 | d | **Régime fiscal / taux de TVA** | **Décidé cycle 6** : réel, 19,25 %, TTC, arrondi arithmétique sur le total |
 | e | **Saisie a posteriori vs blocage anti-survente** | **Décidé cycle 6** (question 1) : jamais de blocage, écart consigné — questions 2-5 ouvertes |
-| f | Retours / casse / remises / unités | Bloque C4/C5, suivi des pertes — non tranché |
+| f | **Retours / casse** / remises / unités | **Décidé cycle 9**, volet retours et casse seulement : trois opérations distinctes, tracées — remises et conversion d'unités restent entièrement ouvertes |
 | g | Clôture de caisse | Bloque C6, rapprochement espèces — non tranché |
 | h | Rôle caissier oui/non | Bloque C3/C5, poste de caisse — non tranché |
 | i | RPO / RTO / onduleur / mises à jour | Bloque C12, continuité — non tranché |
@@ -648,7 +677,11 @@ prestataire et **incapable de reconstruire, corriger ou reprendre** l'outil.
 | k | Cibles ergonomiques comme critères de recette | Bloque C9/C10, définition de « fini » — non tranché |
 | l | **Propriété du code + livraison du dépôt** | Bloque tout le projet, réversibilité — non tranché |
 
-Décisions encore à trancher **en priorité** pour poursuivre C4/C5 : **a et f**
-(transfert, retours/casse — bloquent C4), **c** (numéro facturier — objectif
-anti-vol de C5), et le reste du point **b** (vente à crédit) si le crédit
-client doit un jour être réellement proposé aux clients.
+Décisions encore à trancher **en priorité** : **c** (numéro facturier —
+objectif anti-vol de C5), **g** et **h** (clôture de caisse, rôle caissier —
+bloquent C6/C3/C5), et le reste du point **b** (vente à crédit) si le crédit
+client doit un jour être réellement proposé aux clients. Les points **a** et
+**f** sont désormais tranchés dans leur volet qui bloquait C4 (cycle 9,
+2026-09-13) ; leurs sous-questions restantes (réappro, identifiant
+catalogue partagé, fréquence, remises, unités) n'ont plus d'effet bloquant
+identifié à ce jour.

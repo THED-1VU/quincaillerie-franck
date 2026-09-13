@@ -14,9 +14,16 @@ Cycle 6 (chantier C5) y a ajouté la première route métier de vente
 qu'elle applique (addendum, points b/d/e) et celle qu'elle laisse
 volontairement de côté (point c, non tranché).
 
-Cycle 7 (chantier C7) y ajoute le comptage d'inventaire à l'aveugle et les
-écarts (`routes/inventaire.py`) — voir ce module pour la garantie qu'aucune
-quantité attendue n'atteint jamais le navigateur de l'agent stock.
+Cycle 7 (chantier C7) y a ajouté le comptage d'inventaire à l'aveugle et
+les écarts (`routes/inventaire.py`) — voir ce module pour la garantie
+qu'aucune quantité attendue n'atteint jamais le navigateur de l'agent
+stock.
+
+Cycle 9 (chantier C4) y ajoute la création d'articles (`routes/
+articles.py`) et les mouvements de stock — réception, transfert
+inter-sites, casse, retours client/fournisseur (`routes/stock.py`) — voir
+`db/migrations/014_...` pour les décisions du propriétaire qu'ils
+appliquent (addendum, points a et f).
 
 Lancer en développement :
     server\\.venv\\Scripts\\uvicorn.exe app.main:app --reload --app-dir server
@@ -34,7 +41,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import Config, ErreurConfiguration, charger_config
 from .database import BaseDeDonnees
-from .routes import auth, demonstration, inventaire, ventes
+from .routes import articles, auth, demonstration, inventaire, stock, ventes
 from .securite import GestionnaireSessions, LimiteurDebit
 
 logger = logging.getLogger("quincaillerie")
@@ -75,6 +82,8 @@ def creer_application(config: Config | None = None) -> FastAPI:
     app.include_router(demonstration.routeur)
     app.include_router(ventes.routeur)
     app.include_router(inventaire.routeur)
+    app.include_router(articles.routeur)
+    app.include_router(stock.routeur)
 
     if MAQUETTE_DIR.is_dir():
         app.mount("/app", StaticFiles(directory=str(MAQUETTE_DIR), html=True), name="maquette")

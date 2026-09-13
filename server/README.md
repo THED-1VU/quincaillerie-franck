@@ -157,6 +157,52 @@ fusionnée). Voir `db/migrations/010_correction_usage_qf_app.sql`.
 
 ---
 
+## Chantier C4 — articles et stock (cycle 9)
+
+Décisions du propriétaire (addendum, points a et f) appliquées par
+`db/migrations/014_articles_stock_transferts_retours.sql` :
+
+| Route | Rôle requis | Ce qu'elle fait |
+|---|---|---|
+| `POST /articles` | responsable, agent stock | crée un article, toujours à `quantite_stock = 0` (point j non tranché) ; le prix n'est accepté que du responsable |
+| `POST /stock/entrees` | responsable, agent stock (son site) | réception fournisseur — **seule** opération qui recalcule le seuil d'alerte (20 %, cycle 2) |
+| `POST /stock/transferts` | responsable, agent stock (depuis son site) | transfert inter-sites : une opération atomique, sortie + entrée, même horodatage, même auteur, motif obligatoire, **ne recalcule jamais** le seuil |
+| `POST /stock/casse` | responsable **seul** | casse/avarie : sortie à motif obligatoire — « validée par le responsable » se lit comme « c'est lui qui l'enregistre » |
+| `POST /stock/retours-client` | responsable, agent stock (son site) | entrée rattachée à la vente d'origine (`vente_id`) |
+| `POST /stock/retours-fournisseur` | responsable, agent stock (son site) | sortie rattachée à la réception d'origine (`mouvement_origine_id`) — refusée si ce mouvement n'est pas une réception |
+
+**Hors périmètre, volontairement** : remises, unités/conversions décimales
+(point f, non demandées) ; chargement du stock initial (point j, non
+tranché — d'où l'absence de quantité à la création d'un article) ; aucun
+écran maquette pour ces opérations ce cycle.
+
+### Trois failles latentes trouvées en exposant des fonctions par une route
+
+`enregistrer_entree_stock()` existe depuis le cycle 2 mais n'avait jamais
+été appelée que par des tests SQL directs — jamais par une route. En
+l'exposant, vérification par exécution : elle ne contrôlait **aucun** site,
+un agent stock du Magasin pouvait réceptionner du stock sur un article du
+Comptoir. Le même contrôle manquait dans les deux nouvelles fonctions de
+retour. Voir `db/README.md`, section « Mouvements de stock », pour le piège
+exact (`current_user` à l'intérieur d'une fonction `SECURITY DEFINER`) et
+sa correction — appliquée aux quatre fonctions concernées.
+
+### Tests — `server/tests/test_articles.py` + `test_stock.py`, 18/18
+
+Article créé toujours sans stock ; prix ignoré pour un agent stock ; site
+toujours celui de la session, jamais du corps de la requête (même forcé) ;
+réception recalculant le seuil (valeur exacte vérifiée) et refusée hors
+site ; transfert ne recalculant jamais le seuil, refusé à motif blanc
+(défense en profondeur : Pydantic bloque déjà une chaîne vide, la base
+refuse en plus un motif fait seulement d'espaces), refusé si stock
+insuffisant ou même site, réservé au bon site pour un agent ; casse
+réservée au responsable ; retour client rattaché à la vente, refusé hors
+site ou vente inexistante ; retour fournisseur accepté sur une vraie
+réception, refusé sur un mouvement qui n'en est pas une. Suite complète :
+**73/73** (55 héritées + 18 nouvelles).
+
+---
+
 ## Chantier C5 — ventes (cycle 6)
 
 `POST /ventes` (réservé `responsable`/`agent_comptabilite`) applique trois
@@ -358,8 +404,9 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 | `test_securite.py` | aucun hachage ne fuit, config refuse superutilisateur/clé d'exemple, injection SQL neutralisée, jetons expirés/falsifiés/mal signés refusés |
 | `test_ventes.py` | TVA calculée à la main et comparée, vente à découvert jamais refusée (écart consigné), crédit client refusé, cloisonnement par rôle/site sur une route d'ÉCRITURE |
 | `test_inventaire.py` | liste à compter sans aucune quantité (site_id distingue les deux sites pour le responsable), réponse d'un comptage limitée à ce qui a été envoyé **même si le client injecte des champs interdits**, **lecture de `ecart` refusée en SQL direct**, article déjà compté exclu, écarts réservés au responsable et exacts |
+| `test_articles.py` / `test_stock.py` | article toujours créé sans stock, prix ignoré pour un agent stock ; réception recalculant le seuil et refusée hors site ; transfert atomique ne recalculant jamais le seuil ; casse réservée au responsable ; retours rattachés (vente ou réception d'origine), refusés hors site |
 
-Dernier résultat : **55/55**, trace complète dans
+Dernier résultat : **73/73**, trace complète dans
 [`tests/DERNIER_RESULTAT.md`](tests/DERNIER_RESULTAT.md).
 
 ### Piège à éviter en écrivant un test (Windows)
