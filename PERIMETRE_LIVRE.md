@@ -237,7 +237,9 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
    déjà payée. → **Addendum, point e.**
 2. **Rôle « caissier ».** Le CDC fait encaisser le **responsable en personne** au comptoir.
    Le DR mentionne un « caissier » sur PC (checklist UI : « utilisation clavier par le
-   caissier »). Le schéma a `utilisateur_caisse_id` mais aucun rôle `caissier`. → **Addendum, point h.**
+   caissier »). Le schéma a `utilisateur_caisse_id` mais aucun rôle `caissier`. **Décidé
+   2026-09-13** : rôle créé, fusionné avec le périmètre agent comptabilité (encaisse et
+   saisit) — reste à implémenter. → **Addendum, point h.**
 3. **Vente à crédit.** `mode_paiement = 'credit_client'` existe et le CDC crée une recette
    immédiate — pour de l'argent non encaissé. Aucune créance, aucun solde, aucun règlement
    ultérieur. → **Addendum, point b.**
@@ -247,11 +249,12 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
    ni cas d'exonération. `taux_tva` par défaut = `0`. → **Addendum, point d.**
 6. **Numéro du facturier papier + vendeur.** Absents du schéma et des écrans. Sans eux, la
    saisie a posteriori par le comptable ne peut être reliée à un vendeur ni à une pièce
-   papier. → **Addendum, point c.**
+   papier. **Décidé 2026-09-13** : un facturier par site (préfixe MAG-/CPT-) — reste à
+   implémenter. → **Addendum, point c.**
 7. **Sauvegarde / restauration.** Exigée au CDC §4.3 et testée au DR §6. Le **mécanisme**
    existe désormais (`db/outils/sauvegarder.ps1`/`restaurer.ps1`, cycle 21, vérifié par
-   exécution sur une base séparée). Reste tranché par le propriétaire : fréquence, durée de
-   conservation, RPO/RTO. → **Addendum, point i.**
+   exécution sur une base séparée). **Décidé 2026-09-13** : RPO 1 heure — reste à automatiser
+   (planification). → **Addendum, point i.**
 8. **Livrables manquants** (CDC §7) : code source (dépôt Git, livré), scripts de fabrication
    des exécutables (livrés, chantier C0), scripts de sauvegarde / restauration (livrés,
    chantier C12, cycle 21) — reste un **guide** utilisateur pour ces deux derniers (quand et

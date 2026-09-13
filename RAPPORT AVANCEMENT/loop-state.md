@@ -2086,6 +2086,40 @@ restauration C12, sécurité applicative C11, bascule vue C8) est
 **terminé et fusionné** (PR #22/#23/#24/#25, empilées dans l'ordre,
 mêmes garanties que ci-dessus).
 
+### Décisions du propriétaire obtenues le 2026-09-13 (hors cycle de code)
+
+Cinq points de l'addendum tranchés dans leur décision structurante, sans
+qu'aucun code n'ait encore été écrit pour les appliquer — chacun reste un
+chantier à part entière, avec son propre diagnostic et son propre plan
+avant tout code (voir `ADDENDUM_CAHIER_DES_CHARGES.md`, callouts
+« Décidé (2026-09-13) » sous chaque point pour le détail complet) :
+
+- **Point c** (numéro facturier + vendeur) : un facturier **par site**
+  (préfixe `MAG-`/`CPT-`), les deux obligatoires sur chaque vente. Débloque
+  un chantier C5.
+- **Point g** (clôture de caisse) : une clôture **par site**, écran de
+  rapprochement espèces/recettes tel que proposé dans l'addendum. Débloque
+  un chantier C6.
+- **Point h** (rôle caissier) : créé, **fusionné** avec le périmètre de
+  l'agent comptabilité (encaisse ET saisit) — la cohérence exacte avec le
+  rôle `agent_comptabilite` existant (fusion des deux, ou rôle distinct à
+  droits identiques) reste à trancher au diagnostic du chantier. Débloque
+  un chantier C3.
+- **Point i** (RPO/RTO) : RPO cible **1 heure** — le mécanisme de
+  sauvegarde/restauration existe déjà (cycle 21) ; reste à l'automatiser
+  (planification horaire). Débloque un chantier C12 (suite).
+- **Point l** (propriété du code) : déjà résolu en pratique, formalisé
+  dans `OWNERSHIP.md` (nouveau) — audit de l'historique Git complet
+  confirmant qu'aucun secret réel n'y a jamais été committé. **Clos**, ne
+  débloque aucun chantier de code.
+
+Restent réellement non tranchés : le reste du point **b** (vente à
+crédit), le point **j** (volumétrie/reprise du stock initial, bloque le
+dimensionnement de C4), le point **k** (cibles ergonomiques comme
+critères de recette formels).
+
+### Candidats
+
 1. **Vérification C10 depuis un vrai téléphone physique** : la couche
    réseau est prouvée (cycle 15) — reste la dernière étape, qui doit être
    faite par le propriétaire ou un testeur muni d'un téléphone.
@@ -2095,8 +2129,9 @@ mêmes garanties que ci-dessus).
    exact au §1 bis). Lèverait le plafond de 60 % sur C9 et C10 si les
    résultats sont conformes. **Ne peut pas être exécuté par l'agent**
    (mesure humaine).
-3. **C3 (numéro facturier, addendum c)** ou **C6 (clôture de caisse,
-   addendum g)** : nécessitent au préalable une décision du propriétaire,
-   non tranchée à ce jour. **Ne peut pas être tranché par l'agent** —
-   décision métier, comme les points h, i et l évoqués dans le bilan
-   donné après le cycle 12.
+3. **C5 (numéro facturier + vendeur, point c)**, **C6 (clôture de caisse,
+   point g)**, **C3 (rôle caissier, point h)**, **C12 (automatisation des
+   sauvegardes, point i)** : les quatre décisions structurantes viennent
+   d'être obtenues (ci-dessus) — chacun peut maintenant démarrer son
+   propre cycle (diagnostic, options, plan, validation du propriétaire
+   avant tout code, comme d'habitude).

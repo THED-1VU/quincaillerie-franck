@@ -130,6 +130,14 @@ rapprochement de caisse.
 
 ## c) Numéro du facturier papier + identification du vendeur
 
+> **Décidé (2026-09-13).** Un facturier **par site**, avec préfixe
+> (`MAG-####` au Magasin, `CPT-####` au Comptoir) : `numero_facturier`
+> et `vendeur_id` deviennent obligatoires sur chaque vente. Les questions
+> 2 à 5 (format exact du numéro au-delà du préfixe, vendeurs sans compte,
+> blocage vs. alerte à la saisie sans numéro, seuil de validation d'un
+> écart de prix) restent à trancher au moment de l'implémentation
+> (chantier dédié, diagnostic puis plan avant tout code).
+
 **Contexte.** La saisie des ventes est faite **a posteriori** par le comptable, d'après le
 **facturier papier** tenu par le responsable après négociation. Le schéma ne stocke ni la
 **référence de la pièce papier**, ni **qui a réellement vendu / négocié le prix**
@@ -371,6 +379,15 @@ un texte libre sans référentiel ni règle de conversion.
 
 ## g) Clôture de caisse quotidienne et rapprochement
 
+> **Décidé (2026-09-13).** Une clôture **par site** (Magasin et Comptoir
+> clôturent séparément), selon l'écran proposé ci-dessous : total attendu
+> par mode de paiement, comptage réel saisi par le responsable, écart
+> calculé et figé. Les questions 2 à 6 (fond de caisse initial, qui
+> clôture et à quelle heure, rapprochement Mobile Money, seuil d'écart
+> toléré, blocage ou simple marquage de la journée) restent à trancher au
+> moment de l'implémentation (chantier dédié, diagnostic puis plan avant
+> tout code).
+
 **Contexte.** Aucune clôture de caisse n'est prévue (ni CDC, ni schéma). Le responsable
 encaisse au comptoir mais rien ne rapproche, en fin de journée, les **espèces réellement en
 caisse** des **recettes enregistrées**.
@@ -414,6 +431,16 @@ caisse** des **recettes enregistrées**.
 
 ## h) Rôle « caissier »
 
+> **Décidé (2026-09-13).** Un rôle `caissier` est créé, **fusionné avec
+> le périmètre de l'agent comptabilité** : il encaisse une vente **et**
+> peut la saisir (contrairement à la « règle proposée » initiale, qui
+> séparait les deux). Reste à trancher au moment de l'implémentation :
+> le périmètre exact de lecture (détail des prix ou total seul — question
+> 3), le cumul avec d'autres rôles (question 4), et la cohérence avec les
+> rôles `agent_comptabilite` déjà existants (fusion des deux rôles, ou
+> `caissier` comme rôle distinct avec les mêmes droits — diagnostic puis
+> plan avant tout code).
+
 **Contexte.** Le cahier des charges ne prévoit **pas** de rôle caissier : c'est le
 **responsable en personne** qui encaisse au comptoir. Le dossier de recette et la checklist
 UI parlent pourtant d'un **« caissier »** sur PC (« utilisation clavier par le caissier »,
@@ -450,6 +477,16 @@ UI parlent pourtant d'un **« caissier »** sur PC (« utilisation clavier par l
 ---
 
 ## i) Exploitation : onduleur, RPO / RTO, mise à jour des postes
+
+> **Décidé (2026-09-13), question 1.** RPO cible : **1 heure** — sauvegarde
+> automatique horaire pendant les heures d'ouverture, plus une en fin de
+> journée, comme proposé ci-dessous. Le **mécanisme** de sauvegarde/
+> restauration existe déjà (`db/outils/sauvegarder.ps1`/`restaurer.ps1`,
+> cycle 21, vérifié par exécution sur une base séparée) ; reste à
+> l'automatiser (planification horaire — Tâches planifiées Windows,
+> chantier dédié). Questions 2 à 6 (RTO cible, budget onduleur/poste de
+> secours, connexion Internet pour une copie distante, qui sait restaurer
+> sur place, fréquence acceptable des mises à jour) restent ouvertes.
 
 **Contexte.** Coupures de courant fréquentes à Batouri, PostgreSQL sur un poste serveur non
 protégé = risque de corruption. Le CDC exige une sauvegarde quotidienne (rétention 30 jours,
@@ -610,6 +647,16 @@ touchant C9 ou C10.
 
 ## l) Propriété du code source et obligation de livraison du dépôt
 
+> **Décidé (2026-09-13), question 1.** La situation problématique décrite
+> ci-dessous (« livré uniquement en exécutables, aucun code source ») est
+> déjà résolue en pratique : le dépôt existe sous un compte dont le
+> propriétaire détient l'accès administrateur permanent, et chaque cycle
+> y est livré en continu. Formalisé dans `OWNERSHIP.md` (nouveau), qui
+> documente aussi un audit de l'historique Git complet confirmant
+> qu'aucun secret réel n'y a jamais été committé. Questions 2 à 4
+> (clause contractuelle de paiement, dépôt fiduciaire, répartition des
+> accès) relèvent d'un accord contractuel, hors du périmètre technique.
+
 **Contexte.** L'application a été livrée **uniquement en exécutables**. Aucun code source,
 aucun script de fabrication (`.spec` PyInstaller), aucun script de sauvegarde n'existe sur la
 machine du propriétaire. Le CDC §7 liste pourtant le code source (dépôt Git) et les scripts
@@ -666,22 +713,28 @@ prestataire et **incapable de reconstruire, corriger ou reprendre** l'outil.
 |---|---|---|
 | a | **Modèle de transfert inter-sites** | **Décidé cycle 9** (questions 2-3) : opération atomique sortie+entrée, sans recalcul de seuil — questions 1, 4, 5 restent ouvertes, sans effet bloquant |
 | b | Créance client / vente à crédit | Statu quo confirmé cycle 6 : **désactivé**, C5/C6 attendent toujours les 6 questions |
-| c | Numéro facturier + vendeur obligatoires | Bloque l'objectif anti-vol de C5 — non tranché |
+| c | **Numéro facturier + vendeur obligatoires** | **Décidé 2026-09-13** : un facturier par site (préfixe MAG-/CPT-) — questions 2-5 (format exact, vendeurs sans compte, blocage vs. alerte, seuil de validation) ouvertes, sans effet bloquant sur le principe |
 | d | **Régime fiscal / taux de TVA** | **Décidé cycle 6** : réel, 19,25 %, TTC, arrondi arithmétique sur le total |
 | e | **Saisie a posteriori vs blocage anti-survente** | **Décidé cycle 6** (question 1) : jamais de blocage, écart consigné — questions 2-5 ouvertes |
 | f | **Retours / casse** / remises / unités | **Décidé cycle 9**, volet retours et casse seulement : trois opérations distinctes, tracées — remises et conversion d'unités restent entièrement ouvertes |
-| g | Clôture de caisse | Bloque C6, rapprochement espèces — non tranché |
-| h | Rôle caissier oui/non | Bloque C3/C5, poste de caisse — non tranché |
-| i | RPO / RTO / onduleur / mises à jour | Bloque C12, continuité — non tranché |
+| g | **Clôture de caisse** | **Décidé 2026-09-13** : une clôture par site — questions 2-6 (fond de caisse, horaire, Mobile Money, seuil d'écart, blocage) ouvertes, sans effet bloquant sur le principe |
+| h | **Rôle caissier** | **Décidé 2026-09-13** : créé, fusionné avec le périmètre agent comptabilité (encaisse et saisit) — questions 3-4 (lecture des prix, cumul de rôles) et la cohérence avec `agent_comptabilite` restent à trancher à l'implémentation |
+| i | **RPO / RTO / onduleur / mises à jour** | **Décidé 2026-09-13**, question 1 : RPO 1 heure — mécanisme déjà livré (cycle 21), reste à automatiser (planification) ; questions 2-6 (RTO, onduleur, Internet, qui restaure, fréquence de mise à jour) ouvertes |
 | j | Volumétrie + reprise du stock + formation | Bloque C4, dimensionnement — non tranché |
 | k | Cibles ergonomiques comme critères de recette | Bloque C9/C10, définition de « fini » — non tranché |
-| l | **Propriété du code + livraison du dépôt** | Bloque tout le projet, réversibilité — non tranché |
+| l | **Propriété du code + livraison du dépôt** | **Décidé 2026-09-13**, question 1 : déjà résolu en pratique (dépôt sous compte propriétaire, accès admin détenu, livraison continue) — formalisé dans `OWNERSHIP.md`, audit de l'historique confirmé sans secret réel. Questions 2-4 (clause contractuelle, escrow, répartition des accès) relèvent d'un accord contractuel |
 
-Décisions encore à trancher **en priorité** : **c** (numéro facturier —
-objectif anti-vol de C5), **g** et **h** (clôture de caisse, rôle caissier —
-bloquent C6/C3/C5), et le reste du point **b** (vente à crédit) si le crédit
-client doit un jour être réellement proposé aux clients. Les points **a** et
-**f** sont désormais tranchés dans leur volet qui bloquait C4 (cycle 9,
+Restent à trancher : le reste du point **b** (vente à crédit) si le
+crédit client doit un jour être réellement proposé aux clients, le point
+**j** (volumétrie/reprise du stock, bloque le dimensionnement de C4), et
+le point **k** (cibles ergonomiques comme critères de recette formels,
+distinct des mesures déjà décrites dans `UX_BASELINE.md`). Les points
+**a** et **f** sont tranchés dans leur volet qui bloquait C4 (cycle 9,
 2026-09-13) ; leurs sous-questions restantes (réappro, identifiant
-catalogue partagé, fréquence, remises, unités) n'ont plus d'effet bloquant
-identifié à ce jour.
+catalogue partagé, fréquence, remises, unités) n'ont plus d'effet
+bloquant identifié à ce jour. Les points **c**, **g**, **h**, **i** et
+**l** sont tranchés dans leur décision structurante (2026-09-13) : les
+chantiers correspondants (C5 numéro facturier, C6 clôture de caisse, C3
+rôle caissier, C12 automatisation des sauvegardes) peuvent démarrer —
+chacun avec son propre diagnostic et son propre plan avant tout code,
+comme le veut le processus.
