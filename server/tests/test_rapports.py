@@ -61,6 +61,24 @@ def test_export_articles_agent_stock_pdf_sans_prix(client):
     assert "Ciment CIM II 50 kg" in texte
 
 
+def test_export_articles_agent_stock_limite_a_son_site(client):
+    """Constat du contrôle de boucle après le cycle 10 : le cloisonnement
+    par site des exports fonctionnait (RLS du cycle 2), vérifié deux fois
+    par exécution directe, mais jamais couvert par un test dédié."""
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.get(
+        "/rapports/articles", params={"format": "xlsx"}, headers=entete_autorisation(session["jeton"])
+    )
+    assert reponse.status_code == 200, reponse.text
+    classeur = load_workbook(BytesIO(reponse.content))
+    feuille = classeur.active
+    entetes = [c.value for c in next(feuille.iter_rows(min_row=1, max_row=1))]
+    idx_nom = entetes.index("nom")
+    noms = [row[idx_nom].value for row in feuille.iter_rows(min_row=2)]
+    assert "Clou 5 cm" not in noms  # site 2 (Comptoir), hors du site de l'agent
+    assert "Ciment CIM II 50 kg" in noms  # site 1 (Magasin), bien présent
+
+
 def test_export_articles_responsable_xlsx_avec_prix(client):
     session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     reponse = client.get(
@@ -171,6 +189,34 @@ def test_export_ventes_agent_comptabilite_autorise(client):
         headers=entete_autorisation(session["jeton"]),
     )
     assert reponse.status_code == 200, reponse.text
+
+
+def test_export_ventes_agent_comptabilite_limite_a_son_site(client):
+    """Constat du contrôle de boucle après le cycle 10 : une vente du
+    Comptoir (site 2) ne doit jamais apparaître dans l'export d'un agent
+    comptabilité du Magasin (site 1)."""
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={
+            "site_id": 2,
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 3, "quantite": 1, "prix_unitaire": 800}],
+        },
+    )
+    assert reponse_vente.status_code == 201, reponse_vente.text
+
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.get(
+        "/rapports/ventes",
+        params={"format": "xlsx", "date_debut": "2000-01-01", "date_fin": "2999-12-31"},
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert reponse.status_code == 200, reponse.text
+    classeur = load_workbook(BytesIO(reponse.content))
+    feuille = classeur.active
+    assert feuille.max_row == 1  # aucune vente du Comptoir visible pour un agent du Magasin
 
 
 def test_export_ventes_agent_stock_refuse(client):
