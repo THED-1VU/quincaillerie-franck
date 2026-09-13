@@ -31,9 +31,17 @@ encaissement déjà fait), conformément au circuit réel de la boutique.
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
+from io import BytesIO
+from xml.sax.saxutils import escape as _echapper_xml
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from ..deps import exiger_role, obtenir_bd
 from ..erreurs import erreur_metier
@@ -247,4 +255,156 @@ def annuler_vente(
         vente_id=vente_id,
         montant_ttc=float(ligne["montant_ttc"]),
         articles_restitues=ligne["articles_restitues"],
+    )
+
+
+def _fcfa(montant) -> str:
+    return f"{round(float(montant)):,}".replace(",", " ") + " FCFA"
+
+
+def _construire_recu_pdf(boutique: dict, vente: dict, lignes: list[dict]) -> bytes:
+    """Reçu imprimable d'une vente (chantier C5, cycle 19 — CDC §3.3, §7.1
+    « imprimer / réimprimer le reçu »). N'affiche QUE ce qui a été
+    réellement décidé par le propriétaire :
+      * ``boutique_telephone``/``boutique_numero_contribuable`` restent
+        ``a_definir`` (addendum, point d) — omis plutôt qu'inventés ;
+      * ``numero_facture`` (point c, numérotation du facturier, non
+        tranché) est restitué tel quel — ``None`` ici, jamais fabriqué ;
+        le numéro de vente interne est utilisé pour identifier le
+        document, comme dans ``/rapports/ventes`` (cycle 10).
+    Une vente annulée reste imprimable (aucune règle du CDC ne l'interdit)
+    mais porte une mention explicite — jamais un reçu d'apparence valide
+    pour une vente qui ne l'est plus.
+    """
+    styles = getSampleStyleSheet()
+    style_titre = ParagraphStyle("titre", parent=styles["Title"], fontSize=16, spaceAfter=2)
+    style_normal = styles["Normal"]
+    style_centre = ParagraphStyle("centre", parent=style_normal, alignment=1)
+    style_annule = ParagraphStyle(
+        "annule", parent=style_normal, textColor=colors.red,
+        fontName="Helvetica-Bold", alignment=1, fontSize=13, spaceBefore=6, spaceAfter=6,
+    )
+
+    # Paragraph() interprète un sous-ensemble XML (<b>, <br/>...) : tout texte
+    # non fixe par le code (paramètres modifiables par le responsable, motif
+    # d'annulation saisi librement) doit être échappé avant d'y entrer — un
+    # nom de boutique ou un motif contenant "<" ou "&" ne doit ni casser le
+    # document ni s'y injecter (même discipline que l'échappement HTML des
+    # écrans, vérifié par exécution ailleurs — verifier-echappement-html.mjs).
+    elements = []
+    elements.append(Paragraph(_echapper_xml(boutique.get("boutique_nom") or "Quincaillerie Franck"), style_titre))
+    sous_entete = [t for t in (boutique.get("boutique_ville"), boutique.get("boutique_telephone")) if t]
+    if sous_entete:
+        elements.append(Paragraph(_echapper_xml(" · ".join(sous_entete)), style_centre))
+    if boutique.get("boutique_numero_contribuable"):
+        elements.append(Paragraph("N° contribuable : " + _echapper_xml(boutique["boutique_numero_contribuable"]), style_centre))
+    elements.append(Spacer(1, 8 * mm))
+
+    identifiant_document = vente["numero_facture"] or f"vente n°{vente['id']}"
+    elements.append(Paragraph(_echapper_xml(f"Reçu — {identifiant_document}"), styles["Heading2"]))
+    elements.append(Paragraph(
+        _echapper_xml(
+            f"Date : {vente['date_encaissement']:%d/%m/%Y %H:%M} — "
+            f"Mode de paiement : {vente['mode_paiement']}"
+        ),
+        style_normal,
+    ))
+    if vente["statut"] == "annulee":
+        motif = vente.get("motif_annulation") or "non précisé"
+        elements.append(Paragraph(_echapper_xml(f"VENTE ANNULÉE — motif : {motif}"), style_annule))
+    elements.append(Spacer(1, 4 * mm))
+
+    donnees = [["Article", "Qté", "Prix unitaire", "Total"]]
+    for ligne in lignes:
+        total_ligne = Decimal(str(ligne["prix_unitaire"])) * ligne["quantite"]
+        donnees.append([
+            ligne["nom"], str(ligne["quantite"]), _fcfa(ligne["prix_unitaire"]), _fcfa(total_ligne),
+        ])
+    tableau = Table(donnees, colWidths=[80 * mm, 20 * mm, 35 * mm, 35 * mm])
+    tableau.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+    ]))
+    elements.append(tableau)
+    elements.append(Spacer(1, 4 * mm))
+
+    totaux = [
+        ["Sous-total HT", _fcfa(vente["sous_total_ht"])],
+        [f"TVA ({vente['taux_tva']} %)", _fcfa(vente["montant_tva"])],
+        ["Total TTC", _fcfa(vente["total_ttc"])],
+    ]
+    tableau_totaux = Table(totaux, colWidths=[135 * mm, 35 * mm])
+    tableau_totaux.setStyle(TableStyle([
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("LINEABOVE", (0, -1), (-1, -1), 0.75, colors.black),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(tableau_totaux)
+
+    tampon = BytesIO()
+    SimpleDocTemplate(tampon, pagesize=A4, title=f"Reçu {identifiant_document}").build(elements)
+    return tampon.getvalue()
+
+
+@routeur.get("/{vente_id}/recu")
+def recu_vente(
+    vente_id: int,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
+):
+    """Reçu PDF imprimable d'une vente (chantier C5, cycle 19) — mêmes
+    rôles que la saisie elle-même (CDC §3.3) ; un agent stock n'a de toute
+    façon aucun privilège sur ``ventes`` (migration 008). Le cloisonnement
+    par site pour un agent comptabilité vient de la RLS (``connexion_pour``
+    avec ``site_id=session.site_id``, comme partout ailleurs) : une vente
+    de l'autre site est simplement introuvable, jamais un refus distinct
+    qui révélerait son existence."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, numero_facture, mode_paiement, statut, motif_annulation,
+                       sous_total_ht, taux_tva, montant_tva, total_ttc, date_encaissement
+                  FROM ventes WHERE id = %s
+                """,
+                (vente_id,),
+            )
+            vente = cur.fetchone()
+            if vente is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Vente introuvable.")
+
+            cur.execute(
+                """
+                SELECT a.nom, vl.quantite, vl.prix_unitaire
+                  FROM ventes_lignes vl
+                  JOIN articles a ON a.id = vl.article_id
+                 WHERE vl.vente_id = %s
+                 ORDER BY vl.id
+                """,
+                (vente_id,),
+            )
+            lignes = cur.fetchall()
+
+            cur.execute(
+                "SELECT cle, valeur FROM parametres WHERE cle IN "
+                "('boutique_nom', 'boutique_ville', 'boutique_telephone', 'boutique_numero_contribuable')"
+            )
+            # Valeurs encore « a_definir » (addendum, point d) omises du reçu
+            # plutôt qu'inventées — jamais par parametre_texte() ici, qui les
+            # refuserait par une exception (migration 006, comportement voulu
+            # ailleurs mais pas approprié pour un simple affichage optionnel).
+            boutique = {ligne["cle"]: ligne["valeur"] for ligne in cur.fetchall() if ligne["valeur"] != "a_definir"}
+
+    contenu = _construire_recu_pdf(boutique, vente, lignes)
+    identifiant = vente["numero_facture"] or f"vente-{vente_id}"
+    return Response(
+        content=contenu,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="recu-{identifiant}.pdf"'},
     )

@@ -463,6 +463,52 @@ Playwright rejouées sans régression — voir
 (réelle depuis le cycle 8) gagne un bouton « Régulariser » par ligne non
 régularisée.
 
+### Cycle 19 — reçu de vente imprimable (`GET /ventes/{id}/recu`)
+
+CDC §3.3/§7.1 : « imprimer / réimprimer le reçu ». `GET
+/ventes/{vente_id}/recu` (mêmes rôles que `POST /ventes` : responsable,
+agent comptabilité) génère un PDF A4 (`reportlab`, même bibliothèque que
+`/rapports/*`, cycle 10) — pas un ticket de caisse thermique, aucun
+code-barres (non demandé). Cloisonnement par site hérité de la RLS
+(`connexion_pour(site_id=session.site_id)`, comme partout ailleurs) : une
+vente de l'autre site est simplement introuvable (404), jamais un refus
+distinct qui révélerait son existence.
+
+- **N'affiche que ce qui a été décidé** : `boutique_telephone` et
+  `boutique_numero_contribuable` restent `a_definir` (addendum, point d)
+  — omis du reçu plutôt qu'invoquer `parametre_texte()`, qui les
+  refuserait par exception (comportement voulu ailleurs, pas ici pour un
+  simple affichage optionnel) ; lus directement dans `parametres` puis
+  filtrés en Python. `numero_facture` (point c, non tranché) reste `NULL`
+  et n'est jamais fabriqué — le numéro de vente interne identifie le
+  document en attendant.
+- **Une vente annulée reste imprimable** (rien dans le CDC ne l'interdit)
+  mais porte une mention rouge explicite avec le motif — jamais un reçu
+  d'apparence valide pour une vente qui ne l'est plus.
+- **Échappement XML** : `reportlab.Paragraph` interprète un sous-ensemble
+  de balises (`<b>`, `<br/>`...) — tout texte non fixe par le code
+  (paramètres de boutique modifiables, motif d'annulation saisi
+  librement) est échappé (`xml.sax.saxutils.escape`) avant d'y entrer,
+  même discipline que l'échappement HTML des écrans.
+
+`maquette/vente.html` : un bouton « Imprimer le reçu » apparaît après
+chaque vente réussie (`telechargerFichier()`, déjà utilisée pour les
+exports C8) — masqué à nouveau dès la vente suivante, pour ne jamais
+pointer vers un reçu périmé.
+
+### Tests — `server/tests/test_ventes.py`, 5 nouveaux
+
+Reçu d'une vente normale (contenu réellement relu : article, boutique,
+total — `pypdf`) ; reçu d'une vente annulée portant la mention et le
+motif ; vente introuvable (404) ; agent stock sans aucun droit (403) ;
+agent comptabilité d'un site ne peut pas obtenir le reçu d'une vente de
+l'autre site (404, cloisonnement RLS — nouveau compte de test
+`comptoir.compta` ajouté à `conftest.py` pour le prouver). Suite complète :
+**140/140** (135 héritées + 5 nouvelles), 0 régression.
+`verifier-vente-reelle.mjs` étendu (+2, un VRAI téléchargement PDF
+intercepté après la vente) : **12/12**. `verifier-cablage.mjs` (77/77) et
+`verifier-echappement-html.mjs` (11/11) rejoués sans régression.
+
 ---
 
 ## Chantier C6 — comptabilité et RH (cycle 16)

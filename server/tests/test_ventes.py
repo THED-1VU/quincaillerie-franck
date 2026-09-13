@@ -13,16 +13,25 @@ une route hors de son rôle.
 
 from __future__ import annotations
 
+from io import BytesIO
+
 import psycopg
+from pypdf import PdfReader
 
 from conftest import (
     MOT_DE_PASSE_AGENT_COMPTA,
+    MOT_DE_PASSE_AGENT_COMPTA_COMPTOIR,
     MOT_DE_PASSE_AGENT_STOCK,
     MOT_DE_PASSE_RESPONSABLE,
     PG_ADMIN_DSN,
     entete_autorisation,
     se_connecter,
 )
+
+
+def _texte_pdf(contenu: bytes) -> str:
+    lecteur = PdfReader(BytesIO(contenu))
+    return "\n".join(page.extract_text() or "" for page in lecteur.pages)
 
 
 def test_parametres_vente_expose_le_taux_tva_en_vigueur(client):
@@ -425,3 +434,109 @@ def test_agent_stock_et_agent_comptabilite_ne_peuvent_pas_annuler_une_vente(clie
             json={"motif": "Test"},
         )
         assert reponse.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Reçu de vente imprimable (chantier C5, cycle 19) — CDC §3.3/§7.1.
+# ---------------------------------------------------------------------------
+
+def test_recu_vente_pdf_contient_les_lignes_et_totaux(client):
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    entetes = entete_autorisation(session_compta["jeton"])
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entetes,
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6000}],
+        },
+    )
+    assert reponse_vente.status_code == 201, reponse_vente.text
+    vente_id = reponse_vente.json()["vente_id"]
+
+    reponse = client.get(f"/ventes/{vente_id}/recu", headers=entetes)
+    assert reponse.status_code == 200, reponse.text
+    assert reponse.headers["content-type"] == "application/pdf"
+    assert reponse.content[:4] == b"%PDF"
+
+    texte = _texte_pdf(reponse.content)
+    assert "Ciment CIM II 50 kg" in texte
+    assert "Ets Quincaillerie Franck" in texte  # boutique_nom, jamais un placeholder
+    assert "12" in texte and "000" in texte  # total TTC (12 000 FCFA)
+    assert "ANNUL" not in texte.upper()  # vente active : pas de mention d'annulation
+
+
+def test_recu_vente_annulee_porte_la_mention(client):
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
+        },
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    entetes_resp = entete_autorisation(session_resp["jeton"])
+    annulation = client.post(
+        f"/ventes/{vente_id}/annuler", headers=entetes_resp, json={"motif": "Erreur de saisie"}
+    )
+    assert annulation.status_code == 200, annulation.text
+
+    reponse = client.get(f"/ventes/{vente_id}/recu", headers=entetes_resp)
+    assert reponse.status_code == 200, reponse.text
+    texte = _texte_pdf(reponse.content)
+    assert "ANNUL" in texte.upper()
+    assert "Erreur de saisie" in texte
+
+
+def test_recu_vente_inexistante_refusee(client):
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get(
+        "/ventes/999999/recu", headers=entete_autorisation(session_resp["jeton"])
+    )
+    assert reponse.status_code == 404
+
+
+def test_agent_stock_ne_peut_pas_obtenir_de_recu(client):
+    """Aucun droit sur ``ventes`` pour l'agent stock (migration 008)."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
+        },
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_stock = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.get(
+        f"/ventes/{vente_id}/recu", headers=entete_autorisation(session_stock["jeton"])
+    )
+    assert reponse.status_code == 403
+
+
+def test_recu_vente_agent_comptabilite_limite_a_son_site(client):
+    """Une vente du Magasin (site 1) reste introuvable pour un comptable du
+    Comptoir (site 2) — cloisonnement RLS, jamais un refus distinct qui
+    révélerait son existence sur l'autre site."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
+        },
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_comptoir = se_connecter(client, "comptoir.compta", MOT_DE_PASSE_AGENT_COMPTA_COMPTOIR)
+    reponse = client.get(
+        f"/ventes/{vente_id}/recu", headers=entete_autorisation(session_comptoir["jeton"])
+    )
+    assert reponse.status_code == 404

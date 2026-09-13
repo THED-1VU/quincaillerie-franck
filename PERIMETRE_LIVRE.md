@@ -195,10 +195,11 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
 
 | Fonction | Détail | Source | Confiance |
 |---|---|---|---|
-| Reçu format ticket de caisse avec code-barres | Émis à la validation de la vente, sans étape intermédiaire | CDC §3.3 ; GS §5 | Spécifié |
-| Facture détaillée numérotée | `numero_facture` attribué automatiquement | CDC §3.3 ; GS §5 (clients 2, 4, 10) | Spécifié |
-| Contenu attendu du ticket | Nom + coordonnées entreprise, n° vente/facture, date/heure, articles, quantités, prix, total, mode de paiement, code-barres ; réimpression possible | diag. §9 | Non vérifiable (imprimante requise) |
-| Comportement si imprimante indisponible | Vente reste traçable, erreur claire, réimpression autorisée | DR §6 | Non vérifiable (test à faire) |
+| Reçu PDF, disponible dès la validation de la vente | `GET /ventes/{id}/recu`, bouton « Imprimer le reçu » sur l'écran de vente, sans étape intermédiaire | CDC §3.3 ; GS §5 | Confirmé (test) — cycle 19. Document A4 (`reportlab`), pas un ticket de caisse thermique ; **aucun code-barres** (non demandé explicitement, non ajouté) |
+| Facture détaillée numérotée | `numero_facture` attribué automatiquement | CDC §3.3 ; GS §5 (clients 2, 4, 10) | Spécifié — le point c (numérotation du facturier) reste non tranché ; le reçu identifie la vente par son numéro interne en attendant |
+| Contenu du reçu | Nom + coordonnées de la boutique (si décidées — `boutique_telephone`/`numero_contribuable` restent `a_definir`, omis plutôt qu'inventés), n° de vente, date/heure, articles, quantités, prix, total TTC + détail TVA, mode de paiement ; réimprimable à tout moment (route en lecture, aucun effet de bord) ; une vente annulée porte une mention explicite (jamais un reçu d'apparence valide pour une vente qui ne l'est plus) | diag. §9 | Confirmé (test) — cycle 19, contenu relu dans le fichier PDF réellement produit, pas seulement le code HTTP |
+| Impression physique sur une imprimante réelle | Le navigateur ouvre/télécharge le PDF ; l'envoi à une imprimante thermique dédiée n'est pas implémenté | DR §6 | Non vérifiable par l'agent (imprimante physique requise) |
+| Comportement si imprimante indisponible | Vente reste traçable, erreur claire, réimpression autorisée | DR §6 | Non vérifiable (test à faire) — mais la réimpression elle-même (relire le PDF à tout moment) est déjà confirmée |
 
 ### 3.16 API web mobile (`api/`, FastAPI) — optionnelle au CDC
 
