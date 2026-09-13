@@ -41,6 +41,11 @@ package-lock.json
 # télécharge et ne se recrée qu'en local : ~1 Go, aucune donnée à versionner.
 _pgdev/
 
+# --- Worktrees Git du travail en parallèle (voir RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md) ---
+# Chaque worktree est un checkout complet d'une branche de piste ; le
+# contenu suivi vit dans le dépôt principal via ces branches, jamais ici.
+_worktrees/
+
 # --- Environnements virtuels ---
 .venv/
 venv/

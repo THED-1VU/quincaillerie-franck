@@ -58,6 +58,65 @@ de reproductibilité à faire de temps en temps.
 
 ---
 
+## Bases dédiées au travail en parallèle (voir `RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md`)
+
+Trois pistes travaillent en même temps sur ce dépôt (une session Claude
+Code par piste, chacune dans son propre worktree Git). Une seule instance
+PostgreSQL (`127.0.0.1:5433`, celle de `_pgdev\`) héberge **quatre bases
+distinctes** : la base de développement/tests habituelle plus une par
+piste — deux migrations simultanées sur la **même** base se détruiraient
+l'une l'autre.
+
+| Base | Piste | Worktree | Port serveur (uvicorn) |
+|---|---|---|---|
+| `quincaillerie_test` | (aucune — tests automatisés du dépôt principal, `pytest`/Playwright) | dépôt principal | 8010 (convention des suites) |
+| `quincaillerie_ux` | UX (corrections `UX_BASELINE.md`) | `_worktrees/piste-ux` | 8011 |
+| `quincaillerie_c6` | C6 (comptabilité et RH) | `_worktrees/piste-c6` | 8012 |
+| `quincaillerie_c12` | C12 (sauvegarde et exploitation) | `_worktrees/piste-c12` | 8013 |
+
+Chaque worktree a son propre `server/config.ini` (jamais versionné, comme
+d'habitude) pointant vers **sa** base et déclarant son port de
+convention ci-dessus. Les trois pistes peuvent partager le même
+environnement virtuel Python (`server/.venv/` du dépôt **principal**) :
+appeler `python.exe` par son chemin absolu avec `--app-dir` pointé sur le
+`server/` du worktree suffit, sans réinstaller les dépendances trois
+fois.
+
+**Vérifié par exécution (2026-09-14)** : les trois bases créées (schéma
+d'origine + 19 migrations + jeu d'essai chacune), un article marqueur
+inséré directement dans `quincaillerie_ux` puis recherché dans les trois
+autres bases — **absent partout ailleurs**, preuve d'isolation réelle,
+pas seulement nominale. Les trois serveurs démarrés simultanément sur
+8011/8012/8013 ont tous répondu `200` sur `/sante`, et un second marqueur
+inséré via une requête HTTP réelle sur le port 8011 (piste UX) n'est
+apparu que dans `quincaillerie_ux` — la séparation tient de bout en bout,
+de la requête réseau à la ligne en base.
+
+### Remettre une base de piste à neuf
+
+Identique à la préparation de `quincaillerie_test`, avec le nom de base
+de la piste concernée :
+
+```bash
+export PGHOST=127.0.0.1 PGPORT=5433 PGUSER=postgres PGPASSWORD=qf_dev_local
+BASE=quincaillerie_ux   # ou quincaillerie_c6, quincaillerie_c12
+
+psql -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='$BASE' AND pid<>pg_backend_pid();" \
+     -c "DROP DATABASE IF EXISTS $BASE;" -c "CREATE DATABASE $BASE;"
+psql -d "$BASE" -v ON_ERROR_STOP=1 -f QuincaillerieFranck_Test/creation_base_donnees.sql
+PGDATABASE="$BASE" bash db/outils/migrer.sh appliquer
+psql -d postgres -c "ALTER ROLE qf_app WITH PASSWORD 'qf_app_dev_local';"   # voir le piège du cycle 20/21
+psql -d "$BASE" -v ON_ERROR_STOP=1 -f db/tests/00_jeu_essai.sql
+```
+
+Chaque piste ne touche **que** sa propre base — jamais
+`quincaillerie_test`, jamais celle d'une autre piste. À la fin du travail
+en parallèle (toutes les pistes fusionnées), ces trois bases peuvent être
+supprimées ; elles ne contiennent que du jeu d'essai, jamais de donnée
+réelle.
+
+---
+
 ## Appliquer les migrations
 
 ```bash
