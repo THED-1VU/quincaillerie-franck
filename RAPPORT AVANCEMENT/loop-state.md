@@ -31,7 +31,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C1 | Base de données et intégrité | **80 %** | Cycle 2. 9 migrations numérotées (`db/migrations/`) + inverses, appliquées et annulées par exécution réelle sur PostgreSQL 17.11. Corrigés et **prouvés** : contraintes de domaine, cohérence inter-tables, **écart d'inventaire calculé par la base** (et quantité attendue figée par déclencheur), historique non effaçable (`RESTRICT` + verrous de suppression + suppression logique), journaux de connexion et de comptes, annulation tracée et irréversible, table de paramètres avec sentinelle « à décider », index de recherche, **4 rôles non superutilisateurs à privilèges par colonne** + RLS par site. **100 contrôles, 0 échec** (`db/tests/DERNIER_RESULTAT.md`). Reste : décisions métier de l'addendum (points b, d, e, g), fonction d'authentification (C2), exploitation de la RLS (C3), reprise sur une base contenant de vraies données. |
 | C2 | Authentification et comptes | **65 %** | Cycle 3. Noyau serveur (`server/`, FastAPI) : connexion via `verifier_connexion()` (fonction PostgreSQL `SECURITY DEFINER`, migration 009, seule à lire le hachage, jamais restitué) ; verrouillage après 5 échecs, déverrouillage réservé au responsable, obligation de changement à la première connexion, libre-service limité à sa propre ligne, limitation de débit. **36/36 tests, 0 échec** (`server/tests/DERNIER_RESULTAT.md`). Reste : session à durée limitée = choix technique temporaire (`duree_session_minutes` reste `a_definir` en base — décision propriétaire) ; pas de révocation de jeton avant expiration (limite technique documentée) ; pas d'écran, pas de création de compte via API (hors périmètre du cycle). |
 | C3 | Habilitations et cloisonnement des rôles | **60 %** | Cycle 3. Habilitations appliquées **au niveau des requêtes SQL** (pas de vérification applicative dispersée) : privilèges par colonne + RLS par site posés au cycle 2, exploités par `BaseDeDonnees.connexion_pour()` (point de bascule de rôle unique). Prouvé par exécution en **contournant l'API** : `SELECT ... WHERE site_id=2` sous `qf_agent_stock` renvoie 0 ligne même en le demandant explicitement (`server/tests/test_cloisonnement_site.py`). Rôle « caissier » toujours non tranché (addendum h) — non traité ce cycle. Reste : cloisonnement RH/fournisseurs non testé par une route, pas encore d'écran. |
-| C4 | Articles et stock | **68 %** | Cycles 9 et 11. Six opérations réelles (création, modification, réception, transfert inter-sites, casse, retours client/fournisseur), chacune une fonction PostgreSQL `SECURITY DEFINER` et une vraie route API, **désormais toutes câblées sur un vrai écran** (`maquette/stock.html`, cycle 11) pour le responsable et l'agent stock. Modification tracée dans `historique_modifications_articles`/`historique_prix_articles` (existaient sans une seule ligne depuis le cycle 1) ; `quantite_stock` volontairement jamais modifiable par fiche, même si le `GRANT` du cycle 2 le permettrait à un agent stock. **Aucun montant FCFA, aucun champ de prix n'atteint la page ni les réponses réseau de l'agent stock** — prouvé par capture et par inspection du DOM/réseau (cycle 11). Correctif du constat n°1 du contrôle de boucle après le cycle 9 (`POST /articles` : 500 générique → 422 clair sur un `site_id`/`fournisseur_id` invalide). Vérifié par exécution : 100/100 tests pytest (90 + 10 nouveaux), suite SQL à jour (44/44, 52/52, 6/6, réversibilité de la migration 015 confirmée), 5 suites Playwright dont `verifier-stock-reel.mjs` (nouveau, 26/26) — 0 régression. Manquent : volumétrie/reprise du stock initial (addendum j, non tranché), remises et conversion d'unités (addendum f, volet non tranché), export, et le **constat n°2** du contrôle de boucle après le cycle 9 (cohérence article/quantité d'un retour avec le document d'origine, non traité ce cycle — voir le contrôle de boucle après ce cycle-ci pour la raison). |
+| C4 | Articles et stock | **68 %** | Cycles 9 et 11. Six opérations réelles (création, modification, réception, transfert inter-sites, casse, retours client/fournisseur), chacune une fonction PostgreSQL `SECURITY DEFINER` et une vraie route API, **désormais toutes câblées sur un vrai écran** (`maquette/stock.html`, cycle 11) pour le responsable et l'agent stock. Modification tracée dans `historique_modifications_articles`/`historique_prix_articles` (existaient sans une seule ligne depuis le cycle 1) ; `quantite_stock` volontairement jamais modifiable par fiche, même si le `GRANT` du cycle 2 le permettrait à un agent stock. **Aucun montant FCFA, aucun champ de prix n'atteint la page ni les réponses réseau de l'agent stock** — prouvé par capture et par inspection du DOM/réseau (cycle 11). Correctif du constat n°1 du contrôle de boucle après le cycle 9 (`POST /articles` : 500 générique → 422 clair sur un `site_id`/`fournisseur_id` invalide). Vérifié par exécution : 100/100 tests pytest (90 + 10 nouveaux), suite SQL à jour (44/44, 52/52, 6/6, réversibilité de la migration 015 confirmée), 5 suites Playwright dont `verifier-stock-reel.mjs` (nouveau, 26/26) — 0 régression. Manquent : volumétrie/reprise du stock initial (addendum j, non tranché), remises et conversion d'unités (addendum f, volet non tranché), export, le **constat n°2** (cohérence article/quantité d'un retour) et le **constat n°3** trouvé au contrôle de boucle après le cycle 11 (`PUT /articles/{id}` trace un changement de prix dans `historique_prix_articles` même quand le prix soumis est identique à l'actuel — se déclenche dans l'usage ordinaire de l'écran, puisque le formulaire pré-remplit toujours les prix). |
 | C5 | Ventes et facturation | **43 %** | Cycle 6, durci par le cycle de correction après C7. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` (`server/app/routes/ventes.py`) enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. Vérifié par exécution : 8/8 tests pytest dédiés (55/55 au total, 0 régression), suite SQL du cycle 2 rejouée à jour (44/44 protections, 52/52 habilitations, **6/6 concurrence — réécrite pour le nouveau comportement anti-survente**, réversibilité des migrations confirmée), et 10/10 contrôles Playwright bout-en-bout sur l'écran de vente réellement câblé (`verifier-vente-reelle.mjs`) : vente normale (aperçu affiché AVANT validation identique à la confirmation serveur), vente à découvert acceptée avec écart affiché, crédit client absent des choix, responsable contraint de choisir un site. **+3 points (cycle de correction)** : fuseau horaire de `/ventes/synthese-jour` fixé à Africa/Douala au lieu d'hériter d'un réglage faux (Europe/Paris) — le « jour » des ventes dépendait silencieusement de l'horloge du poste serveur ; recherche/panier de `vente.html` ne construisent plus le HTML par concaténation non échappée (nom d'article), vérifié par un essai d'injection réel. Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), annulation d'une vente, régularisation d'un écart, documents imprimés (ticket/facture), écarts de stock pas encore affichés au tableau de bord (prévu chantier C7). |
 | C6 | Comptabilité et RH | **0 %** | Non vérifié. `transactions`, `employes`, `absences_conges`, `avances_salaire` présents. Manquent : clôture de caisse (addendum g), contre-passation d'annulation, `transactions.vente_id` non unique, audit des corrections. |
 | C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
@@ -1243,28 +1243,68 @@ Troisième cycle mené sous le processus corrigé en 4 étapes de `SKILL.md`.
   l'agent stock exclut désormais explicitement la quantité, l'historique
   de prix/modifications est réellement câblé pour la première fois),
   `loop-state.md`.
-- **Score** : C4 **55 % → 68 %**. Commit, PR sur `cycle-11-ecran-stock` —
-  **non fusionnée**, sur instruction du propriétaire.
+- **Score** : C4 **55 % → 68 %**. Commit, PR #12 sur `cycle-11-ecran-stock`,
+  **fusionnée le 2026-09-13** sur instruction explicite du propriétaire
+  (commit de fusion `4728683`, fast-forward, branche supprimée) après le
+  contrôle de boucle ci-dessous.
 - **Reste ouvert** : volumétrie/reprise du stock initial (point j),
   remises et conversion d'unités (point f, volet), le **constat n°2** de
   C4 (cohérence article/quantité d'un retour), export dédié pour C4,
-  et le cycle 12 proposé (historique des comptages + exports, priorité 2).
+  et le cycle 12 proposé (historique des comptages + exports, priorité 2) ;
+  voir aussi le **constat n°3** du contrôle de boucle ci-dessous.
+
+---
+
+### Contrôle de boucle — après cycle 11, avant de démarrer le cycle 12 (2026-09-13, sans code)
+
+Diagnostic par exécution, avant tout choix pour le cycle suivant. Le
+propriétaire a demandé un bilan complet des 15 chantiers puis a validé
+**Cycle 12 — écran pour C8** (déjà proposé au cycle 11).
+
+- **Suites rejouées, toutes identiques au rapport du cycle 11** : suite
+  pytest complète **100/100** ; `db/tests/executer_tests.sh` (base
+  recréée de zéro, migrations 000 à 015) protections **44/44**,
+  habilitations **52/52**, concurrence **6/6**, réversibilité confirmée ;
+  les 5 suites Playwright **76/76**, **10/10**, **17/17**, **11/11**,
+  **26/26**. **0 écart avec le rapport initial.**
+- **Relecture du code comme un tiers, 1 constat trouvé par exécution,
+  absent du rapport du cycle 11** : dans `PUT /articles/{id}`, la
+  traçabilité d'un changement de prix (`historique_prix_articles`) ne
+  vérifie PAS que le prix a réellement changé — contrairement à la boucle
+  sur `nom`/`categorie`/`unite`/`fournisseur_id`, qui compare explicitement
+  l'ancienne et la nouvelle valeur. Conséquence vérifiée par exécution :
+  soumettre `{"prix_vente": 6500}` sur un article déjà à 6500 crée quand
+  même une ligne d'historique « 6500,00 → 6500,00 ». **Plus grave qu'un
+  cas limite** : `stock.html` pré-remplit toujours les champs de prix
+  avec la valeur actuelle dans le panneau « Modifier » — un responsable
+  qui corrige seulement le nom d'un article et valide déclenche cette
+  fausse entrée à chaque fois, dans l'usage le plus ordinaire de l'écran.
+  Aucun test ne couvre ce cas (les tests existants changent toujours
+  réellement le prix).
+- **Verdict** : un défaut de qualité de l'audit (une trace créée sans
+  changement réel), jamais une fuite de rôle ou de site — **C4 n'est pas
+  revu à la baisse**. Consigné comme **constat n°3**, à traiter avec le
+  constat n°2 dans le même futur cycle de correction (les deux touchent
+  `PUT /articles/{id}` et l'audit des articles).
 
 ---
 
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 1. **Cycle 12 — écran pour C8** (proposé au cycle 11, priorité 2 du
-   découpage) : historique des comptages et exports Excel/PDF n'ont
-   toujours aucune interface (API + pytest seulement, cycle 10) — un écran
-   (boutons de téléchargement, sélecteur de période) lèverait le plafond
-   actuel de C8.
-2. **Correction du constat n°2 de C4** (contrôle de boucle après cycle 9,
-   reporté au cycle 11) : absence de vérification de cohérence
-   article/quantité sur les retours client et fournisseur contre le
-   document d'origine réellement référencé (`ventes_lignes`, quantité
-   reçue) — exige une nouvelle migration modifiant deux fonctions
-   `SECURITY DEFINER`, un travail de fond distinct de l'ergonomie d'écran.
+   découpage, **validé par le propriétaire — cycle en cours**) :
+   historique des comptages et exports Excel/PDF n'ont toujours aucune
+   interface (API + pytest seulement, cycle 10) — un écran (boutons de
+   téléchargement, sélecteur de période) lèverait le plafond actuel de C8.
+2. **Correction des constats n°2 et n°3 de C4** : n°2 (contrôle de boucle
+   après cycle 9) — absence de vérification de cohérence article/quantité
+   sur les retours client et fournisseur contre le document d'origine
+   réellement référencé (`ventes_lignes`, quantité reçue), exige une
+   nouvelle migration modifiant deux fonctions `SECURITY DEFINER` ; n°3
+   (contrôle de boucle après cycle 11) — `PUT /articles/{id}` trace un
+   changement de prix même sans changement réel, se déclenche dans l'usage
+   ordinaire de l'écran (formulaire pré-rempli). Les deux touchent l'audit
+   des articles, un travail de fond distinct de l'ergonomie d'écran.
 3. **C6 (comptabilité/RH)** : reste entièrement à 0 %, sans blocage connu
    par une décision non tranchée.
 4. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
