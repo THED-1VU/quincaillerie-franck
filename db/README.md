@@ -115,6 +115,7 @@ Puis reporter la valeur dans `config.ini` (fichier local, non versionné), avec
 | 011 | `ventes_fiscalite_anti_survente` | appliquer une TVA inventée (paramètres fiscaux décidés par le propriétaire, cycle 6) ; bloquer une vente déjà encaissée pour stock insuffisant au lieu de consigner l'écart |
 | 012 | `comptage_aveugle_colonnes` | qu'un agent stock LISE `ecart` ou `quantite_attendue` d'un comptage, y compris après coup, y compris en SQL direct |
 | 013 | `fuseau_horaire_boutique` | que le « jour » vu par `CURRENT_DATE`/`NOW()` dépende du fuseau du système d'exploitation du poste serveur plutôt que de l'heure réelle de la boutique (Africa/Douala) |
+| 014 | `articles_stock_transferts_retours` | confondre un transfert, une casse ou un retour avec une correction de quantité ; qu'un transfert ou un retour recalcule le seuil d'alerte ; qu'un agent stock agisse sur le stock d'un **autre** site via une réception, un transfert ou un retour (trois failles latentes trouvées par exécution en exposant des fonctions du cycle 2 par une route pour la première fois) |
 
 ---
 
@@ -151,6 +152,47 @@ paramètre de `config.ini`. Changer de fuseau (si la boutique déménageait un
 jour hors du Cameroun) demanderait une nouvelle migration ET une mise à
 jour de `FUSEAU_HORAIRE_BOUTIQUE` — un choix délibéré plutôt qu'une valeur
 implicite.
+
+---
+
+## Mouvements de stock : catégorie, et le piège `current_user` en SECURITY DEFINER
+
+Depuis la migration 014 (chantier C4), `mouvements_stock.type` (le **sens** :
+`entree`/`sortie`, inchangé depuis le schéma d'origine) est complété par
+`categorie` (le **pourquoi** : `reception_fournisseur`, `vente`, `transfert`,
+`casse`, `retour_client`, `retour_fournisseur`) — colonne `NOT NULL`, donc
+**toute** fonction qui écrit dans cette table doit la renseigner, y compris
+celles qui existaient déjà (`enregistrer_entree_stock`,
+`decrementer_stock_vente`) et les scripts de test qui y insèrent directement
+(`db/tests/01_protections.sql`).
+
+Deux colonnes de traçabilité, nullables selon la catégorie : `vente_id`
+(retour client → la vente d'origine) et `mouvement_origine_id`, une
+auto-référence réutilisée pour deux cas — un retour fournisseur (→ la
+réception qu'il annule partiellement) et la moitié « entrée » d'un
+transfert (→ sa moitié « sortie », même transfert).
+
+**Piège rencontré et vérifié par exécution, à ne pas reproduire** :
+à l'intérieur d'une fonction `SECURITY DEFINER`, `current_user` (et
+`session_user`) valent l'identité du **propriétaire** de la fonction
+(typiquement `postgres`), **pas** l'appelant — contrairement à une
+politique RLS ordinaire, où `current_user` reflète bien le rôle réellement
+actif (`SET ROLE`). Une première version de `transferer_stock()` vérifiait
+`current_user = 'qf_agent_stock'` pour restreindre un agent à son propre
+site : cette condition ne se déclenchait **jamais**, laissant n'importe quel
+agent transférer depuis n'importe quel site. Trouvé en testant directement
+en SQL, pas en relisant le code. La seule source fiable ici est
+`qf_site_courant()` (une variable de session, `set_config`, indépendante de
+l'identité de rôle) : `qf_site_courant() IS NOT NULL AND site <> qf_site_courant()`
+identifie correctement « un agent qui n'est pas sur ce site » (le
+responsable, dont `qf_site_courant()` vaut toujours `NULL`, n'est jamais
+concerné).
+
+Le même contrôle manquait, pour la même raison, dans trois fonctions du
+**cycle 2** (`enregistrer_entree_stock`) et de ce cycle
+(`enregistrer_retour_client`, `enregistrer_retour_fournisseur`) : des
+failles latentes, jamais exploitables tant qu'aucune route ne les exposait,
+corrigées en même temps que leur première exposition par une route HTTP.
 
 ---
 
@@ -251,12 +293,20 @@ explicite si l'application tente de les utiliser :
 SELECT * FROM parametres_a_decider;   -- doit être vide avant la mise en production
 ```
 
-| Paramètre | Décision attendue |
+| Paramètre | État |
 |---|---|
-| `regime_fiscal`, `prix_saisis_ttc`, `arrondi_montants`, `boutique_numero_contribuable` | addendum, **point d** (fiscalité) |
-| `taux_tva` | vaut **0** : l'application fonctionne sans aucune TVA, ce qui est un choix valide et non une valeur devinée |
+| `regime_fiscal`, `taux_tva`, `prix_saisis_ttc`, `arrondi_montants` | **Décidés cycle 6** (addendum, point d) : régime du réel, 19,25 %, TTC, arithmétique — plus dans `parametres_a_decider` |
+| `boutique_numero_contribuable` | toujours `a_definir` (mentions légales, aucun document imprimé n'existe encore) |
 | `seuil_alerte_plancher`, `tentatives_max_connexion` | valeurs proposées, à confirmer |
 | `duree_session_minutes` | règle de session inactive à définir |
+
+Décisions **hors table `parametres`**, appliquées directement dans le
+schéma et les fonctions : transfert inter-sites et retours/casse
+(addendum, **points a et f**, partiellement — retours et casse seulement),
+**décidées cycle 9**, voir `014_articles_stock_transferts_retours.sql`.
+Restent non tranchés dans le point f : remises, unités/conversions
+décimales — et dans le point j : volumétrie/reprise du stock initial (un
+article naît donc toujours à `quantite_stock = 0`).
 
 De même, `decrementer_stock_vente()` **signale** un stock insuffisant avec la
 quantité réellement disponible, mais ne décide pas de ce que l'application doit

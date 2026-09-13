@@ -9,6 +9,92 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 9 — chantier C4 (articles et stock), 2026-09-13
+
+Décisions du propriétaire (addendum, points a et f) appliquées : migration
+000 à **014** (`014_articles_stock_transferts_retours.sql`).
+
+### `test_articles.py` (5) + `test_stock.py` (13) — nouveaux, 18/18
+
+```
+test_responsable_cree_un_article_avec_prix PASSED
+test_agent_stock_cree_un_article_sans_prix PASSED
+test_agent_stock_ne_peut_pas_choisir_un_autre_site PASSED
+test_responsable_doit_preciser_un_site PASSED
+test_agent_comptabilite_ne_peut_pas_creer_darticle PASSED
+test_reception_recalcule_le_seuil PASSED
+test_reception_refusee_pour_un_article_de_lautre_site PASSED
+test_transfert_normal_ne_recalcule_pas_le_seuil PASSED
+test_transfert_motif_blanc_refuse_par_la_base PASSED
+test_transfert_stock_insuffisant_refuse PASSED
+test_transfert_vers_le_meme_site_refuse PASSED
+test_agent_stock_ne_transfere_que_depuis_son_site PASSED
+test_casse_reservee_au_responsable PASSED
+test_retour_client_rattache_a_la_vente PASSED
+test_retour_client_vente_inexistante_refuse PASSED
+test_agent_stock_ne_traite_un_retour_client_que_pour_son_site PASSED
+test_retour_fournisseur_sur_une_vraie_reception PASSED
+test_retour_fournisseur_sur_un_mouvement_qui_nest_pas_une_reception PASSED
+```
+
+**Trois failles trouvées par exécution**, jamais exploitables avant ce
+cycle (aucune route n'appelait ces fonctions) : `enregistrer_entree_stock()`
+(cycle 2), `enregistrer_retour_client()` et `enregistrer_retour_fournisseur()`
+(ce cycle) ne vérifiaient aucun site — un agent stock du Magasin pouvait
+agir sur le stock du Comptoir. Confirmé par exécution AVANT correction :
+
+```sql
+SET ROLE qf_agent_stock; SELECT set_config('qf.site_id', '1', true);
+SELECT enregistrer_entree_stock(3, 10, 2, 'test cross-site');  -- article du Comptoir
+ enregistrer_entree_stock
+--------------------------
+                      109        <- ACCEPTÉ, aurait dû être refusé
+```
+
+Cause : `current_user` à l'intérieur d'une fonction `SECURITY DEFINER` vaut
+le propriétaire de la fonction, pas l'appelant — voir `db/README.md`. Après
+correction (`qf_site_courant()` à la place de `current_user`), même essai :
+`ERROR: Un agent stock ne peut réceptionner que pour son propre site.`
+
+### Suite complète — 73/73, 0 régression
+
+```
+73 passed in ~107s
+```
+
+### Non-régression SQL du cycle 2, rejouée à jour (`db/tests/executer_tests.sh`)
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 014) : OK
+>>> jeu d'essai chargé : OK
+>>> protections   : OK   (44/44)
+>>> habilitations : OK   (52/52)
+>>> concurrence   : OK   (6/6)
+>>> aller / retour des migrations : OK   (aucune différence nouvelle après
+                                          réversion — colonnes et fonctions
+                                          entièrement retirées)
+```
+
+Bug trouvé en écrivant la migration (pas en la concevant) :
+`01_protections.sql` insère directement dans `mouvements_stock` sans
+`categorie`, désormais `NOT NULL` — corrigé (deux lignes).
+
+### Non-régression des écrans réels (Playwright)
+
+Aucun écran n'a été construit pour C4 ce cycle (hors périmètre du plan
+validé) ; les quatre scripts existants ont été rejoués pour confirmer
+qu'un changement de schéma sur `mouvements_stock` ne casse ni C5 ni C7 :
+
+```
+verifier-cablage.mjs (C9/C10)          : 74/74 — 0 régression
+verifier-vente-reelle.mjs (C5)         : 10/10 — 0 régression
+verifier-inventaire-reel.mjs (C7)      : 17/17 — 0 régression
+verifier-echappement-html.mjs          : 11/11 — 0 régression
+```
+
+---
+
 ## Cycle de correction après le cycle 7, 2026-09-12
 
 Fait avant de démarrer un nouveau chantier, sur validation explicite du

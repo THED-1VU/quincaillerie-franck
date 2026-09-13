@@ -302,3 +302,36 @@ Toutes les étapes sont passées.
 
 **100 contrôles exécutés, 0 échec** — inchangé. Vérification directe du
 fuseau (fraîche connexion) : `SHOW TimeZone` renvoie `Africa/Douala`.
+
+---
+
+## Cycle 9 — chantier C4 (articles et stock), 2026-09-13
+
+Migration 000 à **014** (`014_articles_stock_transferts_retours.sql`) :
+transfert inter-sites, casse, retours client/fournisseur (addendum,
+points a et f). `01_protections.sql` corrigé : deux `INSERT INTO
+mouvements_stock` directs sans `categorie` (désormais `NOT NULL`)
+faisaient échouer le script en entier avant correction.
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 014) : OK
+>>> jeu d'essai chargé             : OK
+>>> protections                    : OK   (44/44)
+>>> habilitations                  : OK   (52/52)
+>>> concurrence                    : OK   (6/6)
+>>> aller / retour des migrations  : OK
+Toutes les étapes sont passées.
+```
+
+**100 contrôles exécutés, 0 échec** — inchangé (aucun nouveau contrôle
+ajouté à ces fichiers ; les 18 nouveaux contrôles de C4 vivent dans
+`server/tests/test_articles.py`/`test_stock.py`, voir
+`server/tests/DERNIER_RESULTAT.md`).
+
+Trois failles trouvées par exécution en écrivant les fonctions de ce cycle
+(détail complet dans `server/tests/DERNIER_RESULTAT.md` et
+`db/README.md`) : `enregistrer_entree_stock()` (cycle 2),
+`enregistrer_retour_client()` et `enregistrer_retour_fournisseur()` (ce
+cycle) ne vérifiaient aucun site avant d'agir sur le stock — jamais
+exploitable tant qu'aucune route ne les appelait, corrigé en les exposant.

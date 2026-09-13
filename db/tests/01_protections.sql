@@ -84,8 +84,8 @@ SELECT t_refus('001 · seuil d''alerte négatif',
   $$UPDATE articles SET seuil_alerte = -3 WHERE id = 1$$);
 
 SELECT t_refus('001 · mouvement de stock de quantité 0',
-  $$INSERT INTO mouvements_stock (article_id, type, quantite, motif, utilisateur_id)
-    VALUES (1, 'entree', 0, 'essai', 2)$$);
+  $$INSERT INTO mouvements_stock (article_id, type, categorie, quantite, motif, utilisateur_id)
+    VALUES (1, 'entree', 'reception_fournisseur', 0, 'essai', 2)$$);
 
 SELECT t_refus('001 · taux de TVA à 500 %',
   $$INSERT INTO ventes (site_id, utilisateur_id, sous_total_ht, taux_tva, montant_tva, total_ttc)
@@ -183,8 +183,8 @@ SELECT t_refus('004 · suppression d''une ligne d''historique de prix',
 -- modifiante (WITH m AS (INSERT ...) DELETE ...), le DELETE ne verrait pas la
 -- ligne insérée dans la même instruction : il supprimerait 0 ligne et le
 -- déclencheur ne se déclencherait jamais — le test passerait à tort.
-INSERT INTO mouvements_stock (article_id, type, quantite, motif, utilisateur_id)
-VALUES (1, 'entree', 5, 'essai suppression', 2);
+INSERT INTO mouvements_stock (article_id, type, categorie, quantite, motif, utilisateur_id)
+VALUES (1, 'entree', 'reception_fournisseur', 5, 'essai suppression', 2);
 
 SELECT t_refus('004 · suppression d''un mouvement de stock',
   $$DELETE FROM mouvements_stock WHERE motif = 'essai suppression'$$);
