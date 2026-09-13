@@ -364,3 +364,40 @@ ajouté à ces fichiers ; les 10 nouveaux contrôles vivent dans
 `server/tests/test_articles.py`, voir `server/tests/DERNIER_RESULTAT.md`).
 Réversibilité de la migration 015 confirmée : aucune trace résiduelle
 au-delà des 2 écarts déjà documentés et pré-existants.
+
+---
+
+## Cycle 13 — correction des constats n°2 et n°3 (chantier C4), 2026-09-13
+
+Migration 000 à **016** (`016_retours_coherence_document_origine.sql`) :
+corrige `enregistrer_retour_client()` et `enregistrer_retour_fournisseur()`
+(migration 014) — un retour ne dépasse désormais jamais, en article et en
+quantité (cumul de plusieurs retours contre le même document compris), ce
+que la vente ou la réception d'origine porte réellement (constat n°2,
+contrôle de boucle après le cycle 9).
+
+```
+>>> création de quincaillerie_test : OK
+>>> migrations appliquées (000 à 016) : OK
+>>> jeu d'essai chargé             : OK
+>>> protections                    : OK   (44/44)
+>>> habilitations                  : OK   (52/52)
+>>> concurrence                    : OK   (6/6)
+>>> aller / retour des migrations  : OK
+Toutes les étapes sont passées.
+```
+
+**100 contrôles exécutés, 0 échec** — inchangé (aucun nouveau contrôle
+ajouté à ces fichiers ; les 4 nouveaux contrôles vivent dans
+`server/tests/test_stock.py`/`test_articles.py`, voir
+`server/tests/DERNIER_RESULTAT.md`). Réversibilité de la migration 016
+confirmée : aucune trace résiduelle au-delà des 2 écarts déjà documentés
+et pré-existants.
+
+Vérifié en SQL direct avant tout code Python (comme pour la migration 014) :
+retour exactement égal au reste disponible (accepté), un de plus (refusé),
+deuxième retour cumulé qui dépasse après un premier retour valide
+(refusé), article non vendu dans la vente indiquée (refusé) — pour le
+retour client comme pour le retour fournisseur ; les vérifications
+préexistantes (site, existence, nature du mouvement, stock suffisant)
+revérifiées intactes.

@@ -210,6 +210,56 @@ def test_agent_stock_ne_traite_un_retour_client_que_pour_son_site(client):
     assert reponse.status_code == 403
 
 
+def test_retour_client_article_non_vendu_dans_la_vente_refuse(client):
+    """Migration 016 (constat n°2, contrôle de boucle après le cycle 9) :
+    l'article 2 (Fer) n'a jamais été vendu dans cette vente, qui ne porte
+    que sur l'article 1 (Ciment)."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"mode_paiement": "especes", "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.post(
+        "/stock/retours-client",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 2, "vente_id": vente_id, "quantite": 1},
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "ne fait pas partie" in reponse.json()["detail"].lower()
+
+
+def test_retour_client_quantite_cumulee_depassee_refuse(client):
+    """Migration 016 : deux unités vendues, un premier retour de deux passe,
+    un second retour de une de plus (cumul 3 > 2) est refusé."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"mode_paiement": "especes", "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6500}]},
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    premier = client.post(
+        "/stock/retours-client",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 2},
+    )
+    assert premier.status_code == 201, premier.text
+
+    second = client.post(
+        "/stock/retours-client",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 1},
+    )
+    assert second.status_code == 422, second.text
+    assert "dépasserait" in second.json()["detail"].lower()
+
+
 # ---------------------------------------------------------------------------
 # Retour fournisseur (addendum, point f)
 # ---------------------------------------------------------------------------
@@ -265,3 +315,37 @@ def test_retour_fournisseur_sur_un_mouvement_qui_nest_pas_une_reception(client):
     )
     assert reponse.status_code == 422
     assert "réception" in reponse.json()["detail"].lower()
+
+
+def test_retour_fournisseur_quantite_cumulee_depassee_refuse(client):
+    """Migration 016 : trois unités reçues, un premier retour de trois
+    passe, un second retour de une de plus (cumul 4 > 3) est refusé."""
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse_reception = client.post(
+        "/stock/entrees",
+        headers=entete_autorisation(session["jeton"]),
+        json={"article_id": 1, "quantite": 3, "motif": "Livraison test cumul"},
+    )
+    assert reponse_reception.status_code == 201, reponse_reception.text
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute(
+                "SELECT id FROM mouvements_stock WHERE article_id = 1 AND categorie = 'reception_fournisseur' ORDER BY id DESC LIMIT 1"
+            )
+            mouvement_id = cur.fetchone()["id"]
+
+    premier = client.post(
+        "/stock/retours-fournisseur",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mouvement_origine_id": mouvement_id, "quantite": 3},
+    )
+    assert premier.status_code == 201, premier.text
+
+    second = client.post(
+        "/stock/retours-fournisseur",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mouvement_origine_id": mouvement_id, "quantite": 1},
+    )
+    assert second.status_code == 422, second.text
+    assert "dépasserait" in second.json()["detail"].lower()

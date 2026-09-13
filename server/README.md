@@ -196,16 +196,46 @@ prix n'atteint la page ni les réponses réseau de l'agent stock** — vérifié
 par capture et par inspection du DOM/réseau, pas seulement par lecture du
 code.
 
-Le **constat n°2** (cohérence article/quantité d'un retour avec le
-document d'origine réellement référencé) n'est **pas** traité ce cycle —
-voir `loop-state.md`, il reste un candidat pour un cycle de correction
-dédié.
-
 `server/tests/test_articles.py` : +10 tests (5 → 15) pour la modification,
 le correctif d'erreur et la sélection inter-site. Suite complète :
 **100/100** (90 héritées + 10 nouvelles) ; `verifier-stock-reel.mjs`
 (nouveau) : **26/26** — les 6 opérations réellement exécutées, layout aux
 5 largeurs, aucune régression sur les 4 autres suites Playwright.
+
+### Cycle 13 — correction des constats n°2 et n°3
+
+Le **constat n°2** (contrôle de boucle après le cycle 9) et le
+**constat n°3** (contrôle de boucle après le cycle 11) sont corrigés ici,
+ensemble : les deux touchaient l'audit des articles/mouvements, sans
+rapport avec l'ergonomie d'un écran.
+
+`db/migrations/016_retours_coherence_document_origine.sql` corrige
+`enregistrer_retour_client()` et `enregistrer_retour_fournisseur()`
+(migration 014) : un retour n'était vérifié que par site et par nature du
+mouvement — jamais que l'article ait réellement fait partie du document
+d'origine, ni que la quantité rendue (cumulée sur plusieurs retours contre
+le MÊME document) ne dépasse ce qui a réellement été vendu ou reçu.
+Vérifié en SQL direct avant tout code Python : retour exact accepté, un de
+plus refusé, deuxième retour cumulé qui dépasse après un premier retour
+valide refusé, article non vendu dans la vente indiquée refusé — sans
+toucher au reste des vérifications déjà en place (site, existence,
+insuffisance de stock).
+
+`PUT /articles/{id}` (constat n°3) : la traçabilité d'un changement de
+prix dans `historique_prix_articles` ne s'écrit désormais que si le prix
+a **réellement** changé — comparaison en `float` des deux côtés (l'ancien
+prix est un `Decimal` lu en base, le nouveau un `float` Pydantic ;
+comparer leurs représentations en chaîne les aurait distingués à tort).
+Avant ce correctif, rouvrir « Modifier » et valider sans toucher au prix
+(l'usage le plus ordinaire de l'écran, puisque le formulaire pré-remplit
+toujours les prix) créait une fausse ligne d'historique à chaque fois.
+
+`server/tests/test_stock.py` : +3 tests (retour client sur un article non
+vendu, quantité cumulée dépassée côté client, quantité cumulée dépassée
+côté fournisseur). `server/tests/test_articles.py` : +1 test (aucune
+ligne d'historique pour un prix soumis identique à l'actuel, et un vrai
+changement reste tracé). Suite complète : **104/104** (100 héritées + 4
+nouvelles), 0 régression sur les 6 suites Playwright (aucun écran touché).
 
 ### Trois failles latentes trouvées en exposant des fonctions par une route
 
@@ -493,11 +523,11 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 | `test_securite.py` | aucun hachage ne fuit, config refuse superutilisateur/clé d'exemple, injection SQL neutralisée, jetons expirés/falsifiés/mal signés refusés |
 | `test_ventes.py` | TVA calculée à la main et comparée, vente à découvert jamais refusée (écart consigné), crédit client refusé, cloisonnement par rôle/site sur une route d'ÉCRITURE |
 | `test_inventaire.py` | liste à compter sans aucune quantité (site_id distingue les deux sites pour le responsable), réponse d'un comptage limitée à ce qui a été envoyé **même si le client injecte des champs interdits**, **lecture de `ecart` refusée en SQL direct**, article déjà compté exclu, écarts réservés au responsable et exacts |
-| `test_articles.py` / `test_stock.py` | article toujours créé sans stock, prix ignoré pour un agent stock ; **modification tracée dans l'historique, `quantite_stock` jamais acceptée** ; **articles de l'autre site sans prix ni quantité** ; réception recalculant le seuil et refusée hors site ; transfert atomique ne recalculant jamais le seuil ; casse réservée au responsable ; retours rattachés (vente ou réception d'origine), refusés hors site |
+| `test_articles.py` / `test_stock.py` | article toujours créé sans stock, prix ignoré pour un agent stock ; **modification tracée dans l'historique, `quantite_stock` jamais acceptée, aucune ligne de prix pour un prix inchangé** ; **articles de l'autre site sans prix ni quantité** ; réception recalculant le seuil et refusée hors site ; transfert atomique ne recalculant jamais le seuil ; casse réservée au responsable ; **retours rattachés (vente ou réception d'origine) ET bornés à ce qui a réellement été vendu/reçu, cumul de plusieurs retours compris**, refusés hors site |
 | `test_tableau_bord.py` | alertes de stock réelles (article sous seuil, réservé au responsable), historique des comptages filtré par période |
 | `test_rapports.py` | contenu **réellement relu** (`openpyxl`, `pypdf`) des exports articles/ventes pour les 3 rôles — gating du prix en SQL, jamais après coup |
 
-Dernier résultat : **100/100**, trace complète dans
+Dernier résultat : **104/104**, trace complète dans
 [`tests/DERNIER_RESULTAT.md`](tests/DERNIER_RESULTAT.md).
 
 ### Piège à éviter en écrivant un test (Windows)

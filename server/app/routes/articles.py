@@ -212,7 +212,23 @@ def modifier_article(
                         ),
                     )
 
-            if "prix_achat" in champs or "prix_vente" in champs:
+            # Constat n°3 (contrôle de boucle après le cycle 11) : comparer
+            # RÉELLEMENT l'ancien et le nouveau prix, comme la boucle
+            # ci-dessus le fait déjà pour les autres champs — jamais tracer
+            # un « changement » de prix quand le prix soumis est identique
+            # à l'actuel (le formulaire de l'écran pré-remplit toujours les
+            # prix, donc ce cas se produit dans l'usage le plus ordinaire).
+            # Comparaison en float des deux côtés : `actuel[...]` est un
+            # Decimal (colonne NUMERIC), `champs[...]` un float (Pydantic) —
+            # comparer leurs représentations en chaîne les distinguerait à
+            # tort (« 5000.00 » != « 5000.0 »).
+            prix_achat_change = (
+                "prix_achat" in champs and float(actuel["prix_achat"]) != champs["prix_achat"]
+            )
+            prix_vente_change = (
+                "prix_vente" in champs and float(actuel["prix_vente"]) != champs["prix_vente"]
+            )
+            if prix_achat_change or prix_vente_change:
                 nouveau_prix_achat = champs.get("prix_achat", actuel["prix_achat"])
                 nouveau_prix_vente = champs.get("prix_vente", actuel["prix_vente"])
                 cur.execute(
