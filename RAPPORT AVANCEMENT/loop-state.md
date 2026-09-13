@@ -1362,13 +1362,41 @@ choisi l'option qu'il contenait.
     l'état déjà revérifié pendant le diagnostic du cycle précédent.
 - **Documentation** : `server/README.md` (section cycle 12 ajoutée sous
   C8), `maquette/verification/README.md`, `loop-state.md`.
-- **Score** : C8 **45 % → 60 %**. Commit, PR sur `cycle-12-ecran-rapports`
-  — **non fusionnée**, sur instruction du propriétaire.
+- **Score** : C8 **45 % → 60 %**. Commit, PR #13 sur `cycle-12-ecran-rapports`,
+  **fusionnée le 2026-09-13** sur instruction explicite du propriétaire
+  (commit de fusion `75d461e`, fast-forward, branche supprimée) après le
+  contrôle de boucle ci-dessous.
 - **Reste ouvert** : bascule vue consolidée/par site (pas d'écran),
   clôture de caisse (point g) et numéro de facturier (point c) non
   tranchés, absence persistante d'un test dédié au cloisonnement par site
   des exports (constat du contrôle de boucle après cycle 10, toujours pas
   traité), constats n°2 et n°3 de C4 (leur propre cycle de correction).
+
+---
+
+### Contrôle de boucle — après cycle 12, avant la correction des constats de C4 (2026-09-13, sans code)
+
+Diagnostic par exécution, avant tout choix pour le cycle suivant. Le
+propriétaire a demandé un bilan complet des 15 chantiers et un plan
+hiérarchisé (donnés directement en réponse, hors journal), puis a validé
+la fusion de la PR #13 et le lancement, en séquence, de plusieurs cycles
+du plan — en commençant par la correction des constats n°2 et n°3 de C4.
+
+- **Suites rejouées, toutes identiques au rapport du cycle 12** : suite
+  pytest complète **100/100** ; `db/tests/executer_tests.sh` (base
+  recréée de zéro) protections **44/44**, habilitations **52/52**,
+  concurrence **6/6**, réversibilité confirmée ; les 6 suites Playwright
+  **76/76**, **10/10**, **17/17**, **11/11**, **26/26**, **29/29**. **0
+  écart avec le rapport initial.**
+- **Relecture du code comme un tiers, aucun nouveau constat** : essai
+  spécifique d'une période inversée (`date_debut` postérieure à
+  `date_fin`) sur l'historique des comptages ET sur l'export des ventes
+  depuis l'écran réel — les deux affichent le message d'erreur du serveur
+  correctement, en français, près du bon champ. Rien à signaler sur
+  `telechargerFichier()`/`appelApiBrut()` (cycle 12) ni sur le repli CSS
+  `.bandeau--vente`.
+- **Verdict** : aucune régression, aucune faille. Cycle 12 tient sans
+  réserve supplémentaire.
 
 ---
 
