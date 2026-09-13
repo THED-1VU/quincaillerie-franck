@@ -4,10 +4,11 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 11 — écran des opérations de stock,
-  C4**, 2026-09-13 (PR #12, fast-forward, commit `4728683`) ; précédé du
-  **Cycle 10 — tableaux de bord et rapports, C8** (PR #11, commit
-  `5aba09b`), du **Cycle 9 — articles et stock, C4** (PR #10, commit
+- Dernier cycle fusionné : **Cycle 12 — écran de rapports, C8**,
+  2026-09-13 (PR #13, fast-forward, commit `75d461e`) ; précédé du
+  **Cycle 11 — écran des opérations de stock, C4** (PR #12, commit
+  `4728683`), du **Cycle 10 — tableaux de bord et rapports, C8** (PR #11,
+  commit `5aba09b`), du **Cycle 9 — articles et stock, C4** (PR #10, commit
   `a0195be`), du **Cycle 7 — inventaire et écarts, C7** et d'un **cycle de
   correction transverse**, 2026-09-12 — voir le journal, après les
   contrôles de boucle qui ont suivi chacun
