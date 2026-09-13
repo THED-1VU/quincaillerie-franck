@@ -495,6 +495,40 @@ remboursement refusé. Suite complète : **124/124** (106 héritées + 18
 nouvelles). `verifier-cablage.mjs` : **77/77** (+1, saisie rapide d'une
 recette réellement enregistrée, vérifiée en base).
 
+### Cycle 18 — écran dédié (`maquette/rh.html`)
+
+Les routes `employes`/`absences-conges`/`avances-salaire` (cycle 16)
+n'avaient encore aucune interface. `maquette/rh.html` (responsable seul,
+lien depuis `tableau-bord.html`) câble les trois cartes sur les routes
+existantes — **aucune route nouvelle, aucune migration** :
+
+- « Employés » : création + liste (nom, poste, site, salaire, actif/inactif).
+- « Absences / congés » : création (employé, type, période, motif) + liste.
+- « Avances sur salaire » : création + liste avec bouton « Rembourser »
+  par ligne non remboursée — disparaît après remboursement, jamais
+  l'inverse (comme la route elle-même).
+
+Un même panneau, réutilisé pour les trois formulaires (principe déjà
+appliqué à `stock.html`, cycle 11) : un agent ne travaille qu'un
+formulaire à la fois.
+
+**Piège rencontré et corrigé** : le bandeau partagé (`.bandeau`,
+`styles.css`) ne repasse en colonne qu'en dessous de 719px — un 3e lien de
+navigation (« Ressources humaines ») ajouté à `tableau-bord.html` faisait
+déborder l'écran entre 720px et ~820px, une plage que le seuil partagé ne
+couvrait pas. Corrigé par un `<style>` scopé à `tableau-bord.html` (seuil
+propre à 820px), sans toucher au seuil partagé des autres écrans.
+
+### Tests — `verifier-rh-reel.mjs` (nouveau), 21/21
+
+Accès refusé à l'agent stock et à l'agent comptabilité (redirection) ;
+mise en page aux 5 largeurs habituelles ; un employé créé depuis l'écran
+réapparaît dans la liste ; une absence/congé rattachée à cet employé
+réapparaît ; une avance créée puis remboursée depuis l'écran change
+réellement d'état côté serveur (le bouton « Rembourser » disparaît
+ensuite). `verifier-cablage.mjs` et `verifier-echappement-html.mjs`
+rejoués sans régression (77/77, 11/11) après la correction du bandeau.
+
 ---
 
 ## Chantier C7 — inventaire et écarts (cycle 7)

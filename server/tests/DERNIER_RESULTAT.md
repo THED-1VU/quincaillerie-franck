@@ -9,6 +9,42 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 18 — écran dédié pour la RH (chantier C6), 2026-09-13
+
+Aucune route ni migration nouvelle : `maquette/rh.html` câble les routes
+`employes`/`absences-conges`/`avances-salaire` du cycle 16, jamais
+exposées à un écran jusqu'ici. Aucun test pytest ajouté (rien de nouveau
+côté serveur) — vérifié uniquement par une nouvelle suite Playwright,
+`verifier-rh-reel.mjs`.
+
+```
+RÉUSSIS (21) :
+  magasin.stock : accès direct à rh.html -> reredirigé
+  magasin.compta : accès direct à rh.html -> reredirigé
+  rh@360/390/768/1366/1920 : aucun débordement, cibles ≥ 44px
+  responsable : accès à rh.html
+  employé réel : POST /rh/employes -> 201, réapparaît dans la liste
+  absence/congé réelle : POST /rh/absences-conges -> 201, rattachée au bon employé
+  avance réelle : POST /rh/avances-salaire -> 201, réapparaît non remboursée
+  remboursement réel : POST /rh/avances-salaire/{id}/rembourser -> 204,
+    bouton « Rembourser » disparaît ensuite
+
+Total : 21 contrôles, 0 échec.
+```
+
+**Piège rencontré et corrigé** : le 3e lien de navigation ajouté au
+bandeau de `tableau-bord.html` (« Ressources humaines ») faisait déborder
+l'écran entre 720px et ~820px — la règle générique de `styles.css` ne
+repasse en colonne qu'en dessous de 719px. Corrigé par un `<style>` scopé
+à `tableau-bord.html` (voir `server/README.md`, section C6/cycle 18).
+`verifier-cablage.mjs` (77/77) et `verifier-echappement-html.mjs` (11/11)
+rejoués après correction : 0 régression.
+
+Suite pytest complète inchangée : **135/135** (aucun code serveur touché
+ce cycle).
+
+---
+
 ## Cycle 17 — annulation de vente, régularisation d'écart (chantier C5), 2026-09-13
 
 Migration 017 (`annulation_vente_regularisation_ecart`) : `annuler_vente()`
