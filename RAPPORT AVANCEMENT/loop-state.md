@@ -35,7 +35,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C5 | Ventes et facturation | **43 %** | Cycle 6, durci par le cycle de correction après C7. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` (`server/app/routes/ventes.py`) enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. Vérifié par exécution : 8/8 tests pytest dédiés (55/55 au total, 0 régression), suite SQL du cycle 2 rejouée à jour (44/44 protections, 52/52 habilitations, **6/6 concurrence — réécrite pour le nouveau comportement anti-survente**, réversibilité des migrations confirmée), et 10/10 contrôles Playwright bout-en-bout sur l'écran de vente réellement câblé (`verifier-vente-reelle.mjs`) : vente normale (aperçu affiché AVANT validation identique à la confirmation serveur), vente à découvert acceptée avec écart affiché, crédit client absent des choix, responsable contraint de choisir un site. **+3 points (cycle de correction)** : fuseau horaire de `/ventes/synthese-jour` fixé à Africa/Douala au lieu d'hériter d'un réglage faux (Europe/Paris) — le « jour » des ventes dépendait silencieusement de l'horloge du poste serveur ; recherche/panier de `vente.html` ne construisent plus le HTML par concaténation non échappée (nom d'article), vérifié par un essai d'injection réel. Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), annulation d'une vente, régularisation d'un écart, documents imprimés (ticket/facture), écarts de stock pas encore affichés au tableau de bord (prévu chantier C7). |
 | C6 | Comptabilité et RH | **0 %** | Non vérifié. `transactions`, `employes`, `absences_conges`, `avances_salaire` présents. Manquent : clôture de caisse (addendum g), contre-passation d'annulation, `transactions.vente_id` non unique, audit des corrections. |
 | C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
-| C8 | Tableaux de bord et rapports | **45 %** | Cycle 10. Dernière carte encore simulée du tableau de bord câblée pour de vrai (`GET /tableau-bord/alertes-stock`, responsable, tous sites) ; historique des comptages filtrable par période, tous sites (`GET /inventaire/historique-comptages`) ; deux exports Excel/PDF (`GET /rapports/articles`, `GET /rapports/ventes`) dont le **gating du prix par rôle est posé en SQL**, prouvé en relisant le contenu réel du fichier produit (`openpyxl`, `pypdf`) pour les 3 rôles — pas seulement le code HTTP. Aucune nouvelle migration nécessaire (données déjà décidées depuis C1/C4/C5). Vérifié par exécution : 17/17 tests pytest dédiés (90/90 au total, 0 régression), 76/76 Playwright sur l'écran câblé (+2 par rapport au cycle 9), 0 régression sur les 3 autres suites Playwright (10/10, 17/17, 11/11). Manquent : bascule vue consolidée/par site (les données portent déjà `site_id`, la bascule elle-même n'a pas d'écran), écran dédié pour l'historique des comptages et les exports, clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel), paquet Windows (.exe) non re-fabriqué avec les 3 nouvelles dépendances. **Constaté au contrôle de boucle après cycle 10** (n'entame pas le score) : le cloisonnement par site des deux exports fonctionne (vérifié par exécution directe) mais n'a pas de test dédié dans `test_rapports.py` — il repose implicitement sur la RLS du cycle 2. |
+| C8 | Tableaux de bord et rapports | **60 %** | Cycles 10 et 12. Alertes de stock, historique des comptages et deux exports Excel/PDF, **désormais tous câblés sur un vrai écran** (`maquette/rapports.html`, cycle 12) : historique filtré par période (responsable), export du catalogue (les 3 rôles), export des ventes (responsable, agent comptabilité). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit (`openpyxl`, `pypdf`) pour les 3 rôles au niveau API (cycle 10) **et** par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12, en-têtes de fichier relus : `PK`/`%PDF`). `telechargerFichier()` (nouveau, `api.js`) : un `<a href>` nu ne peut pas porter le jeton de session, contournement par lecture en `blob()`. Vérifié par exécution : 90/90 pytest (aucune route serveur changée ce cycle), 6 suites Playwright dont `verifier-rapports-reel.mjs` (nouveau, 29/29) — 0 régression après correction d'un débordement à 768 px trouvé en ajoutant un lien de navigation à `vente.html` (repli scopé à cet écran, cycle 12). Manquent : bascule vue consolidée/par site (les données portent déjà `site_id`, la bascule elle-même n'a pas d'écran), clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). **Reste du constat du contrôle de boucle après cycle 10** (n'entame pas le score) : le cloisonnement par site des deux exports fonctionne mais n'a toujours pas de test dédié dans `test_rapports.py`. |
 | C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
 | C10 | Mobile et API web *(priorité 1)* | **30 %** | Cycle 5. Les deux écrans mobile-first (tableau de bord responsable, comptage d'inventaire) sont désormais **la même application web**, session réelle, testée et capturée à 360/390/768 px avec de vrais comptes — première preuve d'exécution sur ce chantier (`verifier-cablage.mjs`). Reste : accès démontré depuis un **téléphone physique** sur le LAN ou via tunnel (seules des largeurs de navigateur ont été testées ici, pas un appareil réel), API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **55 %** | Cycle 3. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse (vérifié par expression régulière), erreurs SQL jamais renvoyées telles quelles au client. Reste : révocation de session, limiteur de débit partagé (multi-processus), audit de sécurité plus large (dépendances, en-têtes HTTP, TLS — hors périmètre local de dev). |
@@ -43,7 +43,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 11 : ≈ 43 %** (C0 55, C1 80, C2 65, C3 60, C4 68, C5 43, C7 50, C8 45, C9 50, C10 30, C11 55, C14 40, autres 0).
+**Moyenne indicative après le cycle 12 : ≈ 44 %** (C0 55, C1 80, C2 65, C3 60, C4 68, C5 43, C7 50, C8 60, C9 50, C10 30, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -1289,14 +1289,91 @@ propriétaire a demandé un bilan complet des 15 chantiers puis a validé
 
 ---
 
+### Cycle 12 — Écran de rapports : C8 — 2026-09-13
+
+Quatrième cycle mené sous le processus corrigé en 4 étapes de `SKILL.md`.
+Précédé d'une demande explicite du propriétaire : bilan complet des 15
+chantiers (donné en pourcentage, avec preuve pour chacun) et plan
+d'exécution hiérarchisé pour les cycles suivants — ce bilan est resté hors
+du journal (donné directement en réponse), le propriétaire ayant ensuite
+choisi l'option qu'il contenait.
+
+- **Étape 1 — Diagnostic du cycle précédent (cycle 11, C4)** : voir
+  « Contrôle de boucle — après cycle 11 » ci-dessus. Tout rejoué à
+  l'identique (100/100 pytest, 44/44+52/52+6/6 SQL, 5 suites Playwright),
+  1 constat trouvé (n°3, traçabilité de prix sans changement réel) —
+  n'entame pas le score de C4, regroupé avec le constat n°2 pour un futur
+  cycle de correction.
+- **Étape 2 — Propositions** : une seule option, déjà retenue par le
+  propriétaire dans le plan hiérarchisé qu'il avait demandé — Cycle 12,
+  écran pour C8 (historique des comptages + exports), priorité 2 du
+  découpage proposé au cycle 11.
+- **Étape 3 — Objectif et plan** : donner une interface aux deux briques
+  de C8 sans écran depuis le cycle 10, sans toucher au code serveur sauf
+  découverte en cours de route. **Validé explicitement par le
+  propriétaire** (« je valide »).
+- **Étape 4 — Mise en œuvre** : branche `cycle-12-ecran-rapports`.
+  - `maquette/api.js` : `appelApiBrut()` (nouveau, factorise la requête
+    authentifiée et la traduction d'erreur, partagée par `appelApi()` et
+    la nouveauté ci-dessous) ; `telechargerFichier()` (nouveau) — un
+    `<a href>` nu ne peut pas porter le jeton de session, contournement
+    par lecture de la réponse en `blob()` et clic simulé sur une ancre
+    temporaire ; `fcfa()` inchangé.
+  - `maquette/rapports.html` (nouveau) : trois sections gatées par rôle —
+    historique des comptages (responsable, période choisie, tableau),
+    export du catalogue (les 3 rôles, Excel/PDF), export des ventes
+    (responsable, agent comptabilité, période + Excel/PDF). Aucune
+    nouvelle route serveur nécessaire : les trois existaient et étaient
+    déjà testées depuis le cycle 10.
+  - Liens d'accès ajoutés au bandeau de `tableau-bord.html`, `stock.html`
+    et `vente.html` (ce dernier n'avait jusqu'ici aucun lien vers un
+    second écran, pour l'agent comptabilité).
+  - **Régression trouvée et corrigée en écrivant ce cycle** : le lien
+    ajouté au bandeau déjà chargé de `vente.html` (titre, badge de rôle,
+    note du facturier papier) faisait déborder l'écran horizontalement à
+    768 px — juste sous le seuil de retour à la ligne commun (719 px,
+    `styles.css`), jamais atteint par les bandeaux plus courts des autres
+    écrans. Trouvé par `verifier-cablage.mjs` (0 échec attendu, 1 obtenu),
+    corrigé par un repli CSS scopé à cet écran seul (`.bandeau--vente`),
+    sans toucher au seuil partagé.
+  - `maquette/verification/verifier-rapports-reel.mjs` (nouveau) :
+    historique filtré par période avec un vrai écart affiché (comptage
+    semé à l'avance) ; sections visibles/absentes vérifiées pour les 3
+    rôles ; **un clic sur un bouton d'export intercepte le vrai
+    téléchargement de navigateur** (`page.waitForEvent("download")`) et
+    relit les premiers octets du fichier obtenu (`PK` pour un `.xlsx`,
+    `%PDF` pour un `.pdf`) — pas seulement un code HTTP 200 ; aucune
+    occurrence de « FCFA » sur l'écran de l'agent stock ; captures aux
+    5 largeurs.
+- **Vérification par exécution** :
+  - `verifier-rapports-reel.mjs` (nouveau) : **29/29**, réussi dès la
+    première exécution complète (aucun aller-retour de débogage sur le
+    script lui-même, contrairement au cycle 11).
+  - Suite pytest complète : **100/100**, inchangée (aucune route serveur
+    modifiée ce cycle).
+  - 0 régression sur les 5 suites Playwright existantes une fois le
+    débordement de `vente.html` corrigé : `verifier-cablage.mjs` **76/76**,
+    `verifier-vente-reelle.mjs` **10/10**, `verifier-inventaire-reel.mjs`
+    **17/17**, `verifier-echappement-html.mjs` **11/11**,
+    `verifier-stock-reel.mjs` **26/26**.
+  - Aucune migration à vérifier par exécution SQL directe (aucun
+    changement de schéma) ; la suite `db/tests/executer_tests.sh` reste à
+    l'état déjà revérifié pendant le diagnostic du cycle précédent.
+- **Documentation** : `server/README.md` (section cycle 12 ajoutée sous
+  C8), `maquette/verification/README.md`, `loop-state.md`.
+- **Score** : C8 **45 % → 60 %**. Commit, PR sur `cycle-12-ecran-rapports`
+  — **non fusionnée**, sur instruction du propriétaire.
+- **Reste ouvert** : bascule vue consolidée/par site (pas d'écran),
+  clôture de caisse (point g) et numéro de facturier (point c) non
+  tranchés, absence persistante d'un test dédié au cloisonnement par site
+  des exports (constat du contrôle de boucle après cycle 10, toujours pas
+  traité), constats n°2 et n°3 de C4 (leur propre cycle de correction).
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
-1. **Cycle 12 — écran pour C8** (proposé au cycle 11, priorité 2 du
-   découpage, **validé par le propriétaire — cycle en cours**) :
-   historique des comptages et exports Excel/PDF n'ont toujours aucune
-   interface (API + pytest seulement, cycle 10) — un écran (boutons de
-   téléchargement, sélecteur de période) lèverait le plafond actuel de C8.
-2. **Correction des constats n°2 et n°3 de C4** : n°2 (contrôle de boucle
+1. **Correction des constats n°2 et n°3 de C4** : n°2 (contrôle de boucle
    après cycle 9) — absence de vérification de cohérence article/quantité
    sur les retours client et fournisseur contre le document d'origine
    réellement référencé (`ventes_lignes`, quantité reçue), exige une
@@ -1305,14 +1382,19 @@ propriétaire a demandé un bilan complet des 15 chantiers puis a validé
    changement de prix même sans changement réel, se déclenche dans l'usage
    ordinaire de l'écran (formulaire pré-rempli). Les deux touchent l'audit
    des articles, un travail de fond distinct de l'ergonomie d'écran.
-3. **C6 (comptabilité/RH)** : reste entièrement à 0 %, sans blocage connu
-   par une décision non tranchée.
-4. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
+2. **C6 (comptabilité/RH)**, hors clôture de caisse : reste entièrement à
+   0 %, sans blocage connu par une décision non tranchée.
+3. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
    développement — un testeur humain, chronomètre en main, sur le serveur
    désormais câblé pour de vrai jusqu'au comptage d'inventaire (protocole
    exact au §1 bis). Lèverait le plafond de 60 % sur C9 et C10 si les
    résultats sont conformes. Peut se faire à tout moment, en parallèle d'un
    autre cycle.
+4. **Test dédié au cloisonnement par site des exports** (constat du
+   contrôle de boucle après cycle 10, toujours ouvert) : `test_rapports.py`
+   ne teste pas explicitement que l'export d'un agent ne contient que son
+   propre site — ça fonctionne (vérifié par exécution directe deux fois),
+   mais ce n'est pas dans la suite automatisée.
 5. **C3 (numéro facturier, addendum c)** ou **C6 (clôture de caisse,
    addendum g)** : nécessitent au préalable une décision du propriétaire,
    non tranchée à ce jour.

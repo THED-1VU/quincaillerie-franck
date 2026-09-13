@@ -62,12 +62,11 @@ async function lireJsonSecurise(reponse) {
 }
 
 /**
- * Appelle une route du serveur en ajoutant automatiquement le jeton de
- * session. Lève une Error au message déjà en français (celui du serveur pour
- * un refus, un message générique pour une panne réseau) — jamais l'erreur
- * brute de fetch().
+ * Fait la requête authentifiée et la traduction d'erreur commune à
+ * appelApi() et telechargerFichier() (cycle 12) — renvoie la Response
+ * BRUTE (pas encore lue), pour que l'appelant choisisse .json() ou .blob().
  */
-async function appelApi(chemin, options = {}) {
+async function appelApiBrut(chemin, options = {}) {
   const session = Session.lire();
   const entetes = Object.assign({}, options.headers || {});
   if (session && session.jeton) entetes["Authorization"] = "Bearer " + session.jeton;
@@ -89,9 +88,44 @@ async function appelApi(chemin, options = {}) {
     erreur.statut = reponse.status;
     throw erreur;
   }
+  return reponse;
+}
 
+/**
+ * Appelle une route du serveur en ajoutant automatiquement le jeton de
+ * session. Lève une Error au message déjà en français (celui du serveur pour
+ * un refus, un message générique pour une panne réseau) — jamais l'erreur
+ * brute de fetch().
+ */
+async function appelApi(chemin, options = {}) {
+  const reponse = await appelApiBrut(chemin, options);
   if (reponse.status === 204) return null;
   return lireJsonSecurise(reponse);
+}
+
+/**
+ * Télécharge un fichier authentifié (export Excel/PDF, cycle 12) : un lien
+ * <a href> nu ne peut pas porter le jeton de session, donc on lit la
+ * réponse en blob() et on simule un clic sur une ancre temporaire — seule
+ * façon de déclencher un téléchargement de navigateur pour une requête qui
+ * doit passer par fetch(). Le nom de fichier vient du Content-Disposition
+ * du serveur (routes/rapports.py) si présent, sinon d'une valeur de repli.
+ */
+async function telechargerFichier(chemin, nomFichierParDefaut) {
+  const reponse = await appelApiBrut(chemin);
+  const blob = await reponse.blob();
+  const entete = reponse.headers.get("Content-Disposition") || "";
+  const correspondance = /filename="([^"]+)"/.exec(entete);
+  const nomFichier = correspondance ? correspondance[1] : nomFichierParDefaut;
+
+  const url = URL.createObjectURL(blob);
+  const lien = document.createElement("a");
+  lien.href = url;
+  lien.download = nomFichier;
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+  URL.revokeObjectURL(url);
 }
 
 /**
