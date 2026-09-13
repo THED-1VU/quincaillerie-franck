@@ -4,8 +4,15 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 16 — comptabilité et RH, C6**,
-  2026-09-13 (PR #17, fast-forward, commit `548995f`) ; précédé du
+- Dernier cycle fusionné : **Cycle 19 — reçu de vente imprimable, C5**,
+  2026-09-13 (PR #21, fast-forward, commit `6b9acad`) ; précédé du
+  **Cycle 18 — écran dédié RH, C6** (PR #20, fast-forward, commit
+  `b5919ca`) et du **Cycle 17 — annulation de vente et régularisation
+  d'écart, C5** (PR #19, fast-forward, commit `40c41a8`) — lot de 3 PR
+  empilées (#20 sur #19, #21 sur #20), chacune retargée vers `main` avant
+  fusion de sa base pendant qu'elle était encore ouverte (règle issue de
+  l'incident de la PR #16, ci-dessous) : les trois fusions et suppressions
+  de branche se sont enchaînées sans accroc. Précédé du
   **Cycle 15 — accès réseau local, C10** (PR #18 — réouverture propre de
   la PR #16, close automatiquement par GitHub après suppression de sa
   branche de base ; leçon retenue : ne plus supprimer une branche de base
@@ -1669,10 +1676,10 @@ boucle ci-après).
 - **Documentation** : `db/README.md` (ligne migration 017),
   `db/tests/DERNIER_RESULTAT.md`, `server/README.md` (section C5 étendue),
   `server/tests/DERNIER_RESULTAT.md`, `loop-state.md`.
-- **Score** : C5 **43 % → 55 %**. Commit, PR sur
-  `cycle-17-c5-annulation-regularisation` — **non fusionnée**, sur
-  instruction du propriétaire (à confirmer avant fusion, comme pour les
-  cycles précédents).
+- **Score** : C5 **43 % → 55 %**. Commit, PR #19 sur
+  `cycle-17-c5-annulation-regularisation`, **fusionnée le 2026-09-13**
+  sur instruction explicite du propriétaire (commit de fusion `40c41a8`,
+  fast-forward, branche supprimée).
 - **Reste ouvert** : n° facturier + vendeur obligatoires (addendum point
   c, non tranché — objectif anti-vol volontairement incomplet), documents
   imprimés (ticket/facture), régularisation des écarts de COMPTAGE
@@ -1720,8 +1727,9 @@ sans aucune interface.
 - **Documentation** : `server/README.md` (section C6 étendue),
   `server/tests/DERNIER_RESULTAT.md`, `PERIMETRE_LIVRE.md` (3 lignes
   §3.12 passées de « Spécifié » à « Confirmé (test) »), `loop-state.md`.
-- **Score** : C6 **45 % → 55 %**. Commit, PR sur `cycle-18-c6-ecran-rh`
-  — **non fusionnée**, sur instruction du propriétaire.
+- **Score** : C6 **45 % → 55 %**. Commit, PR #20 sur `cycle-18-c6-ecran-rh`,
+  **fusionnée le 2026-09-13** sur instruction explicite du propriétaire
+  (commit de fusion `b5919ca`, fast-forward, branche supprimée).
 - **Reste ouvert** : clôture de caisse (point g, non tranché),
   contre-passation d'annulation, audit des corrections.
 
@@ -1768,9 +1776,10 @@ Troisième et dernier des trois chantiers de ce lot.
   « Impression » mise à jour honnêtement : PDF confirmé par test, mais
   format A4 — pas un ticket thermique — et aucun code-barres),
   `loop-state.md`.
-- **Score** : C5 **55 % → 62 %**. Commit, PR sur
-  `cycle-19-c5-recu-vente-pdf` — **non fusionnée**, sur instruction du
-  propriétaire.
+- **Score** : C5 **55 % → 62 %**. Commit, PR #21 sur
+  `cycle-19-c5-recu-vente-pdf`, **fusionnée le 2026-09-13** sur
+  instruction explicite du propriétaire (commit de fusion `6b9acad`,
+  fast-forward, branche supprimée).
 - **Reste ouvert** : n° facturier + vendeur obligatoires (point c, non
   tranché), impression physique sur une imprimante réelle (non
   vérifiable par l'agent), ticket thermique / code-barres (non demandés
@@ -1784,13 +1793,11 @@ Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
 terminé et fusionné (PR #15, #18, #17 — voir la note sur la PR #16, close
 automatiquement lors de l'empilage, dans l'en-tête de ce document). Le lot
 de 3 chantiers suivant (cycles 17, 18, 19 — annulation/régularisation C5,
-écran RH C6, reçu de vente PDF C5) est **terminé, PR #19/#20/#21
-ouvertes**, fusion laissée au propriétaire — les trois **empilées** dans
-l'ordre (#20 sur #19, #21 sur #20) : `ventes.py` porte une vraie
-dépendance de code d'un cycle à l'autre (route d'annulation du 17,
-lue/étendue par la route de reçu du 19), retarger chaque PR vers `main`
-au fur et à mesure des fusions, jamais avant (voir la leçon de la PR #16
-dans l'en-tête de ce document).
+écran RH C6, reçu de vente PDF C5) est **terminé et fusionné** (PR
+#19/#20/#21, empilées dans l'ordre — retargées vers `main` avant chaque
+fusion de leur base pendant qu'elles étaient encore ouvertes, comme la
+leçon de la PR #16 le prescrit ; les trois fusions et suppressions de
+branche se sont enchaînées sans accroc cette fois).
 
 1. **Vérification C10 depuis un vrai téléphone physique** : la couche
    réseau est prouvée (cycle 15) — reste la dernière étape, qui doit être
