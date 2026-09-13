@@ -28,6 +28,18 @@ non câblée (`maquette/`).
 > reste simulée (chantier C8), signalée explicitement à l'écran — le testeur
 > humain doit considérer cette pastille « donnée simulée » comme la
 > confirmation attendue, pas comme un bug.
+>
+> **Mise à jour 2026-09-13 : première campagne réelle effectuée**, voir
+> §4 bis. Le tableau n'est plus vide : **1/7 mesures chronométrées
+> conforme au protocole (§1, pire des 3 essais), 4/9 contrôles téléphone
+> conformes, 1/4 contrôles de compréhension conformes**. Score C9/C10
+> ajusté en conséquence dans `RAPPORT AVANCEMENT/loop-state.md` — à la
+> baisse pour C9 (l'objectif principal, sous la lecture du protocole,
+> n'est PAS atteint au pire essai), à la hausse pour C10 (la preuve
+> manquante — un vrai téléphone — existe enfin, même si elle révèle des
+> défauts réels). **11 constats ouverts (UX-0, méthodologie, + UX-1 à
+> UX-10), aucun corrigé** — le choix du cycle qui les traite revient au
+> propriétaire.
 
 ---
 
@@ -219,6 +231,12 @@ la seule voie pour lever le plafond de 60 %.
 
 Reproduire ce tableau à chaque campagne. Tant qu'il est vide, **C9 ≤ 60 %**.
 
+**Ce gabarit reste disponible pour une prochaine campagne** — la première
+campagne réelle (§4 bis, ci-dessous) a utilisé un format plus détaillé
+(sections A/B/C séparées PC/téléphone/compréhension), conservé tel quel
+par souci de fidélité à la mesure réelle plutôt que forcé dans les lignes
+ci-dessous.
+
 | # | Mesure | Objectif | Essai 1 | Essai 2 | Essai 3 | Retenu (pire) | Conforme ? | Observation / capture |
 |---|--------|----------|---------|---------|---------|---------------|-----------|-----------------------|
 | A | Connexion (chrono) | < 30 s | | | | | ☐ oui ☐ non | |
@@ -248,3 +266,130 @@ Reproduire ce tableau à chaque campagne. Tant qu'il est vide, **C9 ≤ 60 %**.
 
 - ☐ Toutes les lignes conformes → C9 peut viser 100 % (sous réserve des autres critères du cycle en cours).
 - ☐ Lignes non conformes : ______________________ → C9 plafonné, corrections à planifier.
+
+---
+
+## 4 bis. Campagne réelle n°1 — mesures effectuées sur PC et téléphone
+
+**Le tableau ci-dessus (§4) n'a pas été rempli tel quel** : le testeur a
+utilisé un format plus détaillé, reproduit ici **sans aucune modification
+des valeurs mesurées**. Les identités de campagne ci-dessous (testeur,
+date, matériel exact) n'ont **pas** été renseignées par le testeur — non
+inventées ici, laissées telles quelles.
+
+**Testeur :** *(non renseigné)* — **Date :** *(non renseignée)* —
+**Poste PC :** *(marque/modèle/résolution non renseignés)* —
+**Téléphone :** *(marque/modèle/taille d'écran non renseignés)* —
+**Navigateur PC :** *(non renseigné)* — **Navigateur mobile :** *(non renseigné)*
+
+### A — Chronométrage des parcours (poste PC de caisse)
+
+> Le testeur a retenu **le troisième essai** pour juger la conformité
+> (« le premier mesure la découverte, le troisième mesure l'usage
+> courant »). Le protocole ci-dessus (§1) retient **le pire des 3
+> essais**. Les deux lectures sont données ; **la colonne « Conforme
+> (pire des 3, §1) » est celle utilisée pour noter C9 ci-dessous** — voir
+> le constat UX-0 plus bas.
+
+| # | Parcours | Objectif | Essai 1 | Essai 2 | Essai 3 | Conforme (3ᵉ essai, lecture du testeur) | Conforme (pire des 3, §1) |
+|---|---|---|---|---|---|---|---|
+| A1 | Connexion, de l'écran vide au tableau de bord | < 30 s | 41 s | 22 s | 18 s | oui | **non** (41 s) |
+| A2 | Vente de 3 articles, prix négociés, validation | < 60 s | 2 min 10 | 1 min 24 | 58 s | oui | **non** (2 min 10) |
+| A3 | Ajouter un article au panier (nombre d'actions) | ≤ 2 | 4 | 3 | 3 | non | non |
+| A4 | Corriger une quantité déjà saisie | sans changer d'écran | oui | oui | oui | oui | oui |
+| A5 | Supprimer une ligne du panier | < 5 s | 7 s | 4 s | 3 s | oui | **non** (7 s) |
+| A6 | Vente entière au clavier, sans toucher la souris | possible | non | non | non | non | non |
+| A7 | Saisie d'un comptage d'inventaire, 10 articles | < 2 min | 3 min 05 | 2 min 12 | 1 min 51 | oui | **non** (3 min 05) |
+
+**Sous la lecture du protocole (§1, pire des 3 essais) : 1/7 conforme (A4 seulement).**
+Sous la lecture du testeur (3ᵉ essai) : 5/7 conforme.
+
+### B — Rendu et saisie depuis le téléphone
+
+| # | Contrôle | Attendu | Constaté | OK ? |
+|---|---|---|---|---|
+| B1 | Connexion depuis le téléphone | fonctionne | fonctionne | oui |
+| B2 | Débordement horizontal, écran par écran | aucun | tableau de bord déborde de ~40 px | **non** |
+| B3 | Texte lisible sans zoomer | oui | oui sauf les chiffres des cartes, trop petits | **non** |
+| B4 | Boutons atteignables au pouce, une main | oui | oui | oui |
+| B5 | Saisie d'une recette depuis le téléphone | < 45 s | 1 min 02 | **non** |
+| B6 | Comptage d'inventaire debout, une main | faisable | faisable, clavier numérique ne s'ouvre pas seul | **non** |
+| B7 | Aucun montant en FCFA visible en agent stock | aucun | aucun | oui |
+| B8 | Passage en mode paysage | pas de casse | pas de casse | oui |
+| B9 | Comportement si le Wi-Fi coupe en pleine saisie | message clair | tourne indéfiniment, aucun message | **non** |
+
+**4/9 conforme.**
+
+### C — Compréhension, avec un utilisateur non informaticien
+
+| # | Question | Réponse observée |
+|---|---|---|
+| C1 | Comprend-il le message d'erreur de connexion ? | oui, immédiatement |
+| C2 | Trouve-t-il seul comment annuler une ligne ? | **non**, a cherché ~20 s |
+| C3 | Comprend-il à quoi sert le prix affiché en gris ? | **non**, l'a pris pour le prix à facturer |
+| C4 | Sait-il qu'un comptage est définitif une fois validé ? | **non** |
+
+**1/4 conforme.**
+
+### D — Verdict et suites (tel que transmis — non complété par le testeur)
+
+- Objectif principal (vente complète en moins de 60 secondes) : *(le
+  testeur n'a pas tranché explicitement entre « atteint »/« non atteint »
+  — voir constat UX-0 : sous la lecture du protocole §1, non atteint ;
+  sous la lecture 3ᵉ essai du testeur, atteint à 58 s)*.
+- Points à corriger, classés par gêne réelle : *(non renseigné par le testeur)*
+- Ce qui a bien fonctionné et ne doit pas être touché : *(non renseigné par le testeur)*
+- Blocages rencontrés pendant le test lui-même : *(non renseigné par le testeur — le test a pu être mené jusqu'au bout côté PC et côté téléphone, voir B1)*
+
+### Constats — à traiter dans un cycle à choisir par le propriétaire (aucune correction faite ici)
+
+- **UX-0 (méthodologie)** — Le testeur a jugé la conformité des mesures
+  chronométrées (A1, A2, A5, A7) sur le **3ᵉ essai**, alors que le
+  protocole documenté depuis le cycle 1 (§1) retient **le pire des 3
+  essais**. Sous cette dernière lecture, 4 des 7 mesures chronométrées
+  changent de conclusion (oui → non), y compris **l'objectif principal**
+  (vente de 3 articles en moins de 60 s : 2 min 10 au pire essai). Aucune
+  des deux lectures n'est « fausse » — elles répondent à deux questions
+  différentes (résistance au premier contact vs. vitesse une fois
+  pratiqué) — mais le choix de laquelle compte pour la recette doit être
+  tranché explicitement avant la prochaine campagne, pas laissé implicite.
+- **UX-1** — Ajouter un article au panier prend 3-4 actions, pas ≤ 2
+  (A3).
+- **UX-2** — Impossible de faire une vente entière au clavier seul (A6) —
+  contredit « Ce qui est déjà acquis au cycle 1 » (§3), qui listait ce
+  parcours comme « OK partiel » sur la seule foi des raccourcis
+  disponibles, jamais vérifié par un humain sur un vrai clavier avant ce
+  test.
+- **UX-3** — Le tableau de bord déborde d'environ 40 px sur le téléphone
+  réel utilisé (B2), alors qu'aucun débordement n'est détecté par les
+  suites automatisées aux largeurs standard (360/390/768/1366/1920 px,
+  `verifier-cablage.mjs`). Écart à investiguer : largeur effective du
+  vrai téléphone hors des 3 largeurs testées automatiquement, zoom
+  système, barre de navigateur mobile qui réduit la largeur utile, ou
+  autre — pas encore diagnostiqué.
+- **UX-4** — Les chiffres des cartes du tableau de bord sont trop petits
+  pour être lus sans zoomer sur téléphone (B3).
+- **UX-5** — Saisir une recette depuis le téléphone prend 1 min 02, pas
+  < 45 s (B5).
+- **UX-6** — Le clavier numérique ne s'ouvre pas automatiquement pour la
+  saisie d'un comptage sur téléphone (B6) — laisse penser à un champ de
+  saisie sans l'attribut adéquat (`inputmode`/`type="number"`), à
+  vérifier au diagnostic du cycle qui traitera ce constat.
+- **UX-7 (sévère)** — Si le Wi-Fi coupe pendant une saisie, l'écran
+  **tourne indéfiniment sans aucun message** (B9) — viole directement la
+  règle du projet « jamais un message brut, toujours un message clair en
+  français » (déjà vérifiée pour une panne réseau simulée côté PC,
+  `verifier-cablage.mjs`, mais visiblement pas pour une coupure **en
+  cours** de requête sur un réseau réel). Le plus sérieux des constats de
+  cette campagne : un utilisateur peut rester bloqué sans aucune
+  indication de ce qui se passe ni de quoi faire.
+- **UX-8** — Un utilisateur non formé ne trouve pas seul comment annuler
+  une ligne du panier (C2, ~20 s de recherche).
+- **UX-9** — Un utilisateur non formé comprend mal le prix affiché en
+  gris, le prenant pour le prix à facturer (C3) — à rapprocher de
+  l'addendum, point d (prix négociés vs. prix catalogue) : la confusion
+  observée porte exactement sur la distinction que ce point est censé
+  clarifier à l'écran.
+- **UX-10** — Un utilisateur non formé ne sait pas qu'un comptage
+  d'inventaire devient définitif une fois validé (C4) — aucun
+  avertissement explicite avant validation.

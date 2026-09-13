@@ -61,14 +61,14 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C6 | Comptabilité et RH | **55 %** | Cycle 16, complété au cycle 18. `transactions` (recette/dépense **hors vente**, historique filtrable par période), `employes`/`absences_conges`/`avances_salaire` (responsable seul, CDC §3.5) — tables et `GRANT` existant depuis les cycles 1/2, jamais exposés avant le cycle 16. `POST /transactions`, `POST/GET /rh/employes\|absences-conges\|avances-salaire`, `POST /rh/avances-salaire/{id}/rembourser`. La carte « Saisie rapide » de `tableau-bord.html` (simulée depuis le cycle 5) câble un vrai formulaire. **Cycle 18** : `maquette/rh.html`, écran dédié pour les trois routes RH (employés, absences/congés, avances sur salaire), lien ajouté au tableau de bord. **Correction d'une inexactitude du diagnostic d'origine** (cycle 16) : `transactions.vente_id` porte déjà un index unique partiel (`uq_transactions_recette_par_vente`, cycle 2) empêchant une double recette pour la même vente. Vérifié par exécution : 18/18 tests pytest dédiés (135/135 au total, 0 régression), `verifier-cablage.mjs` 77/77, `verifier-rh-reel.mjs` 21/21 (nouveau — employé/absence/avance créés depuis l'écran et retrouvés en base, remboursement réel). Manquent : clôture de caisse (point g, non tranché), contre-passation d'annulation, audit des corrections. |
 | C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
 | C8 | Tableaux de bord et rapports | **70 %** | Cycles 10, 12, 14 et 23. Alertes de stock, historique des comptages et deux exports Excel/PDF, tous câblés sur un vrai écran (`maquette/rapports.html`, cycle 12). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit pour les 3 rôles au niveau API (cycle 10) et par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12). **Cycle 14** : cloisonnement par site des exports, 2 tests dédiés. **Cycle 23** : bascule vue consolidée/par site sur `tableau-bord.html` — chaque route renvoyait déjà `site_id` par ligne, la bascule est un filtre purement d'affichage (aucune route ni migration nouvelle, aucun appel réseau au changement de vue). Vérifié par exécution : `verifier-cablage.mjs` +7 (87/87) — filtrer sur un site recalcule le total exactement (8 500 / 3 200 FCFA) et fait disparaître l'autre site de chaque carte, retour à « Les deux sites » retrouve le total consolidé identique (11 700 FCFA). Manquent : clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). |
-| C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
-| C10 | Mobile et API web *(priorité 1)* | **38 %** | Cycle 5, complété au cycle 15. Les deux écrans mobile-first sont **la même application web**, testée à 360/390/768 px. **Cycle 15** : trouvé par exécution — le serveur (dev ET paquet Windows) n'écoutait que sur `127.0.0.1`, **injoignable depuis n'importe quel autre appareil**, téléphone compris, même sur le même réseau. Corrigé (`--host 0.0.0.0` en dev, `server/fabrication/lanceur.py` pour le paquet, qui affiche désormais sa propre adresse réseau locale à l'utilisateur). Vérifié par exécution, dev et paquet Windows reconstruit : requête réelle vers l'adresse réseau locale de la machine (pas `127.0.0.1`) répondant correctement sur `/sante` et `/app/connexion.html`. **Non fermé** : la preuve manquante reste un **véritable téléphone physique** — ce que l'agent n'a pas — la couche réseau est prouvée, pas le rendu sur un vrai appareil. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
+| C9 | Ergonomie et UI *(priorité 1)* | **40 %** | Cycle 5, **réévalué à la baisse le 2026-09-13** par la première campagne humaine réelle (`UX_BASELINE.md` §4 bis). Les 4 écrans ne sont plus une maquette isolée (connexion, jeton, câblage réel — `verifier-cablage.mjs`, 87/87), messages d'erreur français vérifiés automatiquement, mais **le protocole documenté depuis le cycle 1 (§1, « on garde le pire des 3 essais ») donne 1/7 mesures chronométrées conformes** : l'objectif principal lui-même (vente de 3 articles < 60 s) n'est **pas** atteint au pire essai (2 min 10), seulement au 3ᵉ essai pratiqué (58 s) — un écart de méthode que le testeur a résolu autrement, consigné comme constat UX-0, pas tranché unilatéralement ici. 1/4 contrôles de compréhension conformes (un utilisateur non formé ne trouve pas seul comment annuler une ligne, confond le prix négocié affiché en gris avec le prix à facturer, ignore qu'un comptage devient définitif). **10 constats UX ouverts (UX-1 à UX-10), aucun corrigé** — le choix du cycle qui les traite revient au propriétaire. Ce que les vérifications automatiques ne mesurent toujours pas (vitesse perçue, compréhension) est désormais mesuré, et le résultat est **moins bon** que le score précédent ne le supposait. |
+| C10 | Mobile et API web *(priorité 1)* | **42 %** | Cycle 5, complété au cycle 15, **réévalué à la hausse le 2026-09-13** par la première campagne sur un vrai téléphone physique (`UX_BASELINE.md` §4 bis, section B) — la preuve manquante explicitement citée depuis le cycle 15 (« l'agent n'a pas de téléphone ») existe enfin, et confirme l'essentiel : connexion, boutons atteignables au pouce, mode paysage et confidentialité des montants pour l'agent stock fonctionnent réellement sur un appareil réel (4/9 contrôles). Mais révèle aussi des défauts réels non anticipés : le tableau de bord déborde d'environ 40 px sur ce téléphone alors qu'aucune suite automatisée (5 largeurs standard) ne l'a jamais détecté — écart non diagnostiqué (UX-3) ; chiffres illisibles sans zoom (UX-4) ; saisie d'une recette trop lente (UX-5) ; clavier numérique qui ne s'ouvre pas seul pour un comptage (UX-6) ; et surtout, **le plus sérieux constat de la campagne** : une coupure Wi-Fi en cours de saisie laisse l'écran tourner indéfiniment, sans aucun message (UX-7) — viole directement le principe du projet « jamais un message brut », jamais vérifié jusqu'ici pour une coupure réseau **en cours** de requête sur un réseau réel. **5 constats ouverts (UX-3 à UX-7), aucun corrigé.** Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **68 %** | Cycle 3, complété au cycle 22. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse, erreurs SQL jamais renvoyées telles quelles au client. **Cycle 22** : révocation de session (migration 018, `POST /auth/deconnexion`, `deps.obtenir_session()` vérifie la révocation à chaque requête — un jeton révoqué signature-valide et non expiré est quand même refusé, prouvé en le rejouant après déconnexion) ; en-têtes HTTP de sécurité (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) sur toute réponse. Vérifié par exécution : 4/4 tests pytest dédiés (144/144 au total, 0 régression, coût mesuré ~13 % de temps d'exécution en plus), `verifier-cablage.mjs` +3 (80/80, jeton intercepté avant déconnexion puis rejoué → refusé). Reste : limiteur de débit partagé entre processus (délibérément pas fait ce cycle — mérite sa propre vérification, pas glissé à la suite de deux autres changements de sécurité), audit plus large (dépendances, TLS — hors périmètre local de dev). |
 | C12 | Sauvegarde et exploitation | **45 %** | Cycle 21. `db/outils/sauvegarder.ps1` (`pg_dump -Fc` + `pg_dumpall --roles-only`, rôles applicatifs globaux au serveur) et `restaurer.ps1` (restaure **toujours** vers une base séparée, refuse d'écraser sauf `-Forcer` explicite). Vérifié par exécution réelle : sauvegarde de `quincaillerie_test`, restaurée à côté — comptes de lignes identiques ET **droits par colonne préservés** (`has_column_privilege()` avant/après restauration). Trois pièges PowerShell trouvés et corrigés en écrivant les scripts (caractères accentués, capture `$null` d'une commande sans sortie, `[int]` sur chaîne vide). Manquent : fréquence, conservation, RPO/RTO (addendum, point i, non tranché) ; planification automatique (Tâches planifiées Windows) ; test de restauration sur un second poste physique ; onduleur, mise à jour des postes (addendum i). |
 | C13 | Tests automatisés et qualité | **55 %** | Cycle 20 — correction d'une inexactitude du diagnostic d'origine (comme pour C6 au cycle 16) : le score restait à 0 % alors que **140 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **7 suites Playwright** (193 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant — jamais reflété dans le score. `db/outils/verifier_tout.sh` (nouveau) enchaîne les trois couches en une seule commande, vérifié par exécution (exit code 0, 0 échec). Deux pièges trouvés en l'écrivant : la limite de connexion de `config.ini` (10/min) fait échouer les suites en cascade au-delà de la première ; l'étape de réversibilité SQL recrée `qf_app` sans mot de passe. Manquent : CI automatisée sur chaque push (`server/tests/conftest.py` appelle un chemin Windows en dur, non portable vers un runner Linux sans correction dédiée — chantier à part), couverture des parcours nécessitant une imprimante ou un téléphone réels. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 23 : ≈ 58 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 70, C9 50, C10 38, C11 68, C12 45, C13 55, C14 40).
+**Moyenne indicative après la campagne UX du 2026-09-13 : ≈ 57 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 70, C9 40, C10 42, C11 68, C12 45, C13 55, C14 40).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -2070,6 +2070,63 @@ se sont enchaînées sans accroc).
 
 ---
 
+### Campagne UX réelle n°1 — 2026-09-13 (aucun code, mesure humaine seule)
+
+Première campagne humaine réelle sur `UX_BASELINE.md` (§4 bis) — la
+seule voie documentée depuis le cycle 1 pour lever le plafond de 60 %
+sur C9/C10. Transmise par le propriétaire, intégrée **sans aucune
+modification des valeurs mesurées**. Aucune correction faite : les
+échecs sont consignés comme constats (UX-0 à UX-10), le choix du cycle
+qui les traite revient au propriétaire.
+
+- **Écart de méthode trouvé en intégrant les mesures (constat UX-0)** :
+  le protocole documenté depuis le cycle 1 (§1) retient **le pire des 3
+  essais** pour juger la conformité d'une mesure chronométrée ; le
+  testeur a retenu **le 3ᵉ essai** (usage pratiqué plutôt que première
+  découverte). Sous la lecture du protocole, 4 des 7 mesures
+  chronométrées changent de conclusion, y compris **l'objectif
+  principal** (vente de 3 articles < 60 s : 2 min 10 au pire essai, 58 s
+  au 3ᵉ). Les deux lectures répondent à des questions différentes,
+  légitimes toutes les deux — le score ci-dessous retient celle du
+  protocole déjà documenté, pas celle du testeur, par cohérence avec ce
+  qui était promis depuis le cycle 1 (« sans arrondir en faveur » de
+  qui que ce soit, y compris de l'agent qui a écrit le protocole).
+- **Section A (PC, 7 mesures)** : **1/7 conforme** (protocole) — seule la
+  correction d'une quantité sans changer d'écran passe. Échouent :
+  connexion, vente de 3 articles, ajout au panier (3-4 actions au lieu
+  de ≤ 2), suppression d'une ligne, vente au clavier seul, comptage de
+  10 articles.
+- **Section B (téléphone réel, 9 contrôles)** : **4/9 conforme** —
+  connexion, boutons au pouce, confidentialité des montants pour l'agent
+  stock et mode paysage fonctionnent réellement. Échouent : débordement
+  d'environ 40 px du tableau de bord (jamais détecté par les suites
+  automatisées aux 5 largeurs standard — écart non diagnostiqué),
+  chiffres illisibles sans zoom, saisie d'une recette trop lente,
+  clavier numérique qui ne s'ouvre pas seul pour un comptage, et surtout
+  **une coupure Wi-Fi en cours de saisie laisse l'écran tourner
+  indéfiniment sans aucun message** — le constat le plus sérieux de la
+  campagne, une vraie violation du principe « jamais un message brut »
+  jamais testée jusqu'ici pour une coupure réseau en cours de requête.
+- **Section C (compréhension, 4 questions, sans aide)** : **1/4
+  conforme** — un utilisateur non formé ne trouve pas seul comment
+  annuler une ligne (~20 s de recherche), confond le prix négocié
+  affiché en gris avec le prix à facturer, et ignore qu'un comptage
+  devient définitif une fois validé.
+- **Score** : C9 **50 % → 40 %** (baisse — l'objectif principal n'est
+  pas atteint au pire essai, la compréhension est nettement en dessous
+  de ce que les vérifications automatiques laissaient supposer). C10
+  **38 % → 42 %** (hausse — la preuve manquante depuis le cycle 15, un
+  vrai téléphone, existe enfin et confirme l'essentiel, même si elle
+  révèle des défauts réels).
+- **Documentation** : `UX_BASELINE.md` (§4 bis, nouveau ; callout de tête
+  mis à jour), `loop-state.md`.
+- **Reste ouvert** : 11 constats (UX-0 à UX-10), aucun corrigé — le
+  propriétaire choisira le cycle qui les traite. Le choix de convention
+  (pire des 3 essais vs 3ᵉ essai) reste lui-même à trancher explicitement
+  avant la prochaine campagne.
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
@@ -2120,15 +2177,15 @@ critères de recette formels).
 
 ### Candidats
 
-1. **Vérification C10 depuis un vrai téléphone physique** : la couche
-   réseau est prouvée (cycle 15) — reste la dernière étape, qui doit être
-   faite par le propriétaire ou un testeur muni d'un téléphone.
-2. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
-   développement — un testeur humain, chronomètre en main, sur le serveur
-   désormais câblé pour de vrai jusqu'au comptage d'inventaire (protocole
-   exact au §1 bis). Lèverait le plafond de 60 % sur C9 et C10 si les
-   résultats sont conformes. **Ne peut pas être exécuté par l'agent**
-   (mesure humaine).
+1. ~~**Vérification C10 depuis un vrai téléphone physique**~~ — **fait**
+   le 2026-09-13 (campagne UX ci-dessus, section B) : la connexion et le
+   rendu de base fonctionnent réellement sur un téléphone physique, avec
+   des défauts réels trouvés (constats UX-3 à UX-7).
+2. ~~**Mesures humaines de `UX_BASELINE.md`**~~ — **fait** le 2026-09-13
+   (campagne UX ci-dessus) : scores C9/C10 réévalués sur mesure réelle
+   (40 % / 42 %), 11 constats ouverts. **Reste à faire** : trancher la
+   convention de mesure (constat UX-0) et traiter les constats eux-mêmes,
+   chacun dans le cycle que choisira le propriétaire.
 3. **C5 (numéro facturier + vendeur, point c)**, **C6 (clôture de caisse,
    point g)**, **C3 (rôle caissier, point h)**, **C12 (automatisation des
    sauvegardes, point i)** : les quatre décisions structurantes viennent
