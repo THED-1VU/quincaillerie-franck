@@ -39,13 +39,13 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
 | C8 | Tableaux de bord et rapports | **62 %** | Cycles 10, 12 et 14. Alertes de stock, historique des comptages et deux exports Excel/PDF, tous câblés sur un vrai écran (`maquette/rapports.html`, cycle 12). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit pour les 3 rôles au niveau API (cycle 10) et par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12). **Cycle 14** : le cloisonnement par site des deux exports (déjà vérifié deux fois par exécution directe, jamais couvert par un test) a désormais 2 tests dédiés dans `test_rapports.py` — un agent stock du Magasin n'exporte aucun article du Comptoir, un agent comptabilité du Magasin n'exporte aucune vente du Comptoir. Vérifié par exécution : 106/106 pytest (104 + 2 nouveaux), aucun écran ni migration touchés. Manquent : bascule vue consolidée/par site (les données portent déjà `site_id`, la bascule elle-même n'a pas d'écran), clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). |
 | C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
-| C10 | Mobile et API web *(priorité 1)* | **30 %** | Cycle 5. Les deux écrans mobile-first (tableau de bord responsable, comptage d'inventaire) sont désormais **la même application web**, session réelle, testée et capturée à 360/390/768 px avec de vrais comptes — première preuve d'exécution sur ce chantier (`verifier-cablage.mjs`). Reste : accès démontré depuis un **téléphone physique** sur le LAN ou via tunnel (seules des largeurs de navigateur ont été testées ici, pas un appareil réel), API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
+| C10 | Mobile et API web *(priorité 1)* | **38 %** | Cycle 5, complété au cycle 15. Les deux écrans mobile-first sont **la même application web**, testée à 360/390/768 px. **Cycle 15** : trouvé par exécution — le serveur (dev ET paquet Windows) n'écoutait que sur `127.0.0.1`, **injoignable depuis n'importe quel autre appareil**, téléphone compris, même sur le même réseau. Corrigé (`--host 0.0.0.0` en dev, `server/fabrication/lanceur.py` pour le paquet, qui affiche désormais sa propre adresse réseau locale à l'utilisateur). Vérifié par exécution, dev et paquet Windows reconstruit : requête réelle vers l'adresse réseau locale de la machine (pas `127.0.0.1`) répondant correctement sur `/sante` et `/app/connexion.html`. **Non fermé** : la preuve manquante reste un **véritable téléphone physique** — ce que l'agent n'a pas — la couche réseau est prouvée, pas le rendu sur un vrai appareil. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **55 %** | Cycle 3. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse (vérifié par expression régulière), erreurs SQL jamais renvoyées telles quelles au client. Reste : révocation de session, limiteur de débit partagé (multi-processus), audit de sécurité plus large (dépendances, en-têtes HTTP, TLS — hors périmètre local de dev). |
 | C12 | Sauvegarde et exploitation | **0 %** | Diagnostic : « Backup and restore procedure : Not found ». Aucun script, aucune procédure. Onduleur, RPO/RTO, mise à jour des postes : à définir (addendum i). |
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 14 : ≈ 44 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 43, C7 50, C8 62, C9 50, C10 30, C11 55, C14 40, autres 0).
+**Moyenne indicative après le cycle 15 : ≈ 45 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 43, C7 50, C8 62, C9 50, C10 38, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -1508,13 +1508,57 @@ les cycles qui est resserré, pas leur contenu.
 
 ---
 
+### Cycle 15 — Accès réseau local pour C10 — 2026-09-13
+
+Deuxième chantier du lot. **Précision assumée dès le plan** : l'agent n'a
+pas de téléphone physique — ce cycle prouve la couche réseau, pas le
+rendu sur un vrai appareil, et le dit sans détour dans le score.
+
+- **Objectif** : lever le blocage technique trouvé en creusant le retard
+  de C10 — le serveur n'écoutait que sur `127.0.0.1`.
+- **Mise en œuvre** : branche `cycle-15-c10-acces-lan`.
+  - `server/fabrication/lanceur.py` : sépare l'adresse d'ÉCOUTE
+    (`HOTE_ECOUTE = "0.0.0.0"`, toutes les interfaces réseau) de l'adresse
+    ouverte dans le navigateur LOCAL (`HOTE = "127.0.0.1"`, inchangée) —
+    une même constante servait aux deux avant ce cycle, ce qui rendait
+    l'une des deux forcément fausse. `_adresse_lan()` (nouveau) : découvre
+    l'adresse IPv4 locale de la machine par l'astuce du socket UDP non
+    connecté (aucune donnée réellement envoyée), affichée au démarrage
+    avec l'URL à donner à un téléphone et un rappel sur le pare-feu
+    Windows (profil réseau, autorisation entrante).
+  - `server/README.md` : section dédiée, `--host 0.0.0.0` ajouté à la
+    commande de lancement documentée.
+- **Vérification par exécution** :
+  - Serveur de développement lancé avec `--host 0.0.0.0` : `curl` depuis
+    la même machine vers sa propre adresse réseau locale (`10.204.63.36`,
+    pas `127.0.0.1`) répond correctement sur `/sante` **et**
+    `/app/connexion.html` (200) — la maquette est bien servie, pas
+    seulement l'API.
+  - `lanceur.py` exécuté directement : le message affiché donne la bonne
+    adresse et le bon port ; la même vérification `curl` réussit sur
+    l'URL exacte affichée.
+  - **Paquet Windows reconstruit** (`construire.ps1`) et testé à froid
+    dans un dossier isolé : le message d'adresse réseau s'affiche, le
+    serveur écoute bien sur `0.0.0.0` (confirmé dans les journaux
+    `uvicorn`), `curl` vers l'adresse réseau locale répond sur `/sante`.
+  - Aucun test pytest n'exerçait `lanceur.py` (aucun avant, aucun après) ;
+    import du module vérifié sain. Suite pytest complète non rejouée :
+    aucun fichier qu'elle couvre n'a changé.
+- **Score** : C10 **30 % → 38 %** — une preuve partielle et honnête, pas
+  un chantier fermé.
+- **Reste ouvert** : la vérification depuis un **vrai téléphone physique**
+  reste entièrement à faire par le propriétaire ou un testeur ; API
+  dédiée, usage hors ligne, notifications.
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
-1. **C6 (comptabilité/RH)**, hors clôture de caisse : en cours (lot de
-   3 chantiers validé après le cycle 13, branche `cycle-15-...`).
-2. **C10, accès depuis un téléphone physique** : en cours (même lot,
-   branche `cycle-16-...`) — périmètre volontairement partiel, voir ce
-   cycle pour la raison (l'agent n'a pas de téléphone physique).
+1. **Vérification C10 depuis un vrai téléphone physique** : la couche
+   réseau est prouvée (cycle 15) — reste la dernière étape, qui doit être
+   faite par le propriétaire ou un testeur muni d'un téléphone.
+2. **C6 (comptabilité/RH)**, hors clôture de caisse : en cours (dernier
+   chantier du lot validé après le cycle 13, branche `cycle-16-...`).
 3. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
    développement — un testeur humain, chronomètre en main, sur le serveur
    désormais câblé pour de vrai jusqu'au comptage d'inventaire (protocole

@@ -61,11 +61,40 @@ Renseigner `config.ini` (jamais versionné — voir `.gitignore`) :
 
 ```powershell
 .\db\outils\demarrer_pg.ps1          # si PostgreSQL de dev n'est pas déjà démarré
-server\.venv\Scripts\uvicorn.exe app.main:app --reload --app-dir server
+server\.venv\Scripts\uvicorn.exe app.main:app --reload --app-dir server --host 0.0.0.0
 ```
 
 `GET /sante` répond sans authentification, utile pour vérifier que le
 serveur et la base sont joignables.
+
+### Accès depuis un téléphone sur le même réseau (chantier C10, cycle 15)
+
+Sans `--host 0.0.0.0`, `uvicorn` n'écoute que sur `127.0.0.1` (la boucle
+locale) : **aucun autre appareil ne peut l'atteindre**, même sur le même
+Wi-Fi — trouvé par exécution en creusant le retard de C10, jamais tenté
+jusqu'ici. `--host 0.0.0.0` fait écouter le serveur sur toutes les
+interfaces réseau de la machine ; le paquet Windows (`fabrication/
+lanceur.py`) fait de même et affiche l'adresse à utiliser au démarrage.
+
+1. Démarrer le serveur avec `--host 0.0.0.0` (ou lancer l'exécutable, qui
+   l'affiche lui-même).
+2. Trouver l'adresse IP locale de la machine : `ipconfig` (ligne
+   « Adresse IPv4 » de la carte réseau active), ou lire le message affiché
+   par `lanceur.py`.
+3. Depuis un téléphone connecté au **même réseau Wi-Fi**, ouvrir
+   `http://<adresse IPv4>:<port>/app/connexion.html` (dev) — le paquet
+   Windows n'embarque pas encore le dossier `maquette/`, voir chantier C0.
+4. Si le téléphone n'y arrive pas : le pare-feu Windows Defender bloque
+   parfois une nouvelle application en écoute réseau, en particulier sur
+   un profil réseau **public** — vérifier le profil (privé recommandé
+   pour un réseau de boutique) et autoriser Python/`uvicorn.exe` en
+   entrée si une invite apparaît.
+
+**Vérifié par exécution** (cycle 15) : `curl` depuis la même machine vers
+sa propre adresse réseau locale (pas `127.0.0.1`) répond correctement sur
+`/sante` et sur `/app/connexion.html` (200). **Non vérifié** : un
+véritable téléphone physique, qui reste la preuve manquante pour clore
+C10 — voir `loop-state.md`.
 
 ---
 
