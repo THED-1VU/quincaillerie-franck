@@ -168,9 +168,9 @@ le DR §7.4 insiste : « masquer l'interface ne suffit pas ».
 
 | Fonction | Détail | Source | Confiance |
 |---|---|---|---|
-| Fiche employé | nom, poste, téléphone, type de contrat (permanent / temporaire), salaire mensuel, site | CDC §3.5 ; DR Resp. B4 | Spécifié |
-| Suivi des absences et congés | | CDC §3.5 | Spécifié |
-| Suivi des avances sur salaire | Statut remboursé / non remboursé | CDC §3.5 | Spécifié |
+| Fiche employé | nom, poste, téléphone, type de contrat (permanent / temporaire), salaire mensuel, site | CDC §3.5 ; DR Resp. B4 | Confirmé (test) |
+| Suivi des absences et congés | | CDC §3.5 | Confirmé (test) |
+| Suivi des avances sur salaire | Statut remboursé / non remboursé, bouton de remboursement | CDC §3.5 | Confirmé (test) |
 | Module inaccessible aux agents | Menus absents ou accès refusé | DR Stock A3, Compta A3 | Confirmé (test) |
 
 ### 3.13 Comptage d'inventaire (`modules/inventaire.py`, agent stock)

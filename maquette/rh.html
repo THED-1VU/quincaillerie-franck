@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ressources humaines — Quincaillerie Franck</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Écran câblé (cycle 18) : employés, absences/congés et avances sur salaire sont réels (<code>server/app/routes/rh.py</code>, cycle 16). Réservé au responsable (CDC §3.5). Clôture de caisse (addendum, point g) hors périmètre.</div>
+<div class="page">
+  <header class="bandeau">
+    <span class="bandeau__marque">Quincaillerie Franck</span>
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <a class="btn btn--fantome" href="tableau-bord.html">Retour</a>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
+  </header>
+
+  <main class="contenu">
+    <h1>Ressources humaines</h1>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2>Employés</h2>
+        <button class="btn btn--secondaire" id="bouton-nouvel-employe" type="button">+ Nouvel employé</button>
+      </div>
+      <div id="zone-erreur-employes" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-employes"></ul>
+    </div>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2>Absences / congés</h2>
+        <button class="btn btn--secondaire" id="bouton-nouvelle-absence" type="button">+ Nouvelle absence / congé</button>
+      </div>
+      <div id="zone-erreur-absences" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-absences"></ul>
+    </div>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2>Avances sur salaire</h2>
+        <button class="btn btn--secondaire" id="bouton-nouvelle-avance" type="button">+ Nouvelle avance</button>
+      </div>
+      <div id="zone-erreur-avances" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-avances"></ul>
+    </div>
+
+    <div class="carte" id="carte-panneau" hidden style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2 id="panneau-titre">—</h2>
+        <button class="btn btn--fantome" id="panneau-fermer" type="button">Fermer</button>
+      </div>
+      <div id="panneau-contenu"></div>
+      <div id="zone-erreur-panneau" class="erreur-champ" hidden></div>
+      <div id="zone-succes-panneau" class="erreur-champ" hidden
+           style="background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+(async function () {
+  "use strict";
+
+  // Écran réservé au responsable — CDC §3.5 (un agent comptabilité ne peut
+  // que LIRE un employé par son nom pour y rattacher une dépense, jamais
+  // gérer les fiches, absences ou avances : server/app/routes/rh.py).
+  const session = await exigerSession(["responsable"]);
+  if (!session) return;
+
+  const $ = (id) => document.getElementById(id);
+
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+
+  let employes = [];
+
+  // --- Employés : RÉEL, via GET/POST /rh/employes ---
+  async function chargerEmployes() {
+    try {
+      const donnees = await appelApi("/rh/employes");
+      employes = donnees.employes;
+      const ul = $("liste-employes");
+      ul.innerHTML = "";
+      if (employes.length === 0) {
+        ul.innerHTML = "<li><span>Aucun employé.</span></li>";
+      } else {
+        employes.forEach((e) => {
+          const sousTexte = [
+            e.poste || "poste non précisé",
+            LIBELLE_SITE[e.site_id] || (e.site_id ? "Site " + e.site_id : "tous sites"),
+            fcfa(e.salaire_mensuel) + "/mois",
+          ].join(" · ");
+          ul.appendChild(creerLigneListe(
+            e.nom_complet, sousTexte,
+            e.actif ? "actif" : "inactif",
+            e.actif ? "pastille--ok" : "pastille--alerte"
+          ));
+        });
+      }
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-employes", erreur);
+    }
+  }
+
+  // --- Absences / congés : RÉEL, via GET/POST /rh/absences-conges ---
+  async function chargerAbsences() {
+    try {
+      const donnees = await appelApi("/rh/absences-conges");
+      const ul = $("liste-absences");
+      ul.innerHTML = "";
+      if (donnees.absences_conges.length === 0) {
+        ul.innerHTML = "<li><span>Aucune absence ni congé enregistré.</span></li>";
+      } else {
+        donnees.absences_conges.forEach((a) => {
+          ul.appendChild(creerLigneListe(
+            a.employe_nom,
+            a.date_debut + " → " + a.date_fin + (a.motif ? " · " + a.motif : ""),
+            a.type,
+            a.type === "conge" ? "pastille--ok" : "pastille--alerte"
+          ));
+        });
+      }
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-absences", erreur);
+    }
+  }
+
+  // --- Avances sur salaire : RÉEL, via GET/POST /rh/avances-salaire ---
+  async function chargerAvances() {
+    try {
+      const donnees = await appelApi("/rh/avances-salaire");
+      const ul = $("liste-avances");
+      ul.innerHTML = "";
+      if (donnees.avances_salaire.length === 0) {
+        ul.innerHTML = "<li><span>Aucune avance sur salaire enregistrée.</span></li>";
+      } else {
+        donnees.avances_salaire.forEach((v) => {
+          const li = creerLigneListe(
+            v.employe_nom,
+            fcfa(v.montant) + (v.motif ? " · " + v.motif : ""),
+            v.remboursee ? "remboursée" : "en cours",
+            v.remboursee ? "pastille--ok" : "pastille--alerte"
+          );
+          if (!v.remboursee) {
+            const bouton = document.createElement("button");
+            bouton.type = "button";
+            bouton.className = "btn btn--fantome";
+            bouton.style.marginLeft = "var(--e-2)";
+            bouton.textContent = "Rembourser";
+            bouton.addEventListener("click", async () => {
+              bouton.disabled = true;
+              try {
+                await appelApi("/rh/avances-salaire/" + v.id + "/rembourser", { method: "POST" });
+                await chargerAvances();
+              } catch (erreur) {
+                bouton.disabled = false;
+                afficherErreurServeur("zone-erreur-avances", erreur);
+              }
+            });
+            li.appendChild(bouton);
+          }
+          ul.appendChild(li);
+        });
+      }
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-avances", erreur);
+    }
+  }
+
+  // --- Panneau unique : une seule action à la fois (même principe que stock.html). ---
+  const champ = (contenu, id, libelle, type, aide) => {
+    const div = document.createElement("div");
+    div.className = "champ";
+    const label = document.createElement("label");
+    label.className = "champ__label";
+    label.htmlFor = id;
+    label.textContent = libelle;
+    const input = document.createElement("input");
+    input.className = "champ__saisie";
+    input.id = id;
+    input.type = type || "text";
+    if (type === "number") { input.min = "0"; input.step = "1"; }
+    div.appendChild(label);
+    div.appendChild(input);
+    if (aide) {
+      const p = document.createElement("p");
+      p.className = "champ__aide";
+      p.textContent = aide;
+      div.appendChild(p);
+    }
+    contenu.appendChild(div);
+    return input;
+  };
+
+  const selectEmploye = (contenu, libelle) => {
+    const div = document.createElement("div");
+    div.className = "champ";
+    const label = document.createElement("label");
+    label.className = "champ__label";
+    label.textContent = libelle;
+    const sel = document.createElement("select");
+    sel.className = "champ__select";
+    sel.innerHTML = '<option value="">— Choisir —</option>' + employes
+      .filter((e) => e.actif)
+      .map((e) => '<option value="' + e.employe_id + '">' + e.nom_complet + "</option>")
+      .join("");
+    div.appendChild(label);
+    div.appendChild(sel);
+    contenu.appendChild(div);
+    return sel;
+  };
+
+  function ouvrirPanneau(action) {
+    $("carte-panneau").hidden = false;
+    $("zone-erreur-panneau").hidden = true;
+    $("zone-succes-panneau").hidden = true;
+    const contenu = $("panneau-contenu");
+    contenu.innerHTML = "";
+
+    const boutonValider = document.createElement("button");
+    boutonValider.type = "button";
+    boutonValider.className = "btn btn--primaire btn--large";
+
+    if (action === "employe") {
+      $("panneau-titre").textContent = "Nouvel employé";
+      const nom = champ(contenu, "f-nom", "Nom complet");
+      const poste = champ(contenu, "f-poste", "Poste (optionnel)");
+      const telephone = champ(contenu, "f-telephone", "Téléphone (optionnel)");
+      const divContrat = document.createElement("div");
+      divContrat.className = "champ";
+      const labelContrat = document.createElement("label");
+      labelContrat.className = "champ__label"; labelContrat.textContent = "Type de contrat";
+      const selContrat = document.createElement("select");
+      selContrat.className = "champ__select";
+      selContrat.innerHTML = '<option value="permanent">Permanent</option><option value="temporaire">Temporaire</option>';
+      divContrat.appendChild(labelContrat); divContrat.appendChild(selContrat);
+      contenu.appendChild(divContrat);
+      const salaire = champ(contenu, "f-salaire", "Salaire mensuel (FCFA)", "number");
+      const divSite = document.createElement("div");
+      divSite.className = "champ";
+      const labelSite = document.createElement("label");
+      labelSite.className = "champ__label"; labelSite.textContent = "Site (optionnel — laisser vide si les deux)";
+      const selSite = document.createElement("select");
+      selSite.className = "champ__select";
+      selSite.innerHTML = '<option value="">— Non précisé —</option><option value="1">Magasin de stock</option><option value="2">Comptoir</option>';
+      divSite.appendChild(labelSite); divSite.appendChild(selSite);
+      contenu.appendChild(divSite);
+
+      boutonValider.textContent = "Créer l'employé";
+      boutonValider.addEventListener("click", async () => {
+        const corps = {
+          nom_complet: nom.value.trim(),
+          type_contrat: selContrat.value,
+          salaire_mensuel: Number(salaire.value),
+        };
+        if (poste.value.trim()) corps.poste = poste.value.trim();
+        if (telephone.value.trim()) corps.telephone = telephone.value.trim();
+        if (selSite.value) corps.site_id = Number(selSite.value);
+        await appeler("/rh/employes", corps, "Employé créé.", chargerEmployes);
+      });
+    }
+
+    if (action === "absence") {
+      $("panneau-titre").textContent = "Nouvelle absence / congé";
+      const employeSel = selectEmploye(contenu, "Employé");
+      const divType = document.createElement("div");
+      divType.className = "champ";
+      const labelType = document.createElement("label");
+      labelType.className = "champ__label"; labelType.textContent = "Type";
+      const selType = document.createElement("select");
+      selType.className = "champ__select";
+      selType.innerHTML = '<option value="conge">Congé</option><option value="absence">Absence</option>';
+      divType.appendChild(labelType); divType.appendChild(selType);
+      contenu.appendChild(divType);
+      const debut = champ(contenu, "f-debut", "Date de début", "date");
+      const fin = champ(contenu, "f-fin", "Date de fin", "date");
+      const motif = champ(contenu, "f-motif", "Motif (optionnel)");
+
+      boutonValider.textContent = "Enregistrer";
+      boutonValider.addEventListener("click", async () => {
+        const corps = {
+          employe_id: Number(employeSel.value),
+          type: selType.value,
+          date_debut: debut.value,
+          date_fin: fin.value,
+        };
+        if (motif.value.trim()) corps.motif = motif.value.trim();
+        await appeler("/rh/absences-conges", corps, "Absence / congé enregistré.", chargerAbsences);
+      });
+    }
+
+    if (action === "avance") {
+      $("panneau-titre").textContent = "Nouvelle avance sur salaire";
+      const employeSel = selectEmploye(contenu, "Employé");
+      const montant = champ(contenu, "f-montant", "Montant (FCFA)", "number");
+      const motif = champ(contenu, "f-motif", "Motif (optionnel)");
+
+      boutonValider.textContent = "Enregistrer l'avance";
+      boutonValider.addEventListener("click", async () => {
+        const corps = { employe_id: Number(employeSel.value), montant: Number(montant.value) };
+        if (motif.value.trim()) corps.motif = motif.value.trim();
+        await appeler("/rh/avances-salaire", corps, "Avance enregistrée.", chargerAvances);
+      });
+    }
+
+    contenu.appendChild(boutonValider);
+  }
+
+  async function appeler(chemin, corps, messageSucces, rechargerListe) {
+    $("zone-erreur-panneau").hidden = true;
+    $("zone-succes-panneau").hidden = true;
+    try {
+      await appelApi(chemin, { method: "POST", body: JSON.stringify(corps) });
+      $("zone-succes-panneau").hidden = false;
+      $("zone-succes-panneau").textContent = messageSucces;
+      await rechargerListe();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-panneau", erreur);
+    }
+  }
+
+  $("panneau-fermer").addEventListener("click", () => { $("carte-panneau").hidden = true; });
+  $("bouton-nouvel-employe").addEventListener("click", () => ouvrirPanneau("employe"));
+  $("bouton-nouvelle-absence").addEventListener("click", () => ouvrirPanneau("absence"));
+  $("bouton-nouvelle-avance").addEventListener("click", () => ouvrirPanneau("avance"));
+
+  await chargerEmployes();
+  await chargerAbsences();
+  await chargerAvances();
+})();
+</script>
+</body>
+</html>
