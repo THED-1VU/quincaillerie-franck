@@ -409,6 +409,38 @@ voir `db/tests/DERNIER_RESULTAT.md`).
 
 ---
 
+## Chantier C6 — comptabilité et RH (cycle 16)
+
+Aucune nouvelle migration : `transactions`, `employes`, `absences_conges`,
+`avances_salaire` existent avec leurs `GRANT` depuis les cycles 1/2, sans
+qu'aucune route ne les ait jamais exposés. **Hors périmètre,
+volontairement : clôture de caisse** (addendum, point g, non tranché) —
+`POST /transactions` enregistre un mouvement daté et attribué, il ne
+rapproche rien avec un comptage d'espèces en caisse.
+
+| Route | Rôle requis | Ce qu'elle fait |
+|---|---|---|
+| `POST`/`GET /transactions` | responsable, agent comptabilité | recette/dépense **hors vente** (une vente crée déjà sa propre recette, `routes/ventes.py`) ; historique filtrable par période, site venant de la RLS (`p_transactions_site`, cycle 1) |
+| `POST`/`GET /rh/employes` | **responsable seul** (CDC §3.5) | fiche employé — un agent comptabilité ne peut que LIRE un nom d'employé, en colonnes restreintes, pour y rattacher une dépense |
+| `POST`/`GET /rh/absences-conges` | responsable seul | absence ou congé, période contrôlée par la base (`chk_absences_periode_coherente`, cycle 1) |
+| `POST`/`GET /rh/avances-salaire` | responsable seul | avance sur salaire ; `POST .../{id}/rembourser` marque le remboursement — jamais l'inverse, comme une vente encaissée ne se ré-ouvre pas |
+
+`maquette/tableau-bord.html` : la carte « Saisie rapide » (recette/dépense),
+présente depuis le cycle 5 mais simulée, câble désormais un vrai
+formulaire vers `POST /transactions`.
+
+### Tests — `test_transactions.py` + `test_rh.py`, 18/18
+
+Transaction hors vente enregistrée pour les deux rôles autorisés, site
+toujours celui de la session pour un agent ; employé/période invalide
+refusés proprement (jamais une 500) ; absence/congé à période incohérente
+refusée par la base ; avance sur salaire créée puis remboursée, un second
+remboursement refusé. Suite complète : **124/124** (106 héritées + 18
+nouvelles). `verifier-cablage.mjs` : **77/77** (+1, saisie rapide d'une
+recette réellement enregistrée, vérifiée en base).
+
+---
+
 ## Chantier C7 — inventaire et écarts (cycle 7)
 
 Le socle existait déjà en base depuis le cycle 2 (migration 003) :
@@ -554,9 +586,10 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 | `test_inventaire.py` | liste à compter sans aucune quantité (site_id distingue les deux sites pour le responsable), réponse d'un comptage limitée à ce qui a été envoyé **même si le client injecte des champs interdits**, **lecture de `ecart` refusée en SQL direct**, article déjà compté exclu, écarts réservés au responsable et exacts |
 | `test_articles.py` / `test_stock.py` | article toujours créé sans stock, prix ignoré pour un agent stock ; **modification tracée dans l'historique, `quantite_stock` jamais acceptée, aucune ligne de prix pour un prix inchangé** ; **articles de l'autre site sans prix ni quantité** ; réception recalculant le seuil et refusée hors site ; transfert atomique ne recalculant jamais le seuil ; casse réservée au responsable ; **retours rattachés (vente ou réception d'origine) ET bornés à ce qui a réellement été vendu/reçu, cumul de plusieurs retours compris**, refusés hors site |
 | `test_tableau_bord.py` | alertes de stock réelles (article sous seuil, réservé au responsable), historique des comptages filtré par période |
-| `test_rapports.py` | contenu **réellement relu** (`openpyxl`, `pypdf`) des exports articles/ventes pour les 3 rôles — gating du prix en SQL, jamais après coup |
+| `test_rapports.py` | contenu **réellement relu** (`openpyxl`, `pypdf`) des exports articles/ventes pour les 3 rôles — gating du prix en SQL, jamais après coup ; **cloisonnement par site des deux exports** |
+| `test_transactions.py` / `test_rh.py` | recette/dépense hors vente, site toujours celui de la session pour un agent ; RH réservée au responsable ; absence à période incohérente refusée par la base ; avance sur salaire remboursée une seule fois |
 
-Dernier résultat : **104/104**, trace complète dans
+Dernier résultat : **124/124**, trace complète dans
 [`tests/DERNIER_RESULTAT.md`](tests/DERNIER_RESULTAT.md).
 
 ### Piège à éviter en écrivant un test (Windows)

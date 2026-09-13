@@ -338,6 +338,18 @@ for (const largeur of LARGEURS) {
   verifier(texteAlertes.includes("Article rare"), "responsable : alerte de stock réelle -> « Article rare » présent");
   verifier(!texteAlertes.includes("Peinture blanche"), "responsable : alerte de stock réelle -> ancienne donnée simulée absente");
 
+  // --- Saisie rapide (recette/dépense hors vente) : RÉELLE depuis le cycle 16 ---
+  await page.click("#btn-recette");
+  await page.fill("#saisie-montant", "4500");
+  await page.fill("#saisie-description", "Vente de chutes de bois");
+  await page.selectOption("#saisie-site", "1");
+  await page.click("#saisie-valider");
+  await page.waitForSelector("#zone-succes-saisie:not([hidden])", { timeout: 5000 });
+  verifier(
+    (await page.textContent("#zone-succes-saisie")).includes("enregistrée"),
+    "responsable : saisie rapide d'une recette réellement enregistrée (POST /transactions)"
+  );
+
   // Un agent qui tenterait cet écran est redirigé ailleurs (déjà prouvé pour
   // agent_stock plus haut) — ici on vérifie le sens inverse : le responsable
   // qui irait sur inventaire.html n'est PAS bloqué (rôle non restreint côté

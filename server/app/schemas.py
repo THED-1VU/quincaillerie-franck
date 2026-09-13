@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date as _date
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -212,3 +213,83 @@ class DemandeRetourFournisseur(BaseModel):
     mouvement_origine_id: int
     quantite: int = Field(gt=0)
     motif: Optional[str] = Field(default=None, max_length=200)
+
+
+# ---------------------------------------------------------------------------
+# Chantier C6 (comptabilité et RH, cycle 16) — hors clôture de caisse
+# (addendum, point g, non tranché).
+# ---------------------------------------------------------------------------
+
+class DemandeTransaction(BaseModel):
+    """Recette ou dépense HORS vente — une vente crée déjà sa propre
+    recette automatiquement (``routes/ventes.py``). ``site_id`` suit le
+    même principe que pour une vente ou un article : obligatoire pour un
+    responsable (deux sites), ignoré pour un agent (son site vient
+    toujours de sa session)."""
+
+    type: Literal["recette", "depense"]
+    montant: float = Field(gt=0)
+    description: Optional[str] = Field(default=None, max_length=200)
+    employe_id: Optional[int] = None
+    site_id: Optional[int] = None
+
+
+class ReponseTransaction(BaseModel):
+    transaction_id: int
+    site_id: int
+    type: str
+    montant: float
+    description: Optional[str] = None
+    employe_id: Optional[int] = None
+
+
+class DemandeEmploye(BaseModel):
+    nom_complet: str = Field(min_length=1, max_length=150)
+    poste: Optional[str] = Field(default=None, max_length=100)
+    telephone: Optional[str] = Field(default=None, max_length=30)
+    type_contrat: Literal["permanent", "temporaire"] = "permanent"
+    salaire_mensuel: float = Field(ge=0)
+    site_id: Optional[int] = None
+    date_embauche: Optional[_date] = None
+
+
+class ReponseEmploye(BaseModel):
+    employe_id: int
+    nom_complet: str
+    poste: Optional[str] = None
+    telephone: Optional[str] = None
+    type_contrat: str
+    salaire_mensuel: float
+    site_id: Optional[int] = None
+    actif: bool
+
+
+class DemandeAbsenceConge(BaseModel):
+    employe_id: int
+    type: Literal["absence", "conge"]
+    date_debut: _date
+    date_fin: _date
+    motif: Optional[str] = Field(default=None, max_length=200)
+
+
+class ReponseAbsenceConge(BaseModel):
+    id: int
+    employe_id: int
+    type: str
+    date_debut: _date
+    date_fin: _date
+    motif: Optional[str] = None
+
+
+class DemandeAvanceSalaire(BaseModel):
+    employe_id: int
+    montant: float = Field(gt=0)
+    motif: Optional[str] = Field(default=None, max_length=200)
+
+
+class ReponseAvanceSalaire(BaseModel):
+    id: int
+    employe_id: int
+    montant: float
+    motif: Optional[str] = None
+    remboursee: bool

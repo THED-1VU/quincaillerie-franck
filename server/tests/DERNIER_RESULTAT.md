@@ -9,6 +9,58 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 16 — comptabilité et RH (chantier C6), 2026-09-13
+
+Aucune nouvelle migration : `transactions`, `employes`, `absences_conges`,
+`avances_salaire` existent avec leurs `GRANT` depuis les cycles 1/2, sans
+route jusqu'ici. Troisième et dernier chantier du lot validé après le
+cycle 13. Clôture de caisse (addendum, point g) volontairement non
+traitée.
+
+### `test_transactions.py` (8) et `test_rh.py` (10) — nouveaux, 18/18
+
+```
+test_responsable_enregistre_une_recette PASSED
+test_responsable_enregistre_une_depense_rattachee_a_un_employe PASSED
+test_agent_comptabilite_enregistre_sur_son_site PASSED
+test_agent_stock_ne_peut_pas_enregistrer_de_transaction PASSED
+test_transaction_employe_invalide_refusee_proprement PASSED
+test_responsable_doit_preciser_un_site_pour_une_transaction PASSED
+test_lister_transactions_filtre_par_periode PASSED
+test_lister_transactions_date_invalide_refusee PASSED
+test_responsable_cree_un_employe PASSED
+test_agent_comptabilite_ne_peut_pas_creer_employe PASSED
+test_lister_employes_reserve_au_responsable PASSED
+test_responsable_cree_une_absence_conge PASSED
+test_absence_conge_employe_invalide_refusee PASSED
+test_absence_periode_incoherente_refusee PASSED
+test_responsable_cree_une_avance_salaire PASSED
+test_rembourser_avance_salaire PASSED
+test_rembourser_avance_deja_remboursee_refusee PASSED
+test_rembourser_avance_inexistante_refusee PASSED
+
+======================= 18 passed, 6 warnings in 26.80s =======================
+```
+
+### Écran (`maquette/tableau-bord.html`) — `verifier-cablage.mjs`, 77/77
+
+La carte « Saisie rapide », simulée depuis le cycle 5, câble désormais un
+vrai formulaire vers `POST /transactions` — vérifié par exécution (une
+recette de 4 500 FCFA réellement retrouvée en base après validation), et
+non plus seulement par lecture du code. +1 contrôle par rapport au cycle
+15 (76 → 77).
+
+### Suite complète
+
+```powershell
+server\.venv\Scripts\python.exe -m pytest server\tests\ -v
+```
+
+**124 passed** (106 hérités + 18 nouveaux), 0 régression. Les 6 suites
+Playwright : 77/77, 10/10, 17/17, 11/11, 26/26, 29/29 — 0 régression.
+
+---
+
 ## Cycle 13 — correction des constats n°2 et n°3 (chantier C4), 2026-09-13
 
 Migration 016 (`retours_coherence_document_origine.sql`) : corrige
