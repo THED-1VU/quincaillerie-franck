@@ -37,9 +37,27 @@ def obtenir_session(
     if not jeton:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Jeton manquant.")
     try:
-        return gestionnaire.verifier(jeton)
+        session = gestionnaire.verifier(jeton)
     except JetonInvalide as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+
+    # Révocation (chantier C11, cycle 21) : la signature et l'expiration ne
+    # suffisent plus depuis que /auth/deconnexion existe — un jeton peut
+    # être signature-valide et pourtant explicitement révoqué. Vérifié SOUS
+    # qf_app (connexion_anonyme, comme verifier_connexion), avant toute
+    # bascule de rôle : la révocation n'est pas une donnée métier cloisonnée
+    # par site. Un jeton antérieur à ce cycle a jti="" (securite.py) —
+    # jeton_est_revoque("") ne trouve jamais de ligne, comportement inchangé
+    # pour lui (jamais révocable, comme avant ce cycle).
+    if session.jti:
+        bd: BaseDeDonnees = obtenir_bd(request)
+        with bd.connexion_anonyme() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT jeton_est_revoque(%s) AS revoque", (session.jti,))
+                if cur.fetchone()["revoque"]:
+                    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session déconnectée, reconnectez-vous.")
+
+    return session
 
 
 def exiger_role(*roles_autorises: str):

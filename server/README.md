@@ -687,17 +687,78 @@ elle-même, ci-dessus (`test_champs_interdits_injectes_par_le_client_sont_sans_e
   intercepte `psycopg.Error` et ne répond que `"Erreur interne."` /
   `"Accès refusé."` — le détail (nom de table, de colonne, de contrainte) est
   journalisé côté serveur, jamais exposé côté client.
-- **Limitation de débit sur `/auth/connexion`** : fenêtre glissante en
-  mémoire, distincte du verrouillage de compte (qui, lui, est une règle
-  métier posée en base). Limite connue et documentée : compteur **par
-  processus**, un déploiement à plusieurs travailleurs voudrait un compteur
-  partagé — ce n'est pas une décision métier, juste une limite technique de
-  ce cycle.
 - **Journalisation applicative** : `verifier_connexion()` écrit dans
   `journal_connexions` à **chaque** tentative (succès et échec) ;
   `changer_mon_mot_de_passe()` et le déverrouillage écrivent dans
   `journal_comptes` — ce sont des fonctions PostgreSQL du cycle 2, pas du
   code serveur, pour qu'aucune route ne puisse « oublier » de tracer.
+- **Limitation de débit sur `/auth/connexion`** : fenêtre glissante en
+  mémoire, distincte du verrouillage de compte (qui, lui, est une règle
+  métier posée en base). Limite connue et documentée : compteur **par
+  processus**, un déploiement à plusieurs travailleurs voudrait un compteur
+  partagé — ce n'est pas une décision métier, juste une limite technique
+  **encore ouverte** (voir « Reste ouvert » ci-dessous).
+
+### Cycle 21 — révocation de session et en-têtes HTTP
+
+Deux des trois lacunes documentées de longue date. La troisième (limiteur
+de débit partagé entre processus) reste délibérément **hors de ce cycle**
+— voir plus bas pourquoi.
+
+- **Révocation de session** (migration 018) : un jeton signé HMAC restait
+  valide jusqu'à sa propre expiration, sans « déconnexion forcée »
+  possible. `GestionnaireSessions.emettre()` pose désormais un identifiant
+  aléatoire (`jti`, 16 octets) dans la charge du jeton ;
+  `POST /auth/deconnexion` (nouveau) le révoque dans PostgreSQL
+  (`jetons_revoques`, table + 2 fonctions `SECURITY DEFINER` sous `qf_app`
+  — même registre déjà partagé entre plusieurs processus, donc la
+  révocation résout implicitement l'autre moitié de la même limite
+  documentée). `deps.obtenir_session()` vérifie la révocation à **chaque**
+  requête authentifiée, après la signature/expiration — un jeton révoqué
+  est refusé même s'il reste par ailleurs signature-valide et non expiré.
+  Un jeton émis avant ce cycle (`jti` absent, donc `""`) reste vérifiable
+  jusqu'à sa propre expiration, simplement jamais révocable a posteriori —
+  aucune régression, il ne l'était pas non plus avant.
+- **En-têtes HTTP de sécurité** : middleware global (`main.py`) posant
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer` sur **toute** réponse — API comme écrans
+  statiques sous `/app`. `Strict-Transport-Security` volontairement **pas**
+  posé : le serveur de développement répond en clair (pas de TLS), l'annoncer
+  serait mentir sur ce que le navigateur reçoit réellement — à ajouter
+  quand le déploiement réel termine effectivement du TLS.
+- **Écran** : `maquette/api.js`, `deconnecter()` appelle désormais
+  `POST /auth/deconnexion` avant d'effacer la session locale — au
+  « meilleur effort » (une coupure réseau au moment du clic n'empêche
+  jamais de quitter l'écran localement).
+- **Piège trouvé en écrivant la migration** : `NOW() + interval '1 hour'`
+  renvoie un `TIMESTAMPTZ`, pas un `TIMESTAMP` — un premier essai avec
+  `p_expire_a TIMESTAMP` échouait à la résolution de surcharge de fonction
+  dès le premier appel réel. Corrigé en passant l'expiration en **secondes
+  Unix** (`BIGINT`, comme le champ `exp` du jeton lui-même) plutôt qu'un
+  type horodaté — la fonction convertit elle-même via `to_timestamp()`,
+  dans le fuseau de la connexion (Africa/Douala), sans que l'appelant
+  Python n'ait à raisonner sur un fuseau.
+- **Pourquoi PAS le limiteur de débit partagé, ce cycle** : le même schéma
+  (registre PostgreSQL partagé) s'y prêterait, mais l'écrire correctement
+  (fenêtre glissante concurrente, sans faux négatif sous contention) mérite
+  sa propre vérification dédiée plutôt que d'être glissé à la suite de deux
+  autres changements de sécurité dans le même cycle — un code
+  d'authentification mérite plus de rigueur, pas moins, sous la pression du
+  temps.
+
+### Tests — `server/tests/test_securite.py`, 4 nouveaux
+
+Déconnexion révoque bien le jeton courant (rejoué ensuite, refusé) ; deux
+sessions du même compte sont indépendantes (déconnecter l'une ne touche pas
+l'autre) ; un jeton déjà révoqué ne peut pas se déconnecter une seconde
+fois ; les 3 en-têtes de sécurité présents sur une réponse authentifiée ET
+sur une réponse anonyme (401). Suite complète : **144/144** (140 héritées +
+4 nouvelles), 0 régression — un coût mesuré : ~305 s contre ~270 s avant
+(la vérification de révocation ajoute un aller-retour PostgreSQL à CHAQUE
+requête authentifiée). `verifier-cablage.mjs` étendu (+3, un jeton
+intercepté avant déconnexion puis rejoué est refusé — 80/80) ; les 5
+autres suites Playwright rejouées sans régression (12/12, 17/17, 26/26,
+29/29, 11/11, 21/21).
 
 ---
 

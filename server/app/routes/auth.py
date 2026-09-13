@@ -91,6 +91,26 @@ def connexion(demande: DemandeConnexion, request: Request):
     )
 
 
+@routeur.post("/deconnexion", status_code=status.HTTP_204_NO_CONTENT)
+def deconnexion(request: Request, session: Session = Depends(obtenir_session)):
+    """Révoque le jeton courant (chantier C11, cycle 21) — jusqu'ici, un
+    jeton signé restait valide jusqu'à sa propre expiration, sans moyen de
+    forcer une déconnexion. Un jeton émis avant ce cycle n'a pas de ``jti``
+    (``session.jti == ""``) : rien à révoquer, la route répond quand même
+    204 plutôt que de renvoyer une erreur pour un cas qui n'est pas une
+    faute de l'appelant."""
+    if not session.jti:
+        return
+    bd: BaseDeDonnees = obtenir_bd(request)
+    with bd.connexion_anonyme() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT revoquer_jeton(%s, %s, %s)",
+                (session.jti, session.utilisateur_id, session.expire_a),
+            )
+        conn.commit()
+
+
 @routeur.post("/changer-mot-de-passe", status_code=status.HTTP_204_NO_CONTENT)
 def changer_mot_de_passe(
     demande: DemandeChangementMotDePasse,

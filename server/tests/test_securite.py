@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from conftest import MOT_DE_PASSE_RESPONSABLE, entete_autorisation, se_connecter
+from conftest import (
+    MOT_DE_PASSE_AGENT_STOCK,
+    MOT_DE_PASSE_RESPONSABLE,
+    entete_autorisation,
+    se_connecter,
+)
 
 MOTIF_HACHAGE_BCRYPT = re.compile(r"\$2[aby]\$\d{2}\$")
 
@@ -136,3 +141,69 @@ def test_injection_sql_dans_lidentifiant_ne_casse_rien(client):
         "/auth/connexion", json={"identifiant": "resp", "mot_de_passe": MOT_DE_PASSE_RESPONSABLE}
     )
     assert reponse.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Révocation de session (chantier C11, cycle 21) — migration 018.
+# ---------------------------------------------------------------------------
+
+def test_deconnexion_revoque_le_jeton_courant(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    entetes = entete_autorisation(session["jeton"])
+
+    # Le jeton fonctionne avant la déconnexion.
+    assert client.get("/moi", headers=entetes).status_code == 200
+
+    reponse_deconnexion = client.post("/auth/deconnexion", headers=entetes)
+    assert reponse_deconnexion.status_code == 204
+
+    # Le MÊME jeton, encore signature-valide et non expiré, est désormais
+    # refusé : la révocation l'emporte sur une signature/expiration correcte.
+    reponse_apres = client.get("/moi", headers=entetes)
+    assert reponse_apres.status_code == 401
+    assert "connect" in reponse_apres.json()["detail"].lower() or "déconnect" in reponse_apres.json()["detail"].lower()
+
+
+def test_deconnexion_ne_revoque_que_ce_jeton_precis(client):
+    """Deux sessions du MÊME compte (ex. deux postes) : déconnecter l'une ne
+    déconnecte pas l'autre — la révocation porte sur un jeton, jamais sur
+    un compte entier (portée volontairement étroite, voir la migration)."""
+    session_a = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    session_b = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    assert session_a["jeton"] != session_b["jeton"]
+
+    client.post("/auth/deconnexion", headers=entete_autorisation(session_a["jeton"]))
+
+    assert client.get("/moi", headers=entete_autorisation(session_a["jeton"])).status_code == 401
+    assert client.get("/moi", headers=entete_autorisation(session_b["jeton"])).status_code == 200
+
+
+def test_deconnexion_deux_fois_le_meme_jeton_refuse_proprement(client):
+    """Un jeton déjà révoqué ne peut plus rien faire, y compris se
+    déconnecter une seconde fois — refusé par obtenir_session() lui-même
+    avant même d'atteindre la route, jamais une erreur serveur brute."""
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    entetes = entete_autorisation(session["jeton"])
+
+    assert client.post("/auth/deconnexion", headers=entetes).status_code == 204
+    reponse = client.post("/auth/deconnexion", headers=entetes)
+    assert reponse.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# En-têtes HTTP de sécurité (chantier C11, cycle 21).
+# ---------------------------------------------------------------------------
+
+def test_en_tetes_securite_presents_sur_toute_reponse(client):
+    """Posés par un middleware global : vérifiés sur une route authentifiée
+    ET sur une route anonyme (401, avant toute session), preuve qu'ils ne
+    dépendent pas d'un chemin de code particulier."""
+    reponse_authentifiee = client.post(
+        "/auth/connexion", json={"identifiant": "resp", "mot_de_passe": MOT_DE_PASSE_RESPONSABLE}
+    )
+    reponse_anonyme = client.get("/moi")  # sans jeton -> 401, mais les en-têtes doivent y être aussi
+
+    for reponse in (reponse_authentifiee, reponse_anonyme):
+        assert reponse.headers["x-content-type-options"] == "nosniff"
+        assert reponse.headers["x-frame-options"] == "DENY"
+        assert reponse.headers["referrer-policy"] == "no-referrer"
