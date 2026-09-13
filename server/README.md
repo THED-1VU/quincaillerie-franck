@@ -349,6 +349,33 @@ l'agent comptabilité ; export ventes contenant le vrai total d'une vente
 réellement enregistrée, vide hors période, refusé à l'agent stock. Suite
 complète : **90/90** (73 héritées + 17 nouvelles).
 
+### Cycle 23 — bascule vue consolidée / par site (`maquette/tableau-bord.html`)
+
+Chaque route du tableau de bord (`/ventes/synthese-jour`,
+`/tableau-bord/alertes-stock`, `/inventaire/ecarts`,
+`/inventaire/ecarts-ventes`) renvoie **déjà** `site_id` sur chaque ligne,
+pour un responsable qui couvre les deux sites — la bascule est donc un
+**filtre purement d'affichage**, aucune route ni migration nouvelle,
+aucun appel réseau supplémentaire au changement de vue.
+
+- Un sélecteur (« Les deux sites » / « Magasin de stock » / « Comptoir »)
+  près du titre « Aujourd'hui ». Chaque carte garde ses données BRUTES
+  (non filtrées) en mémoire et se redessine entièrement au changement de
+  site sélectionné — jamais un nouveau `fetch()`.
+- Le libellé du total (« Total consolidé » / « Total du site ») change
+  avec la vue, pour ne jamais laisser croire qu'un total filtré est
+  encore consolidé.
+
+### Tests — `verifier-cablage.mjs` étendu, +7 (87/87)
+
+Filtrer sur « Magasin de stock » fait disparaître Comptoir de la liste
+des ventes et recalcule le total exactement (8 500 FCFA, sans nouvel
+appel réseau) ; l'inverse pour « Comptoir » (3 200 FCFA) ; les alertes de
+stock suivent le même filtre (« Article rare », au Magasin, disparaît en
+vue Comptoir) ; revenir à « Les deux sites » retrouve le total consolidé
+identique à avant tout filtrage (11 700 FCFA). `verifier-echappement-html.mjs`
+(11/11) et les 5 autres suites Playwright rejouées sans régression.
+
 ---
 
 ## Chantier C5 — ventes (cycle 6)

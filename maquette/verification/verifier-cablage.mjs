@@ -338,6 +338,36 @@ for (const largeur of LARGEURS) {
   verifier(texteAlertes.includes("Article rare"), "responsable : alerte de stock réelle -> « Article rare » présent");
   verifier(!texteAlertes.includes("Peinture blanche"), "responsable : alerte de stock réelle -> ancienne donnée simulée absente");
 
+  // --- Bascule vue consolidée / par site (chantier C8, cycle 23) : filtre
+  // purement d'affichage, aucun nouvel appel réseau au changement de vue.
+  // Magasin de stock (site 1) : 6500 (semée) + 2000 (vente réelle, section
+  // agent comptabilité ci-dessus) = 8500. Comptoir (site 2) : 3200 (semée).
+  await page.selectOption("#filtre-site", "1");
+  const texteVentesSite1 = await page.textContent("#ventes-jour");
+  verifier(
+    texteVentesSite1.includes("Magasin de stock") && !texteVentesSite1.includes("Comptoir"),
+    "bascule vue : « Magasin de stock » -> Comptoir disparaît de la liste des ventes"
+  );
+  const totalSite1 = await page.textContent("#ventes-total");
+  verifier(totalSite1.includes("8") && totalSite1.includes("500"), `bascule vue : total du site Magasin correct (lu : "${totalSite1}")`);
+  const texteAlertesSite1 = await page.textContent("#liste-alertes");
+  verifier(texteAlertesSite1.includes("Article rare"), "bascule vue : alertes du site Magasin toujours présentes (Article rare y est)");
+
+  await page.selectOption("#filtre-site", "2");
+  const texteVentesSite2 = await page.textContent("#ventes-jour");
+  verifier(
+    texteVentesSite2.includes("Comptoir") && !texteVentesSite2.includes("Magasin de stock"),
+    "bascule vue : « Comptoir » -> Magasin de stock disparaît de la liste des ventes"
+  );
+  const totalSite2 = await page.textContent("#ventes-total");
+  verifier(totalSite2.includes("3") && totalSite2.includes("200"), `bascule vue : total du site Comptoir correct (lu : "${totalSite2}")`);
+  const texteAlertesSite2 = await page.textContent("#liste-alertes");
+  verifier(!texteAlertesSite2.includes("Article rare"), "bascule vue : alertes du site Magasin absentes en vue Comptoir (Article rare est au Magasin)");
+
+  await page.selectOption("#filtre-site", "");
+  const totalRevenuConsolide = await page.textContent("#ventes-total");
+  verifier(totalRevenuConsolide.includes("11") && totalRevenuConsolide.includes("700"), "bascule vue : retour à « Les deux sites » -> total consolidé identique à avant le filtrage");
+
   // --- Saisie rapide (recette/dépense hors vente) : RÉELLE depuis le cycle 16 ---
   await page.click("#btn-recette");
   await page.fill("#saisie-montant", "4500");
