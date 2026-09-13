@@ -85,6 +85,13 @@ const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\
   await seConnecter(page, "magasin.stock", MDP_AGENT_STOCK);
   verifier(page.url().endsWith("inventaire.html"), "agent stock : connexion -> inventaire.html");
 
+  // Moment forcé explicitement à "matin", plutôt que de dépendre du choix
+  // par défaut de la page (heure du jour) : un contrôle ne doit pas dépendre
+  // de l'heure à laquelle il tourne (constat trouvé par exécution après le
+  // correctif de fuseau horaire — "matin"/"soir" par défaut a changé de
+  // valeur avec l'heure locale correcte, ce que ce script supposait figé).
+  await page.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
+  await page.click("#btn-matin");
   await page.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
   const nomAffiche = await page.textContent("#art-nom");
   verifier(!!nomAffiche && nomAffiche !== "—", "inventaire : un article réel est affiché");
@@ -176,6 +183,66 @@ const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\
   const texteEcartsVentes = await page.textContent("#liste-ecarts-ventes");
   verifier(texteEcartsVentes.includes("Article rare"), "tableau de bord : écart de vente à découvert affiché (Article rare)");
   verifier(texteEcartsVentes.includes("manque 2"), `tableau de bord : quantité manquante correcte (2), lu : "${texteEcartsVentes}"`);
+
+  await contexte.close();
+}
+
+// ============================================================================
+// 4. Panne réseau simulée par une double soumission (409) : l'agent doit
+//    pouvoir avancer normalement, pas rester bloqué sur une « erreur » qui
+//    n'en est pas une (le comptage est en réalité déjà enregistré). Deux
+//    onglets du même compte, chacun avec sa propre liste chargée AVANT que
+//    l'autre ne soumette — exactement le cas d'une réponse jamais revenue
+//    au premier essai, suivie d'une nouvelle tentative.
+// ============================================================================
+{
+  const contexte = await navigateur.newContext({ viewport: { width: 390, height: 844 } });
+  const pageA = await contexte.newPage();
+  const pageB = await contexte.newPage();
+  await seConnecter(pageA, "magasin.stock", MDP_AGENT_STOCK);
+  await seConnecter(pageB, "magasin.stock", MDP_AGENT_STOCK);
+  await pageA.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
+  await pageB.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
+  // Moment forcé (mêmes raisons que la section 1) : les deux onglets sur
+  // "matin" explicitement, pas sur le choix par défaut de l'heure du jour.
+  await pageA.click("#btn-matin");
+  await pageA.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
+  await pageB.click("#btn-matin");
+  await pageB.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
+
+  async function allerA(page, nomCible) {
+    let tours = 0;
+    while ((await page.textContent("#art-nom")) !== nomCible && tours < 20) {
+      await page.click("#btn-passer");
+      await page.waitForTimeout(50);
+      tours++;
+    }
+    return (await page.textContent("#art-nom")) === nomCible;
+  }
+
+  const cible = "Fer à béton 8 mm";
+  verifier(await allerA(pageA, cible), `409 : onglet A atteint « ${cible} »`);
+  verifier(await allerA(pageB, cible), `409 : onglet B atteint « ${cible} », sur sa PROPRE liste chargée avant la soumission de A`);
+
+  // Onglet A compte réellement -> succès normal, la vraie soumission.
+  await pageA.fill("#saisie", "40");
+  await pageA.click("#btn-suivant");
+  await pageA.waitForTimeout(300);
+
+  // Onglet B ignore que A vient de le faire (de son point de vue, c'est
+  // comme si SA PROPRE tentative précédente avait échoué sans réponse) et
+  // tente la même soumission -> le serveur répond 409.
+  await pageB.fill("#saisie", "40");
+  const [reponseB] = await Promise.all([
+    pageB.waitForResponse((r) => r.url().endsWith("/inventaire/comptages") && r.request().method() === "POST", { timeout: 10000 }),
+    pageB.click("#btn-suivant"),
+  ]);
+  verifier(reponseB.status() === 409, `409 : le serveur refuse bien le second envoi (statut ${reponseB.status()})`);
+  await pageB.waitForTimeout(300);
+
+  verifier(await pageB.isHidden("#zone-erreur-saisie"), "409 : aucun message d'erreur bloquant affiché à l'agent (onglet B)");
+  const encoreSurCible = (await pageB.isVisible("#bloc-comptage")) && (await pageB.textContent("#art-nom")) === cible;
+  verifier(!encoreSurCible, "409 : l'onglet B a avancé après le conflit, pas resté bloqué sur l'article");
 
   await contexte.close();
 }

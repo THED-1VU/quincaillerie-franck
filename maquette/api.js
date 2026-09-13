@@ -135,3 +135,33 @@ function deconnecter() {
   Session.effacer();
   window.location.href = "connexion.html";
 }
+
+/**
+ * Construit un <li> "libellé + sous-texte + pastille" (alertes, écarts...)
+ * SANS jamais passer par innerHTML : un nom d'article vient du serveur et
+ * reste modifiable par le personnel, ce n'est pas un texte fixe — le
+ * concaténer dans du HTML permettrait d'y injecter des balises. Trouvé et
+ * corrigé lors du contrôle de boucle après le cycle 7 (tableau-bord.html
+ * construisait ses listes ainsi, à trois endroits, avec des données réelles
+ * pour deux d'entre eux).
+ */
+function creerLigneListe(libellePrincipal, sousTexte, texteAside, classeAside) {
+  const li = document.createElement("li");
+
+  const spanPrincipal = document.createElement("span");
+  spanPrincipal.appendChild(document.createTextNode(libellePrincipal));
+  spanPrincipal.appendChild(document.createElement("br"));
+  const spanSous = document.createElement("span");
+  spanSous.style.color = "var(--c-texte-doux)";
+  spanSous.style.fontSize = "var(--t-xs)";
+  spanSous.textContent = sousTexte;
+  spanPrincipal.appendChild(spanSous);
+
+  const spanAside = document.createElement("span");
+  spanAside.className = "pastille " + classeAside;
+  spanAside.textContent = texteAside;
+
+  li.appendChild(spanPrincipal);
+  li.appendChild(spanAside);
+  return li;
+}

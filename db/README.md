@@ -112,6 +112,45 @@ Puis reporter la valeur dans `config.ini` (fichier local, non versionné), avec
 | 008 | `roles_applicatifs` | se connecter en superutilisateur ; qu'un agent stock LISE un prix ; qu'un comptable LISE une quantité en stock ; que quiconque modifie le seuil d'alerte à la main |
 | 009 | `authentification` | que quiconque (y compris le serveur applicatif) LISE un hachage de mot de passe ; vérifier un mot de passe ailleurs qu'à un seul endroit audité ; changer le mot de passe d'un tiers via le libre-service |
 | 010 | `correction_usage_qf_app` | corrige un oubli de 008 : `qf_app` ne pouvait exécuter AUCUNE fonction, faute d'accès au schéma (`USAGE ON SCHEMA public` manquant) |
+| 011 | `ventes_fiscalite_anti_survente` | appliquer une TVA inventée (paramètres fiscaux décidés par le propriétaire, cycle 6) ; bloquer une vente déjà encaissée pour stock insuffisant au lieu de consigner l'écart |
+| 012 | `comptage_aveugle_colonnes` | qu'un agent stock LISE `ecart` ou `quantite_attendue` d'un comptage, y compris après coup, y compris en SQL direct |
+| 013 | `fuseau_horaire_boutique` | que le « jour » vu par `CURRENT_DATE`/`NOW()` dépende du fuseau du système d'exploitation du poste serveur plutôt que de l'heure réelle de la boutique (Africa/Douala) |
+
+---
+
+## Fuseau horaire — Africa/Douala, jamais hérité du système d'exploitation
+
+Trouvé par exécution lors d'un contrôle de boucle après le cycle 7 :
+`SHOW TimeZone` renvoyait `Europe/Paris` sur la base de développement, alors
+que le poste serveur sera physiquement à Batouri, Cameroun
+(`Africa/Douala`, UTC+1, jamais d'heure d'été). `CURRENT_DATE`/`NOW()`
+déterminent le « jour » utilisé par :
+- l'unicité d'un comptage d'inventaire (« un par article, par moment, par
+  jour », migration 003) ;
+- les écrans « du jour » : ventes (`GET /ventes/synthese-jour`, C5) et
+  écarts (`GET /inventaire/ecarts`, `GET /inventaire/ecarts-ventes`, C7).
+
+Un poste serveur dont le fuseau système est mal réglé ne doit **jamais**
+pouvoir décaler silencieusement ces dates. Le fuseau est donc fixé à
+**deux niveaux indépendants**, ni l'un ni l'autre hérité du système
+d'exploitation :
+
+1. **Au niveau de la base** (migration 013) : `ALTER DATABASE ... SET
+   timezone TO 'Africa/Douala'` — persiste dans la base elle-même
+   (`pg_db_role_setting`), s'applique à toute nouvelle connexion, quel que
+   soit le fuseau de l'instance PostgreSQL ou du système d'exploitation.
+2. **À chaque connexion applicative** (`server/app/database.py`,
+   `FUSEAU_HORAIRE_BOUTIQUE`) : `set_config('TimeZone', 'Africa/Douala',
+   ...)` dans `connexion_anonyme()` et `connexion_pour()`. Vérifié par
+   exécution en réglant délibérément la base sur `UTC` : les deux méthodes
+   de connexion imposaient quand même `Africa/Douala`.
+
+Un déploiement n'a donc **rien à configurer** pour ce point : ni variable
+d'environnement, ni réglage du système d'exploitation du poste serveur, ni
+paramètre de `config.ini`. Changer de fuseau (si la boutique déménageait un
+jour hors du Cameroun) demanderait une nouvelle migration ET une mise à
+jour de `FUSEAU_HORAIRE_BOUTIQUE` — un choix délibéré plutôt qu'une valeur
+implicite.
 
 ---
 

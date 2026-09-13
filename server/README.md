@@ -252,18 +252,53 @@ flux « brouillon modifiable jusqu'au bout » aurait laissé croire à une
 correction possible qui n'existe pas. « Précédent » redevient une simple
 lecture d'un article déjà soumis (champ désactivé), jamais une réédition.
 
-### Tests — `server/tests/test_inventaire.py`, 9/9
+### Tests — `server/tests/test_inventaire.py`, 11/11
 
-Liste à compter strictement limitée à `{id, nom, unite}` ; réponse d'un
-comptage strictement limitée à ce que le client a envoyé ; lecture directe
-de `ecart`/`quantite_attendue` refusée à l'agent stock (preuve la plus
-forte, hors API, comme `test_cloisonnement_site.py`) ; article déjà compté
-absent de la liste et second envoi refusé (409) ; comptage d'un article de
-l'autre site refusé (422) ; comptabilité totalement exclue (403) ; écarts
-réservés au responsable, avec une valeur d'écart vérifiée à la main
-(30 en stock, 22 comptés → **-8**) ; un écart de vente à découvert
-(chantier C5) retrouvé tel quel dans `/inventaire/ecarts-ventes`. Suite
-complète : **53/53** (44 héritées + 9 nouvelles).
+Liste à compter strictement limitée à `{id, nom, unite, site_id}` (le
+responsable voit les deux sites, distingués par `site_id` — ajouté au
+cycle de correction ci-dessous) ; réponse d'un comptage strictement limitée
+à ce que le client a envoyé, **y compris quand il injecte lui-même
+`quantite_attendue`/`ecart` dans le corps de la requête** (sans effet, ni
+sur la réponse ni en base) ; lecture directe de `ecart`/`quantite_attendue`
+refusée à l'agent stock (preuve la plus forte, hors API, comme
+`test_cloisonnement_site.py`) ; article déjà compté absent de la liste et
+second envoi refusé (409) ; comptage d'un article de l'autre site refusé
+(422) ; comptabilité totalement exclue (403) ; écarts réservés au
+responsable, avec une valeur d'écart vérifiée à la main (30 en stock, 22
+comptés → **-8**) ; un écart de vente à découvert (chantier C5) retrouvé
+tel quel dans `/inventaire/ecarts-ventes`. Suite complète : **55/55**.
+
+### Cycle de correction après le cycle 7 — trouvé lors d'un contrôle de boucle
+
+Avant de démarrer un nouveau chantier, un contrôle a rejoué le cycle 7 comme
+un relecteur extérieur (voir `RAPPORT AVANCEMENT/loop-state.md`) et trouvé
+cinq écarts entre le rapport du cycle et la réalité. Quatre corrigés dans ce
+cycle transverse (aucun n'ouvre de nouveau chantier) :
+
+- **Fuseau horaire** : `FUSEAU_HORAIRE_BOUTIQUE = "Africa/Douala"`
+  (`database.py`), fixé à **deux niveaux indépendants** — voir `db/README.md`,
+  section « Fuseau horaire ». Touche aussi C5 (`/ventes/synthese-jour`) :
+  les deux suites ont été rejouées après ce correctif, sans régression.
+- **HTML non échappé** : recensement de **tous** les usages d'`innerHTML`
+  dans la maquette (5 fichiers) — **5 occurrences dangereuses** trouvées
+  (interpolation de données dans du HTML construit par concaténation), 2
+  dans `vente.html`, 3 dans `tableau-bord.html` ; les 7 autres usages
+  d'`innerHTML` sont des littéraux statiques ou des vidages, sans
+  interpolation, donc non concernés. Les 5 corrigées via `creerLigneListe()`
+  (`api.js`) ou construction DOM directe. Vérifié par un essai d'injection
+  réel (`verifier-echappement-html.mjs`, 11/11) : un nom d'article contenant
+  `<img src=x onerror="...">` ne s'exécute nulle part, s'affiche comme texte
+  partout.
+- **Impasse d'ergonomie sur un 409** : `inventaire.html` traite désormais un
+  409 (« déjà compté ») comme un succès local plutôt qu'une erreur
+  bloquante — le cas réel d'une réponse perdue après une soumission qui a
+  en fait réussi. Vérifié par un scénario à deux onglets simulant la double
+  soumission.
+- **Comportement du responsable sur la liste à compter** : `site_id` ajouté
+  à la réponse de `GET /inventaire/articles-a-compter`.
+
+Le cinquième constat (absence de test d'injection) est la correction
+elle-même, ci-dessus (`test_champs_interdits_injectes_par_le_client_sont_sans_effet`).
 
 ---
 
@@ -322,9 +357,9 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 | `test_cloisonnement_site.py` | un site fourni en paramètre est ignoré ; **RLS bloquée en SQL direct**, hors API |
 | `test_securite.py` | aucun hachage ne fuit, config refuse superutilisateur/clé d'exemple, injection SQL neutralisée, jetons expirés/falsifiés/mal signés refusés |
 | `test_ventes.py` | TVA calculée à la main et comparée, vente à découvert jamais refusée (écart consigné), crédit client refusé, cloisonnement par rôle/site sur une route d'ÉCRITURE |
-| `test_inventaire.py` | liste à compter sans aucune quantité, réponse d'un comptage limitée à ce qui a été envoyé, **lecture de `ecart` refusée en SQL direct**, article déjà compté exclu, écarts réservés au responsable et exacts |
+| `test_inventaire.py` | liste à compter sans aucune quantité (site_id distingue les deux sites pour le responsable), réponse d'un comptage limitée à ce qui a été envoyé **même si le client injecte des champs interdits**, **lecture de `ecart` refusée en SQL direct**, article déjà compté exclu, écarts réservés au responsable et exacts |
 
-Dernier résultat : **53/53**, trace complète dans
+Dernier résultat : **55/55**, trace complète dans
 [`tests/DERNIER_RESULTAT.md`](tests/DERNIER_RESULTAT.md).
 
 ### Piège à éviter en écrivant un test (Windows)

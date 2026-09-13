@@ -10,6 +10,16 @@ C'est ICI, et nulle part ailleurs, que se fait la bascule vers le rôle de
 l'utilisateur authentifié (chantier C3) : aucune route ne doit vérifier un
 droit elle-même, c'est PostgreSQL qui le fait, via les privilèges par colonne
 et les politiques RLS posées au cycle 2.
+
+Trouvé par exécution lors du contrôle de boucle après le cycle 7 : la base
+de développement tournait en ``Europe/Paris`` alors que la boutique est à
+Batouri, Cameroun (``Africa/Douala``, UTC+1, jamais d'heure d'été) — un
+décalage silencieux sur tout ce qui dépend du « jour » (CURRENT_DATE,
+NOW()) : unicité d'un comptage par jour (migration 003), écrans « du jour »
+(chantiers C5 et C7). Fixé au niveau de la base par la migration 013
+(``ALTER DATABASE ... SET timezone``), et RENFORCÉ ICI à chaque connexion,
+pour ne dépendre ni d'un réglage de base qu'un déploiement pourrait oublier
+d'appliquer, ni du fuseau du système d'exploitation du poste serveur.
 """
 
 from __future__ import annotations
@@ -22,6 +32,12 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 from .config import ROLES_VALIDES, Config
+
+# La boutique est à Batouri (Cameroun) : jamais hérité du système
+# d'exploitation du poste serveur, ni d'une variable d'environnement. Voir
+# aussi db/migrations/013_fuseau_horaire_boutique.sql (même valeur, au
+# niveau de la base).
+FUSEAU_HORAIRE_BOUTIQUE = "Africa/Douala"
 
 
 class BaseDeDonnees:
@@ -43,6 +59,7 @@ class BaseDeDonnees:
         utilisables ici.
         """
         with psycopg.connect(**self._parametres_connexion(), row_factory=dict_row) as conn:
+            conn.execute("SELECT set_config('TimeZone', %s, false)", (FUSEAU_HORAIRE_BOUTIQUE,))
             yield conn
 
     @contextmanager
@@ -80,6 +97,7 @@ class BaseDeDonnees:
                     # whitelist fermée vérifiée juste au-dessus, jamais
                     # directement d'une entrée utilisateur.
                     cur.execute(sql.SQL("SET LOCAL ROLE {}").format(sql.Identifier(role)))
+                    cur.execute("SELECT set_config('TimeZone', %s, true)", (FUSEAU_HORAIRE_BOUTIQUE,))
                     if site_id is not None:
                         cur.execute("SELECT set_config('qf.site_id', %s, true)", (str(site_id),))
                     if utilisateur_id is not None:
