@@ -201,6 +201,45 @@ def test_modification_fournisseur_invalide_refusee_proprement(client):
     assert "erreur interne" not in reponse.json()["detail"].lower()
 
 
+def test_modification_prix_identique_ne_trace_rien(client):
+    """Constat n°3 (contrôle de boucle après le cycle 11) : le formulaire de
+    stock.html pré-remplit toujours les prix — soumettre le même prix
+    (typiquement en corrigeant seulement le nom) ne doit PAS créer de ligne
+    dans historique_prix_articles."""
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute("SELECT count(*) AS n FROM historique_prix_articles WHERE article_id = 1")
+            avant = cur.fetchone()["n"]
+
+    reponse = client.put(
+        "/articles/1",
+        headers=entete_autorisation(session["jeton"]),
+        json={"nom": "Ciment renommé, prix inchangé", "prix_achat": 5000, "prix_vente": 6500},
+    )
+    assert reponse.status_code == 200, reponse.text
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute("SELECT count(*) AS n FROM historique_prix_articles WHERE article_id = 1")
+            apres = cur.fetchone()["n"]
+    assert apres == avant, "aucune ligne d'historique de prix pour un prix soumis identique à l'actuel"
+
+    # Un vrai changement, lui, doit toujours être tracé.
+    reponse = client.put(
+        "/articles/1",
+        headers=entete_autorisation(session["jeton"]),
+        json={"prix_vente": 6600},
+    )
+    assert reponse.status_code == 200, reponse.text
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute("SELECT count(*) AS n FROM historique_prix_articles WHERE article_id = 1")
+            apres_vrai_changement = cur.fetchone()["n"]
+    assert apres_vrai_changement == avant + 1, "un vrai changement de prix reste tracé"
+
+
 # ---------------------------------------------------------------------------
 # Articles de l'autre site (GET /articles/autre-site, cycle 11)
 # ---------------------------------------------------------------------------

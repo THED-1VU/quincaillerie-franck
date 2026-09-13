@@ -9,6 +9,47 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 13 — correction des constats n°2 et n°3 (chantier C4), 2026-09-13
+
+Migration 016 (`retours_coherence_document_origine.sql`) : corrige
+`enregistrer_retour_client()` et `enregistrer_retour_fournisseur()`
+(migration 014) pour qu'un retour ne dépasse jamais, en article et en
+quantité, ce que le document d'origine référencé porte réellement — le
+constat n°2 du contrôle de boucle après le cycle 9. `PUT /articles/{id}`
+corrigé pour ne tracer un changement de prix que s'il a réellement eu
+lieu — le constat n°3 du contrôle de boucle après le cycle 11.
+
+### `test_stock.py` (+3) et `test_articles.py` (+1) — nouveaux, 4/4
+
+```
+test_retour_client_article_non_vendu_dans_la_vente_refuse PASSED
+test_retour_client_quantite_cumulee_depassee_refuse PASSED
+test_retour_fournisseur_quantite_cumulee_depassee_refuse PASSED
+test_modification_prix_identique_ne_trace_rien PASSED
+```
+
+Vérifié en SQL direct avant tout code Python (comme pour la migration 014) :
+retour exactement égal au reste disponible (accepté), un de plus (refusé),
+deuxième retour cumulé qui dépasse après un premier retour valide
+(refusé), article non vendu dans la vente indiquée (refusé) — pour le
+retour client comme pour le retour fournisseur. Les vérifications
+préexistantes (site, existence du mouvement/de la vente, nature du
+mouvement, stock suffisant) revérifiées intactes après le changement
+d'ordre des contrôles dans `enregistrer_retour_fournisseur()`.
+
+### Suite complète
+
+```powershell
+server\.venv\Scripts\python.exe -m pytest server\tests\ -v
+```
+
+**104 passed** (100 hérités des cycles précédents + 4 nouveaux), 0
+régression. Les 6 suites Playwright (`cablage`, `vente`, `inventaire`,
+`echappement`, `stock`, `rapports`) : 76/76, 10/10, 17/17, 11/11, 26/26,
+29/29 — 0 régression (aucun écran touché ce cycle).
+
+---
+
 ## Cycle 11 — écran de stock (chantier C4), 2026-09-13
 
 Aucune nouvelle table : migration 015 (une seule fonction,

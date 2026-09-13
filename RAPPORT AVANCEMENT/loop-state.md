@@ -32,7 +32,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C1 | Base de données et intégrité | **80 %** | Cycle 2. 9 migrations numérotées (`db/migrations/`) + inverses, appliquées et annulées par exécution réelle sur PostgreSQL 17.11. Corrigés et **prouvés** : contraintes de domaine, cohérence inter-tables, **écart d'inventaire calculé par la base** (et quantité attendue figée par déclencheur), historique non effaçable (`RESTRICT` + verrous de suppression + suppression logique), journaux de connexion et de comptes, annulation tracée et irréversible, table de paramètres avec sentinelle « à décider », index de recherche, **4 rôles non superutilisateurs à privilèges par colonne** + RLS par site. **100 contrôles, 0 échec** (`db/tests/DERNIER_RESULTAT.md`). Reste : décisions métier de l'addendum (points b, d, e, g), fonction d'authentification (C2), exploitation de la RLS (C3), reprise sur une base contenant de vraies données. |
 | C2 | Authentification et comptes | **65 %** | Cycle 3. Noyau serveur (`server/`, FastAPI) : connexion via `verifier_connexion()` (fonction PostgreSQL `SECURITY DEFINER`, migration 009, seule à lire le hachage, jamais restitué) ; verrouillage après 5 échecs, déverrouillage réservé au responsable, obligation de changement à la première connexion, libre-service limité à sa propre ligne, limitation de débit. **36/36 tests, 0 échec** (`server/tests/DERNIER_RESULTAT.md`). Reste : session à durée limitée = choix technique temporaire (`duree_session_minutes` reste `a_definir` en base — décision propriétaire) ; pas de révocation de jeton avant expiration (limite technique documentée) ; pas d'écran, pas de création de compte via API (hors périmètre du cycle). |
 | C3 | Habilitations et cloisonnement des rôles | **60 %** | Cycle 3. Habilitations appliquées **au niveau des requêtes SQL** (pas de vérification applicative dispersée) : privilèges par colonne + RLS par site posés au cycle 2, exploités par `BaseDeDonnees.connexion_pour()` (point de bascule de rôle unique). Prouvé par exécution en **contournant l'API** : `SELECT ... WHERE site_id=2` sous `qf_agent_stock` renvoie 0 ligne même en le demandant explicitement (`server/tests/test_cloisonnement_site.py`). Rôle « caissier » toujours non tranché (addendum h) — non traité ce cycle. Reste : cloisonnement RH/fournisseurs non testé par une route, pas encore d'écran. |
-| C4 | Articles et stock | **68 %** | Cycles 9 et 11. Six opérations réelles (création, modification, réception, transfert inter-sites, casse, retours client/fournisseur), chacune une fonction PostgreSQL `SECURITY DEFINER` et une vraie route API, **désormais toutes câblées sur un vrai écran** (`maquette/stock.html`, cycle 11) pour le responsable et l'agent stock. Modification tracée dans `historique_modifications_articles`/`historique_prix_articles` (existaient sans une seule ligne depuis le cycle 1) ; `quantite_stock` volontairement jamais modifiable par fiche, même si le `GRANT` du cycle 2 le permettrait à un agent stock. **Aucun montant FCFA, aucun champ de prix n'atteint la page ni les réponses réseau de l'agent stock** — prouvé par capture et par inspection du DOM/réseau (cycle 11). Correctif du constat n°1 du contrôle de boucle après le cycle 9 (`POST /articles` : 500 générique → 422 clair sur un `site_id`/`fournisseur_id` invalide). Vérifié par exécution : 100/100 tests pytest (90 + 10 nouveaux), suite SQL à jour (44/44, 52/52, 6/6, réversibilité de la migration 015 confirmée), 5 suites Playwright dont `verifier-stock-reel.mjs` (nouveau, 26/26) — 0 régression. Manquent : volumétrie/reprise du stock initial (addendum j, non tranché), remises et conversion d'unités (addendum f, volet non tranché), export, le **constat n°2** (cohérence article/quantité d'un retour) et le **constat n°3** trouvé au contrôle de boucle après le cycle 11 (`PUT /articles/{id}` trace un changement de prix dans `historique_prix_articles` même quand le prix soumis est identique à l'actuel — se déclenche dans l'usage ordinaire de l'écran, puisque le formulaire pré-remplit toujours les prix). |
+| C4 | Articles et stock | **72 %** | Cycles 9, 11 et 13. Six opérations réelles, chacune une fonction PostgreSQL `SECURITY DEFINER`, toutes câblées sur un vrai écran (`maquette/stock.html`, cycle 11). **Constats n°2 et n°3 corrigés (cycle 13)** : un retour client ou fournisseur ne peut plus dépasser, en article et en quantité (cumul de plusieurs retours compris), ce que la vente ou la réception d'origine porte réellement (migration 016) ; `PUT /articles/{id}` ne trace plus de changement de prix dans `historique_prix_articles` quand le prix soumis est identique à l'actuel. `quantite_stock` volontairement jamais modifiable par fiche. **Aucun montant FCFA, aucun champ de prix n'atteint la page ni les réponses réseau de l'agent stock**. Vérifié par exécution : 104/104 tests pytest (100 + 4 nouveaux), suite SQL à jour (44/44, 52/52, 6/6, réversibilité de la migration 016 confirmée, vérifiée en SQL direct avant tout code Python), 6 suites Playwright — 0 régression (aucun écran touché par la correction). Manquent : volumétrie/reprise du stock initial (addendum j, non tranché), remises et conversion d'unités (addendum f, volet non tranché), export dédié à C4. |
 | C5 | Ventes et facturation | **43 %** | Cycle 6, durci par le cycle de correction après C7. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` (`server/app/routes/ventes.py`) enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. Vérifié par exécution : 8/8 tests pytest dédiés (55/55 au total, 0 régression), suite SQL du cycle 2 rejouée à jour (44/44 protections, 52/52 habilitations, **6/6 concurrence — réécrite pour le nouveau comportement anti-survente**, réversibilité des migrations confirmée), et 10/10 contrôles Playwright bout-en-bout sur l'écran de vente réellement câblé (`verifier-vente-reelle.mjs`) : vente normale (aperçu affiché AVANT validation identique à la confirmation serveur), vente à découvert acceptée avec écart affiché, crédit client absent des choix, responsable contraint de choisir un site. **+3 points (cycle de correction)** : fuseau horaire de `/ventes/synthese-jour` fixé à Africa/Douala au lieu d'hériter d'un réglage faux (Europe/Paris) — le « jour » des ventes dépendait silencieusement de l'horloge du poste serveur ; recherche/panier de `vente.html` ne construisent plus le HTML par concaténation non échappée (nom d'article), vérifié par un essai d'injection réel. Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), annulation d'une vente, régularisation d'un écart, documents imprimés (ticket/facture), écarts de stock pas encore affichés au tableau de bord (prévu chantier C7). |
 | C6 | Comptabilité et RH | **0 %** | Non vérifié. `transactions`, `employes`, `absences_conges`, `avances_salaire` présents. Manquent : clôture de caisse (addendum g), contre-passation d'annulation, `transactions.vente_id` non unique, audit des corrections. |
 | C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
@@ -44,7 +44,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 12 : ≈ 44 %** (C0 55, C1 80, C2 65, C3 60, C4 68, C5 43, C7 50, C8 60, C9 50, C10 30, C11 55, C14 40, autres 0).
+**Moyenne indicative après le cycle 13 : ≈ 44 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 43, C7 50, C8 60, C9 50, C10 30, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -1400,30 +1400,95 @@ du plan — en commençant par la correction des constats n°2 et n°3 de C4.
 
 ---
 
+### Cycle 13 — Correction des constats n°2 et n°3 : C4 — 2026-09-13
+
+Cinquième cycle mené sous le processus corrigé en 4 étapes de `SKILL.md`.
+Validé par le propriétaire dans le même message que la fusion de la
+PR #13, avec une planification explicite pour la suite : « ensuite la
+fusion et la planification suivante sur l'exécution de 2 ou 3 chantiers
+en même temps » — voir la note de clarification donnée avant ce cycle
+(SKILL.md interdit qu'un cycle traite plus d'un chantier ; la demande est
+donc traitée comme un carnet de cycles validés, exécutés l'un après
+l'autre, chacun avec son diagnostic et son point d'arrêt).
+
+- **Étape 1 — Diagnostic du cycle précédent (cycle 12, C8)** : voir
+  « Contrôle de boucle — après cycle 12 » ci-dessus. Tout rejoué à
+  l'identique (100/100 pytest, 44/44+52/52+6/6 SQL, 6 suites Playwright),
+  essai spécifique d'une période inversée sur l'écran réel : aucun
+  nouveau constat.
+- **Étape 2 — Propositions** : une seule option, déjà retenue par le
+  propriétaire — correction des constats n°2 (contrôle de boucle après
+  le cycle 9) et n°3 (contrôle de boucle après le cycle 11) de C4.
+- **Étape 3 — Objectif et plan** : fermer les deux failles d'audit sans
+  toucher à aucun écran. **Validé explicitement par le propriétaire**
+  (« je valide tout »).
+- **Étape 4 — Mise en œuvre** : branche `cycle-13-correction-c4`.
+  - `db/migrations/016_retours_coherence_document_origine.sql`
+    (+ inverse) : `enregistrer_retour_client()` refuse désormais un
+    article qui ne fait pas partie de la vente référencée
+    (`ventes_lignes`), et refuse un retour qui dépasserait — cumul des
+    retours déjà faits contre CETTE vente précise compris — la quantité
+    réellement vendue. `enregistrer_retour_fournisseur()` refuse de même
+    un retour qui dépasserait — cumul compris — la quantité réellement
+    reçue par CE mouvement de réception précis. Vérifié en SQL direct
+    avant tout code Python (comme la migration 014) : retour exact
+    accepté, un de plus refusé, deuxième retour cumulé qui dépasse après
+    un premier retour valide refusé, article non vendu dans la vente
+    indiquée refusé — pour le client comme pour le fournisseur ; les
+    vérifications préexistantes (site, existence, nature du mouvement,
+    stock suffisant) revérifiées intactes après réordonnancement des
+    contrôles dans `enregistrer_retour_fournisseur()`.
+  - `server/app/routes/articles.py` : la condition d'écriture dans
+    `historique_prix_articles` compare désormais réellement l'ancien et
+    le nouveau prix — en `float` des deux côtés (l'ancien est un
+    `Decimal` lu en base, le nouveau un `float` Pydantic ; comparer leurs
+    représentations en chaîne les aurait distingués à tort, contrairement
+    au motif `str(...) != str(...)` déjà utilisé pour les autres champs).
+  - `server/tests/test_stock.py` : +3 tests (article non vendu dans la
+    vente, quantité cumulée dépassée côté client, côté fournisseur).
+    `server/tests/test_articles.py` : +1 test (aucune ligne d'historique
+    pour un prix identique, un vrai changement reste tracé).
+- **Vérification par exécution** :
+  - `test_stock.py` + `test_articles.py` : **32/32** (28 hérités + 4
+    nouveaux dans ces deux fichiers).
+  - Suite pytest complète : **104/104**, 0 régression.
+  - `db/tests/executer_tests.sh` (migrations 000 à 016) : protections
+    **44/44**, habilitations **52/52**, concurrence **6/6**, réversibilité
+    de la migration 016 confirmée (aucune trace résiduelle au-delà des 2
+    écarts déjà documentés et pré-existants).
+  - 0 régression sur les 6 suites Playwright existantes (aucun écran
+    touché ce cycle) : **76/76**, **10/10**, **17/17**, **11/11**,
+    **26/26**, **29/29**.
+- **Documentation** : `db/README.md` (migration 016), `server/README.md`
+  (section cycle 13 sous C4), `server/tests/DERNIER_RESULTAT.md`,
+  `db/tests/DERNIER_RESULTAT.md`, `loop-state.md`.
+- **Score** : C4 **68 % → 72 %**. Commit, PR sur `cycle-13-correction-c4`
+  — **non fusionnée**, sur instruction du propriétaire (fusion à
+  confirmer dans le bilan qui suit, comme demandé).
+- **Reste ouvert** : points j et f (volet remises/unités) toujours non
+  tranchés, aucun export dédié à C4. Les points 2, 4 et 5 du plan
+  hiérarchisé restent à traiter (C6 hors clôture de caisse, test dédié au
+  cloisonnement par site des exports, décisions du propriétaire).
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
-1. **Correction des constats n°2 et n°3 de C4** : n°2 (contrôle de boucle
-   après cycle 9) — absence de vérification de cohérence article/quantité
-   sur les retours client et fournisseur contre le document d'origine
-   réellement référencé (`ventes_lignes`, quantité reçue), exige une
-   nouvelle migration modifiant deux fonctions `SECURITY DEFINER` ; n°3
-   (contrôle de boucle après cycle 11) — `PUT /articles/{id}` trace un
-   changement de prix même sans changement réel, se déclenche dans l'usage
-   ordinaire de l'écran (formulaire pré-rempli). Les deux touchent l'audit
-   des articles, un travail de fond distinct de l'ergonomie d'écran.
-2. **C6 (comptabilité/RH)**, hors clôture de caisse : reste entièrement à
+1. **C6 (comptabilité/RH)**, hors clôture de caisse : reste entièrement à
    0 %, sans blocage connu par une décision non tranchée.
-3. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
+2. **Mesures humaines de `UX_BASELINE.md`** : ne nécessite aucun
    développement — un testeur humain, chronomètre en main, sur le serveur
    désormais câblé pour de vrai jusqu'au comptage d'inventaire (protocole
    exact au §1 bis). Lèverait le plafond de 60 % sur C9 et C10 si les
    résultats sont conformes. Peut se faire à tout moment, en parallèle d'un
-   autre cycle.
-4. **Test dédié au cloisonnement par site des exports** (constat du
+   autre cycle. **Ne peut pas être exécuté par l'agent** (mesure humaine).
+3. **Test dédié au cloisonnement par site des exports** (constat du
    contrôle de boucle après cycle 10, toujours ouvert) : `test_rapports.py`
    ne teste pas explicitement que l'export d'un agent ne contient que son
    propre site — ça fonctionne (vérifié par exécution directe deux fois),
    mais ce n'est pas dans la suite automatisée.
-5. **C3 (numéro facturier, addendum c)** ou **C6 (clôture de caisse,
+4. **C3 (numéro facturier, addendum c)** ou **C6 (clôture de caisse,
    addendum g)** : nécessitent au préalable une décision du propriétaire,
-   non tranchée à ce jour.
+   non tranchée à ce jour. **Ne peut pas être tranché par l'agent** —
+   décision métier, comme les points h, i et l évoqués dans le bilan
+   donné après le cycle 12.
