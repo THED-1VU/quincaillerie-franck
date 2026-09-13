@@ -51,7 +51,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C5 | Ventes et facturation | **62 %** | Cycle 6, durci par le cycle de correction après C7, complété par les cycles 17 et 19. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. **Cycle 17** : `POST /ventes/{id}/annuler` (migration 017) restitue le stock RÉELLEMENT décrémenté, contre-passe la recette, régularise d'office l'écart devenu sans objet ; `POST /inventaire/ecarts-ventes/{id}/regulariser` marque un écart traité. Faille trouvée par exécution : `decrementer_stock_vente()` (cycle 6) ne renseignait jamais `mouvements_stock.vente_id`, corrigée dans la même migration. **Cycle 19** : `GET /ventes/{id}/recu` — reçu PDF (`reportlab`) téléchargeable depuis l'écran de vente (CDC §3.3/§7.1) ; n'affiche que ce qui est décidé (téléphone/n° contribuable omis tant que `a_definir`, aucun numéro de facturier fabriqué) ; une vente annulée porte une mention explicite. Vérifié par exécution : 24/24 tests pytest dédiés (140/140 au total, 0 régression), suite SQL à jour (44/44/52/52/6/6, réversibilité confirmée), 12/12 + 17/17 contrôles Playwright (dont un vrai téléchargement PDF intercepté après la vente). Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché), ticket thermique / code-barres (non demandés), impression physique sur une imprimante réelle (non vérifiable par l'agent). |
 | C6 | Comptabilité et RH | **55 %** | Cycle 16, complété au cycle 18. `transactions` (recette/dépense **hors vente**, historique filtrable par période), `employes`/`absences_conges`/`avances_salaire` (responsable seul, CDC §3.5) — tables et `GRANT` existant depuis les cycles 1/2, jamais exposés avant le cycle 16. `POST /transactions`, `POST/GET /rh/employes\|absences-conges\|avances-salaire`, `POST /rh/avances-salaire/{id}/rembourser`. La carte « Saisie rapide » de `tableau-bord.html` (simulée depuis le cycle 5) câble un vrai formulaire. **Cycle 18** : `maquette/rh.html`, écran dédié pour les trois routes RH (employés, absences/congés, avances sur salaire), lien ajouté au tableau de bord. **Correction d'une inexactitude du diagnostic d'origine** (cycle 16) : `transactions.vente_id` porte déjà un index unique partiel (`uq_transactions_recette_par_vente`, cycle 2) empêchant une double recette pour la même vente. Vérifié par exécution : 18/18 tests pytest dédiés (135/135 au total, 0 régression), `verifier-cablage.mjs` 77/77, `verifier-rh-reel.mjs` 21/21 (nouveau — employé/absence/avance créés depuis l'écran et retrouvés en base, remboursement réel). Manquent : clôture de caisse (point g, non tranché), contre-passation d'annulation, audit des corrections. |
 | C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
-| C8 | Tableaux de bord et rapports | **62 %** | Cycles 10, 12 et 14. Alertes de stock, historique des comptages et deux exports Excel/PDF, tous câblés sur un vrai écran (`maquette/rapports.html`, cycle 12). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit pour les 3 rôles au niveau API (cycle 10) et par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12). **Cycle 14** : le cloisonnement par site des deux exports (déjà vérifié deux fois par exécution directe, jamais couvert par un test) a désormais 2 tests dédiés dans `test_rapports.py` — un agent stock du Magasin n'exporte aucun article du Comptoir, un agent comptabilité du Magasin n'exporte aucune vente du Comptoir. Vérifié par exécution : 106/106 pytest (104 + 2 nouveaux), aucun écran ni migration touchés. Manquent : bascule vue consolidée/par site (les données portent déjà `site_id`, la bascule elle-même n'a pas d'écran), clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). |
+| C8 | Tableaux de bord et rapports | **70 %** | Cycles 10, 12, 14 et 23. Alertes de stock, historique des comptages et deux exports Excel/PDF, tous câblés sur un vrai écran (`maquette/rapports.html`, cycle 12). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit pour les 3 rôles au niveau API (cycle 10) et par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12). **Cycle 14** : cloisonnement par site des exports, 2 tests dédiés. **Cycle 23** : bascule vue consolidée/par site sur `tableau-bord.html` — chaque route renvoyait déjà `site_id` par ligne, la bascule est un filtre purement d'affichage (aucune route ni migration nouvelle, aucun appel réseau au changement de vue). Vérifié par exécution : `verifier-cablage.mjs` +7 (87/87) — filtrer sur un site recalcule le total exactement (8 500 / 3 200 FCFA) et fait disparaître l'autre site de chaque carte, retour à « Les deux sites » retrouve le total consolidé identique (11 700 FCFA). Manquent : clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). |
 | C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
 | C10 | Mobile et API web *(priorité 1)* | **38 %** | Cycle 5, complété au cycle 15. Les deux écrans mobile-first sont **la même application web**, testée à 360/390/768 px. **Cycle 15** : trouvé par exécution — le serveur (dev ET paquet Windows) n'écoutait que sur `127.0.0.1`, **injoignable depuis n'importe quel autre appareil**, téléphone compris, même sur le même réseau. Corrigé (`--host 0.0.0.0` en dev, `server/fabrication/lanceur.py` pour le paquet, qui affiche désormais sa propre adresse réseau locale à l'utilisateur). Vérifié par exécution, dev et paquet Windows reconstruit : requête réelle vers l'adresse réseau locale de la machine (pas `127.0.0.1`) répondant correctement sur `/sante` et `/app/connexion.html`. **Non fermé** : la preuve manquante reste un **véritable téléphone physique** — ce que l'agent n'a pas — la couche réseau est prouvée, pas le rendu sur un vrai appareil. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **68 %** | Cycle 3, complété au cycle 22. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse, erreurs SQL jamais renvoyées telles quelles au client. **Cycle 22** : révocation de session (migration 018, `POST /auth/deconnexion`, `deps.obtenir_session()` vérifie la révocation à chaque requête — un jeton révoqué signature-valide et non expiré est quand même refusé, prouvé en le rejouant après déconnexion) ; en-têtes HTTP de sécurité (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) sur toute réponse. Vérifié par exécution : 4/4 tests pytest dédiés (144/144 au total, 0 régression, coût mesuré ~13 % de temps d'exécution en plus), `verifier-cablage.mjs` +3 (80/80, jeton intercepté avant déconnexion puis rejoué → refusé). Reste : limiteur de débit partagé entre processus (délibérément pas fait ce cycle — mérite sa propre vérification, pas glissé à la suite de deux autres changements de sécurité), audit plus large (dépendances, TLS — hors périmètre local de dev). |
@@ -59,7 +59,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **55 %** | Cycle 20 — correction d'une inexactitude du diagnostic d'origine (comme pour C6 au cycle 16) : le score restait à 0 % alors que **140 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **7 suites Playwright** (193 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant — jamais reflété dans le score. `db/outils/verifier_tout.sh` (nouveau) enchaîne les trois couches en une seule commande, vérifié par exécution (exit code 0, 0 échec). Deux pièges trouvés en l'écrivant : la limite de connexion de `config.ini` (10/min) fait échouer les suites en cascade au-delà de la première ; l'étape de réversibilité SQL recrée `qf_app` sans mot de passe. Manquent : CI automatisée sur chaque push (`server/tests/conftest.py` appelle un chemin Windows en dur, non portable vers un runner Linux sans correction dédiée — chantier à part), couverture des parcours nécessitant une imprimante ou un téléphone réels. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 22 : ≈ 57 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 62, C9 50, C10 38, C11 68, C12 45, C13 55, C14 40).
+**Moyenne indicative après le cycle 23 : ≈ 58 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 70, C9 50, C10 38, C11 68, C12 45, C13 55, C14 40).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -2000,6 +2000,59 @@ trois lacunes de sécurité documentées de longue date, la troisième
 
 ---
 
+### Cycle 23 — Bascule vue consolidée / par site : C8 — 2026-09-13
+
+Quatrième et dernier chantier de ce lot (C13, C12, C11, C8).
+
+- **Objectif** : le gap identifié depuis le cycle 10 — « les données
+  portent déjà `site_id`, la bascule elle-même n'a pas d'écran ».
+- **Constat qui a simplifié le chantier** : chaque route du tableau de
+  bord (`/ventes/synthese-jour`, `/tableau-bord/alertes-stock`,
+  `/inventaire/ecarts`, `/inventaire/ecarts-ventes`) renvoie **déjà**
+  `site_id` sur chaque ligne pour un responsable (vue non filtrée côté
+  RLS). La bascule est donc un **filtre purement d'affichage** — aucune
+  route, aucune migration, aucun appel réseau supplémentaire au
+  changement de vue.
+- **Mise en œuvre** : branche `cycle-23-c8-bascule-vue-site`, empilée sur
+  `cycle-22-c11-securite-applicative` (même raison que les empilements
+  précédents : pas de dépendance de code, mais le même tableau de scores).
+  - `maquette/tableau-bord.html` : sélecteur (« Les deux sites » /
+    « Magasin de stock » / « Comptoir ») près du titre. Chaque carte
+    garde ses données BRUTES en mémoire et se redessine entièrement au
+    changement de site — jamais un nouveau `fetch()`. Le libellé du
+    total (« consolidé » / « du site ») change avec la vue, pour ne
+    jamais laisser croire qu'un total filtré reste consolidé.
+  - `verifier-cablage.mjs` étendu (+7) : réutilise les ventes déjà
+    semées par la suite elle-même (6500 FCFA site 1, 3200 FCFA site 2)
+    + la vente réelle créée plus tôt dans le même run (2000 FCFA site 1)
+    pour vérifier des totaux filtrés exacts, pas seulement une présence
+    de texte.
+- **Vérification par exécution** : `verifier-cablage.mjs` **87/87**
+  (80 + 7 nouveaux) — filtrer sur Magasin fait disparaître Comptoir et
+  recalcule le total à 8 500 FCFA exactement ; filtrer sur Comptoir
+  donne 3 200 FCFA et fait disparaître l'alerte « Article rare »
+  (au Magasin) ; revenir à « Les deux sites » retrouve 11 700 FCFA,
+  identique à avant tout filtrage. `verifier-echappement-html.mjs`
+  (11/11) et les 5 autres suites Playwright (12/12, 17/17, 26/26,
+  29/29, 21/21) rejouées sans régression. Aucun code serveur touché,
+  suite pytest inchangée (144/144).
+- **Documentation** : `server/README.md` (section C8 étendue),
+  `maquette/verification/DERNIER_RESULTAT.md`, `loop-state.md`.
+- **Score** : C8 **62 % → 70 %**. Commit, PR sur
+  `cycle-23-c8-bascule-vue-site` — **non fusionnée**, sur instruction du
+  propriétaire.
+- **Reste ouvert** : clôture de caisse (point g, non tranché), numéro de
+  facturier (point c, non tranché).
+
+---
+
+Le lot de 4 chantiers (cycles 20 à 23 — correction diagnostic C13,
+sauvegarde/restauration C12, sécurité applicative C11, bascule vue C8)
+est **terminé** : PR #22, #23, #24, #25 ouvertes, empilées dans cet
+ordre, fusion laissée au propriétaire.
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
@@ -2010,7 +2063,11 @@ de 3 chantiers suivant (cycles 17, 18, 19 — annulation/régularisation C5,
 #19/#20/#21, empilées dans l'ordre — retargées vers `main` avant chaque
 fusion de leur base pendant qu'elles étaient encore ouvertes, comme la
 leçon de la PR #16 le prescrit ; les trois fusions et suppressions de
-branche se sont enchaînées sans accroc cette fois).
+branche se sont enchaînées sans accroc cette fois). Le lot de 4 chantiers
+suivant (cycles 20 à 23 — correction diagnostic C13, sauvegarde/
+restauration C12, sécurité applicative C11, bascule vue C8) est
+**terminé, PR #22/#23/#24/#25 ouvertes**, empilées dans l'ordre, fusion
+laissée au propriétaire.
 
 1. **Vérification C10 depuis un vrai téléphone physique** : la couche
    réseau est prouvée (cycle 15) — reste la dernière étape, qui doit être

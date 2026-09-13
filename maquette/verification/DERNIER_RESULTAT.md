@@ -16,7 +16,7 @@ qui enchaîne les 7 suites ci-dessous en une seule commande.
 
 | Suite (`npm run …`) | Depuis | Dernier résultat connu |
 |---|---|---|
-| `cablage` | cycle 5, étendue à chaque écran câblé depuis | **77/77** (cycle 16) |
+| `cablage` | cycle 5, étendue à chaque écran câblé depuis | **87/87** (cycle 23) |
 | `vente` | cycle 6 | **12/12** (cycle 19 — reçu PDF ajouté) |
 | `inventaire` | cycle 7 | **17/17** (cycle 7) |
 | `stock` | cycle 11 | **26/26** (cycle 13) |
