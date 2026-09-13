@@ -4,7 +4,16 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 19 — reçu de vente imprimable, C5**,
+- Dernier cycle fusionné : **Cycle 23 — bascule vue consolidée/site, C8**,
+  2026-09-13 (PR #25, fast-forward, commit `87603d4`) ; précédé du
+  **Cycle 22 — sécurité applicative, C11** (PR #24, commit `58d3845`), du
+  **Cycle 21 — sauvegarde et restauration, C12** (PR #23, commit
+  `debd7b5`) et du **Cycle 20 — correction diagnostic C13, C13** (PR #22,
+  commit `9a466a6`) — lot de 4 PR empilées (#23 sur #22, #24 sur #23, #25
+  sur #24), chacune retargée vers `main` avant fusion de sa base pendant
+  qu'elle était encore ouverte (même règle que pour le lot précédent) :
+  les quatre fusions et suppressions de branche se sont enchaînées sans
+  accroc. Précédé du **Cycle 19 — reçu de vente imprimable, C5**,
   2026-09-13 (PR #21, fast-forward, commit `6b9acad`) ; précédé du
   **Cycle 18 — écran dédié RH, C6** (PR #20, fast-forward, commit
   `b5919ca`) et du **Cycle 17 — annulation de vente et régularisation
@@ -1844,7 +1853,10 @@ applicatif, juste la documentation et l'outillage de test.
 - **Score** : C13 **0 % → 55 %** — corrige une inexactitude du diagnostic
   d'origine (comme pour C6 au cycle 16), ne prétend pas à un chiffre plus
   haut : rien de nouveau n'a été TESTÉ ce cycle, seule la trace existante
-  a été consolidée et outillée d'une commande unique.
+  a été consolidée et outillée d'une commande unique. Commit, PR #22 sur
+  `cycle-20-c13-suite-verification-unifiee`, **fusionnée le 2026-09-13**
+  sur instruction explicite du propriétaire (commit de fusion `9a466a6`,
+  fast-forward, branche supprimée).
 - **Reste ouvert** : **CI automatisée sur chaque push/PR** (mentionnée de
   longue date comme un manque de C0) — délibérément **pas** tentée ce
   cycle : `server/tests/conftest.py` appelle un chemin Windows en dur
@@ -1910,9 +1922,10 @@ aujourd'hui, aucun script ni procédure détectable dans le livré d'origine
   `PERIMETRE_LIVRE.md` (ligne §4 et contradiction n°7 passées de « Non
   couvert » à « Confirmé (test) », ligne « Livrables manquants »
   actualisée), `loop-state.md`.
-- **Score** : C12 **0 % → 45 %**. Commit, PR sur
-  `cycle-21-c12-sauvegarde-restauration` — **non fusionnée**, sur
-  instruction du propriétaire.
+- **Score** : C12 **0 % → 45 %**. Commit, PR #23 sur
+  `cycle-21-c12-sauvegarde-restauration`, **fusionnée le 2026-09-13** sur
+  instruction explicite du propriétaire (commit de fusion `debd7b5`,
+  fast-forward, branche supprimée).
 - **Reste ouvert** : fréquence de sauvegarde, durée de conservation,
   RPO/RTO cible (point i, décision du propriétaire) ; pas de
   planification automatique (Tâches planifiées Windows) ; pas de test de
@@ -1989,9 +2002,10 @@ trois lacunes de sécurité documentées de longue date, la troisième
 - **Documentation** : `db/README.md` (ligne migration 018),
   `server/README.md` (section C11 étendue), `server/tests/
   DERNIER_RESULTAT.md`, `loop-state.md`.
-- **Score** : C11 **55 % → 68 %**. Commit, PR sur
-  `cycle-22-c11-securite-applicative` — **non fusionnée**, sur
-  instruction du propriétaire.
+- **Score** : C11 **55 % → 68 %**. Commit, PR #24 sur
+  `cycle-22-c11-securite-applicative`, **fusionnée le 2026-09-13** sur
+  instruction explicite du propriétaire (commit de fusion `58d3845`,
+  fast-forward, branche supprimée).
 - **Reste ouvert** : limiteur de débit partagé entre processus
   (délibérément pas fait ce cycle — mérite sa propre vérification) ;
   audit de sécurité plus large (dépendances, TLS — hors périmètre local
@@ -2038,9 +2052,10 @@ Quatrième et dernier chantier de ce lot (C13, C12, C11, C8).
   suite pytest inchangée (144/144).
 - **Documentation** : `server/README.md` (section C8 étendue),
   `maquette/verification/DERNIER_RESULTAT.md`, `loop-state.md`.
-- **Score** : C8 **62 % → 70 %**. Commit, PR sur
-  `cycle-23-c8-bascule-vue-site` — **non fusionnée**, sur instruction du
-  propriétaire.
+- **Score** : C8 **62 % → 70 %**. Commit, PR #25 sur
+  `cycle-23-c8-bascule-vue-site`, **fusionnée le 2026-09-13** sur
+  instruction explicite du propriétaire (commit de fusion `87603d4`,
+  fast-forward, branche supprimée).
 - **Reste ouvert** : clôture de caisse (point g, non tranché), numéro de
   facturier (point c, non tranché).
 
@@ -2048,8 +2063,10 @@ Quatrième et dernier chantier de ce lot (C13, C12, C11, C8).
 
 Le lot de 4 chantiers (cycles 20 à 23 — correction diagnostic C13,
 sauvegarde/restauration C12, sécurité applicative C11, bascule vue C8)
-est **terminé** : PR #22, #23, #24, #25 ouvertes, empilées dans cet
-ordre, fusion laissée au propriétaire.
+est **terminé et fusionné** (PR #22/#23/#24/#25, empilées dans l'ordre,
+retargées vers `main` avant chaque fusion de leur base pendant qu'elles
+étaient encore ouvertes — les quatre fusions et suppressions de branche
+se sont enchaînées sans accroc).
 
 ---
 
@@ -2066,8 +2083,8 @@ leçon de la PR #16 le prescrit ; les trois fusions et suppressions de
 branche se sont enchaînées sans accroc cette fois). Le lot de 4 chantiers
 suivant (cycles 20 à 23 — correction diagnostic C13, sauvegarde/
 restauration C12, sécurité applicative C11, bascule vue C8) est
-**terminé, PR #22/#23/#24/#25 ouvertes**, empilées dans l'ordre, fusion
-laissée au propriétaire.
+**terminé et fusionné** (PR #22/#23/#24/#25, empilées dans l'ordre,
+mêmes garanties que ci-dessus).
 
 1. **Vérification C10 depuis un vrai téléphone physique** : la couche
    réseau est prouvée (cycle 15) — reste la dernière étape, qui doit être
