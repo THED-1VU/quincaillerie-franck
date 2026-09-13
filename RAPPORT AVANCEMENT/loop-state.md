@@ -55,11 +55,11 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
 | C10 | Mobile et API web *(priorité 1)* | **38 %** | Cycle 5, complété au cycle 15. Les deux écrans mobile-first sont **la même application web**, testée à 360/390/768 px. **Cycle 15** : trouvé par exécution — le serveur (dev ET paquet Windows) n'écoutait que sur `127.0.0.1`, **injoignable depuis n'importe quel autre appareil**, téléphone compris, même sur le même réseau. Corrigé (`--host 0.0.0.0` en dev, `server/fabrication/lanceur.py` pour le paquet, qui affiche désormais sa propre adresse réseau locale à l'utilisateur). Vérifié par exécution, dev et paquet Windows reconstruit : requête réelle vers l'adresse réseau locale de la machine (pas `127.0.0.1`) répondant correctement sur `/sante` et `/app/connexion.html`. **Non fermé** : la preuve manquante reste un **véritable téléphone physique** — ce que l'agent n'a pas — la couche réseau est prouvée, pas le rendu sur un vrai appareil. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **55 %** | Cycle 3. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse (vérifié par expression régulière), erreurs SQL jamais renvoyées telles quelles au client. Reste : révocation de session, limiteur de débit partagé (multi-processus), audit de sécurité plus large (dépendances, en-têtes HTTP, TLS — hors périmètre local de dev). |
-| C12 | Sauvegarde et exploitation | **0 %** | Diagnostic : « Backup and restore procedure : Not found ». Aucun script, aucune procédure. Onduleur, RPO/RTO, mise à jour des postes : à définir (addendum i). |
+| C12 | Sauvegarde et exploitation | **45 %** | Cycle 21. `db/outils/sauvegarder.ps1` (`pg_dump -Fc` + `pg_dumpall --roles-only`, rôles applicatifs globaux au serveur) et `restaurer.ps1` (restaure **toujours** vers une base séparée, refuse d'écraser sauf `-Forcer` explicite). Vérifié par exécution réelle : sauvegarde de `quincaillerie_test`, restaurée à côté — comptes de lignes identiques ET **droits par colonne préservés** (`has_column_privilege()` avant/après restauration). Trois pièges PowerShell trouvés et corrigés en écrivant les scripts (caractères accentués, capture `$null` d'une commande sans sortie, `[int]` sur chaîne vide). Manquent : fréquence, conservation, RPO/RTO (addendum, point i, non tranché) ; planification automatique (Tâches planifiées Windows) ; test de restauration sur un second poste physique ; onduleur, mise à jour des postes (addendum i). |
 | C13 | Tests automatisés et qualité | **55 %** | Cycle 20 — correction d'une inexactitude du diagnostic d'origine (comme pour C6 au cycle 16) : le score restait à 0 % alors que **140 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **7 suites Playwright** (193 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant — jamais reflété dans le score. `db/outils/verifier_tout.sh` (nouveau) enchaîne les trois couches en une seule commande, vérifié par exécution (exit code 0, 0 échec). Deux pièges trouvés en l'écrivant : la limite de connexion de `config.ini` (10/min) fait échouer les suites en cascade au-delà de la première ; l'étape de réversibilité SQL recrée `qf_app` sans mot de passe. Manquent : CI automatisée sur chaque push (`server/tests/conftest.py` appelle un chemin Windows en dur, non portable vers un runner Linux sans correction dédiée — chantier à part), couverture des parcours nécessitant une imprimante ou un téléphone réels. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 20 : ≈ 53 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 62, C9 50, C10 38, C11 55, C13 55, C14 40, C12 0).
+**Moyenne indicative après le cycle 21 : ≈ 56 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 62, C9 50, C10 38, C11 55, C12 45, C13 55, C14 40).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -1855,6 +1855,71 @@ applicatif, juste la documentation et l'outillage de test.
   soi, pas glissé ici sans validation séparée. Couverture manuelle des
   parcours nécessitant une vraie imprimante ou un vrai téléphone,
   toujours hors de portée de l'agent.
+
+---
+
+### Cycle 21 — Sauvegarde et restauration : C12 — 2026-09-13
+
+Deuxième des quatre chantiers de ce lot (C13, C12, C11, C8) — 0 %
+aujourd'hui, aucun script ni procédure détectable dans le livré d'origine
+(CDC §4.3, testé au DR §6).
+
+- **Objectif** : poser le **mécanisme** de sauvegarde/restauration, sans
+  trancher la politique (fréquence, conservation, RPO/RTO — addendum,
+  point i, non tranché).
+- **Mise en œuvre** : branche `cycle-21-c12-sauvegarde-restauration`,
+  empilée sur `cycle-20-c13-suite-verification-unifiee` (aucune
+  dépendance de CODE entre les deux, mais toutes deux touchent le même
+  tableau de scores dans ce fichier — empilée pour éviter un conflit de
+  fusion sur la ligne « moyenne indicative », pas pour une raison
+  technique).
+  - `db/outils/sauvegarder.ps1` (nouveau) : `pg_dump -Fc` (contenu de la
+    base) + `pg_dumpall --roles-only` (rôles applicatifs, **globaux au
+    serveur**, absents de tout dump d'une seule base — nécessaires pour
+    restaurer sur un nouveau serveur). Deux fichiers horodatés.
+  - `db/outils/restaurer.ps1` (nouveau) : restaure **toujours** vers une
+    base séparée (`-NomBaseCible`), refuse d'écraser une base existante
+    sauf `-Forcer` explicite — prouver une restauration veut dire la
+    rejouer à côté, jamais par-dessus.
+- **Trois pièges rencontrés et corrigés en écrivant ces scripts** :
+  1. Deux fichiers `.ps1` d'abord écrits avec des caractères accentués —
+     exactement le piège déjà documenté dans `demarrer_pg.ps1` (parseur
+     PowerShell 5.1 désynchronisé). Réécrits en **ASCII pur** avant tout
+     test, cette fois sans attendre de le découvrir à l'exécution.
+  2. `$var = & commande` : quand la commande native ne produit **aucune**
+     ligne de sortie (ex. `psql -tAc` sur une requête à zéro résultat),
+     PowerShell capture une valeur interne distincte d'un `$null`
+     ordinaire — `.GetType()`/`.Trim()` échouent dessus **même après un
+     cast `[string]`**. Seule une comparaison explicite (`$null -eq
+     $var`) la détecte de façon fiable ; trouvé par exécution réelle,
+     pas anticipé à l'écriture.
+  3. `[int]$texte` lève une exception sur une chaîne vide plutôt que de
+     s'évaluer à 0 — remplacé par `[int]::TryParse()`.
+- **Vérification par exécution** (aucun test automatisé dédié, chantier
+  hors périmètre de pytest — vérifié directement en SQL/PowerShell) :
+  sauvegarde réelle de `quincaillerie_test` (5 utilisateurs, 4 articles,
+  1 fournisseur), restaurée dans une base séparée
+  (`quincaillerie_test_restauration`) — comptes de lignes identiques sur
+  les trois tables vérifiées, **et les droits par colonne survivent**
+  (`qf_agent_stock` relit `articles.nom` mais toujours pas
+  `articles.prix_vente`, avant et après restauration,
+  `has_column_privilege()`). Base de test nettoyée après vérification.
+- **Documentation** : `db/README.md` (nouvelle section « Sauvegarde et
+  restauration », correction d'une ligne devenue fausse sur
+  `boutique_numero_contribuable` depuis le reçu PDF du cycle 19),
+  `PERIMETRE_LIVRE.md` (ligne §4 et contradiction n°7 passées de « Non
+  couvert » à « Confirmé (test) », ligne « Livrables manquants »
+  actualisée), `loop-state.md`.
+- **Score** : C12 **0 % → 45 %**. Commit, PR sur
+  `cycle-21-c12-sauvegarde-restauration` — **non fusionnée**, sur
+  instruction du propriétaire.
+- **Reste ouvert** : fréquence de sauvegarde, durée de conservation,
+  RPO/RTO cible (point i, décision du propriétaire) ; pas de
+  planification automatique (Tâches planifiées Windows) ; pas de test de
+  restauration sur un **second poste physique** (seulement sur le même
+  serveur, faute d'un second poste disponible pour l'agent) ; guide
+  utilisateur (quand/comment lancer ces scripts sur un poste réel,
+  addendum point l) pas encore écrit — relève de C14.
 
 ---
 

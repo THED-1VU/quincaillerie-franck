@@ -299,7 +299,7 @@ SELECT * FROM parametres_a_decider;   -- doit être vide avant la mise en produc
 | Paramètre | État |
 |---|---|
 | `regime_fiscal`, `taux_tva`, `prix_saisis_ttc`, `arrondi_montants` | **Décidés cycle 6** (addendum, point d) : régime du réel, 19,25 %, TTC, arithmétique — plus dans `parametres_a_decider` |
-| `boutique_numero_contribuable` | toujours `a_definir` (mentions légales, aucun document imprimé n'existe encore) |
+| `boutique_numero_contribuable`, `boutique_telephone` | toujours `a_definir` — le reçu de vente imprimable (cycle 19) existe désormais, mais omet ces deux mentions tant qu'elles ne sont pas renseignées, plutôt que de les inventer |
 | `seuil_alerte_plancher`, `tentatives_max_connexion` | valeurs proposées, à confirmer |
 | `duree_session_minutes` | règle de session inactive à définir |
 
@@ -319,6 +319,46 @@ l'**addendum, point e**, qui reste ouvert.
 Enfin, la suppression d'une recette liée à une vente annulée n'est pas
 verrouillée : le traitement comptable d'une annulation (suppression ou
 contre-passation) relève de l'**addendum, points b et g**.
+
+---
+
+## Sauvegarde et restauration (chantier C12, cycle 21)
+
+Le CDC (§4.3) exige une sauvegarde, le dossier de recette (§6) exige de
+la tester en la restaurant sur une base séparée — **aucun script ni
+procédure n'existait avant ce cycle** (constat du diagnostic d'origine,
+`PERIMETRE_LIVRE.md` §5, point 7).
+
+```powershell
+# Sauvegarder (produit deux fichiers horodatés dans _pgdev\sauvegardes\)
+powershell -File db\outils\sauvegarder.ps1
+
+# Restaurer sur une base SÉPARÉE, jamais par-dessus l'existante
+powershell -File db\outils\restaurer.ps1 -FichierBase "_pgdev\sauvegardes\quincaillerie_test_XXXXXXXX_XXXXXX.dump" -NomBaseCible quincaillerie_verif
+```
+
+- **Deux fichiers par sauvegarde** : `<base>_<horodatage>.dump` (`pg_dump
+  -Fc`, contenu de la base — schéma, données, droits par colonne) et
+  `<base>_<horodatage>_roles.sql` (`pg_dumpall --roles-only`, les rôles
+  applicatifs — **globaux au serveur PostgreSQL**, donc absents de tout
+  `pg_dump` d'une seule base ; nécessaires pour restaurer sur un
+  **nouveau** serveur qui ne les a pas encore).
+- **`restaurer.ps1` ne restaure jamais par-dessus une base existante** :
+  il refuse si `-NomBaseCible` existe déjà, sauf `-Forcer` explicite —
+  prouver une restauration veut dire la rejouer À CÔTÉ, jamais écraser
+  silencieusement.
+- **Vérifié par exécution** (2026-09-13) : sauvegarde de `quincaillerie_test`
+  (5 utilisateurs, 4 articles, 1 fournisseur), restaurée dans
+  `quincaillerie_test_restauration` — comptes de lignes identiques sur les
+  trois tables vérifiées, et **les droits par colonne survivent** :
+  `qf_agent_stock` peut relire `articles.nom` mais toujours pas
+  `articles.prix_vente`, exactement comme sur la base source
+  (`has_column_privilege()`, avant et après restauration).
+- **Ce que ce cycle NE tranche PAS** (addendum, point i) : la fréquence à
+  laquelle lancer `sauvegarder.ps1`, la durée de conservation des
+  fichiers produits, et le RPO/RTO cible restent des décisions du
+  propriétaire. Ces scripts posent le **mécanisme**, pas la politique —
+  aucune valeur n'est inventée pour ces questions.
 
 ---
 
