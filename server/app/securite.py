@@ -8,6 +8,7 @@ import base64
 import hashlib
 import hmac
 import json
+import secrets
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -33,12 +34,16 @@ def hacher_mot_de_passe(mot_de_passe_clair: str) -> str:
 # ---------------------------------------------------------------------------
 # Jetons de session — signés (HMAC-SHA256), sans état côté serveur
 # ---------------------------------------------------------------------------
-# Choix technique délibéré pour ce cycle : un jeton signé et borné dans le
-# temps, ne nécessitant ni table ni magasin partagé. Limite connue et
-# documentée : un déploiement à plusieurs processus ne peut pas révoquer un
-# jeton avant son expiration (pas de "déconnexion forcée" instantanée) — ce
-# n'est pas une règle métier, seulement une limite d'implémentation de ce
-# cycle, qu'un magasin de révocation partagé (base ou cache) lèverait.
+# Choix technique délibéré depuis le cycle 3 : un jeton signé et borné dans
+# le temps, ne nécessitant ni table ni magasin partagé pour sa VALIDITÉ.
+# Limite corrigée au cycle 21 (chantier C11) : chaque jeton porte désormais
+# un identifiant aléatoire (jti) que la route de déconnexion peut révoquer
+# dans PostgreSQL (db/migrations/018_revocation_jetons.sql) — un magasin
+# déjà partagé entre plusieurs processus applicatifs, donc résout les deux
+# limites documentées ici à la fois (révocation ET partage multi-processus)
+# sans dépendance nouvelle. La vérification de signature/expiration reste
+# ICI, sans accès à la base — seule deps.py, qui a déjà une connexion,
+# vérifie la révocation après coup.
 
 
 class JetonInvalide(Exception):
@@ -54,6 +59,7 @@ class Session:
     doit_changer_mot_de_passe: bool
     emis_a: int
     expire_a: int
+    jti: str
 
 
 def _b64_encoder(donnees: bytes) -> bytes:
@@ -87,6 +93,12 @@ class GestionnaireSessions:
             "chg": doit_changer_mot_de_passe,
             "iat": maintenant,
             "exp": maintenant + self._duree_secondes,
+            # Identifiant du jeton (cycle 21) : 16 octets aléatoires en
+            # hexadécimal (32 caractères, tient dans jetons_revoques.jti
+            # VARCHAR(32)) — permet de révoquer CE jeton précis, jamais
+            # deviné à l'avance puisqu'il ne dépend d'aucune donnée connue
+            # de l'utilisateur.
+            "jti": secrets.token_hex(16),
         }
         corps = _b64_encoder(json.dumps(charge, separators=(",", ":")).encode("utf-8"))
         signature = hmac.new(self._cle, corps, hashlib.sha256).digest()
@@ -125,6 +137,12 @@ class GestionnaireSessions:
             doit_changer_mot_de_passe=charge["chg"],
             emis_a=charge["iat"],
             expire_a=charge["exp"],
+            # .get() : un jeton émis avant le cycle 21 (déjà en circulation
+            # au moment du déploiement) n'a pas de "jti" — reste vérifiable
+            # jusqu'à sa propre expiration naturelle, simplement jamais
+            # révocable a posteriori (aucune régression : il ne l'était pas
+            # non plus avant ce cycle).
+            jti=charge.get("jti", ""),
         )
 
 

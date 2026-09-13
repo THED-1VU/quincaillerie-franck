@@ -165,7 +165,20 @@ function afficherErreurServeur(zoneId, erreur) {
   zone.hidden = false;
 }
 
-function deconnecter() {
+/**
+ * Déconnexion RÉELLE (chantier C11, cycle 21) : révoque le jeton côté
+ * serveur (POST /auth/deconnexion) avant de l'effacer localement — jusqu'ici
+ * "se déconnecter" ne faisait que vider le stockage local, le jeton restait
+ * valide jusqu'à sa propre expiration si quelqu'un d'autre l'avait intercepté.
+ * La révocation reste du "meilleur effort" : un réseau coupé au moment du
+ * clic ne doit jamais empêcher de quitter l'écran localement.
+ */
+async function deconnecter() {
+  try {
+    await appelApi("/auth/deconnexion", { method: "POST" });
+  } catch {
+    // Volontairement ignoré : voir le commentaire ci-dessus.
+  }
   Session.effacer();
   window.location.href = "connexion.html";
 }

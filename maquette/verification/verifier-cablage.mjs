@@ -380,6 +380,36 @@ for (const largeur of LARGEURS) {
   await contexte.close();
 }
 
+// ============================================================================
+// 7. Déconnexion RÉELLE : révoque le jeton côté serveur (chantier C11, cycle 21)
+// ============================================================================
+{
+  const { contexte, page } = await nouvellePage();
+  await seConnecter(page, "resp", MDP_RESPONSABLE);
+  const jetonAvant = await page.evaluate(() => JSON.parse(sessionStorage.getItem("qf_session")).jeton);
+
+  const [reponseDeconnexion] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/auth/deconnexion") && r.request().method() === "POST", { timeout: 10000 }),
+    page.click("#bouton-deconnexion"),
+  ]);
+  verifier(reponseDeconnexion.status() === 204, "déconnexion réelle : POST /auth/deconnexion -> 204");
+  await page.waitForURL(/connexion\.html/, { timeout: 10000 });
+  verifier(page.url().endsWith("connexion.html"), "déconnexion réelle : redirigé vers connexion.html");
+
+  // Le jeton effacé localement était encore signature-valide et non expiré :
+  // rejouer un appel avec ce MÊME jeton (intercepté avant l'effacement)
+  // prouve que la révocation a bien eu lieu côté serveur, pas seulement
+  // localement (sessionStorage.clear() ne suffirait pas à protéger un jeton
+  // déjà volé/intercepté auparavant).
+  const statutApresRevocation = await page.evaluate(async (jeton) => {
+    const r = await fetch("/moi", { headers: { Authorization: "Bearer " + jeton } });
+    return r.status;
+  }, jetonAvant);
+  verifier(statutApresRevocation === 401, `déconnexion réelle : le jeton révoqué est refusé même en le rejouant (statut ${statutApresRevocation})`);
+
+  await contexte.close();
+}
+
 await navigateur.close();
 
 console.log(`RÉUSSIS (${ok.length}) :`);

@@ -84,6 +84,30 @@ def creer_application(config: Config | None = None) -> FastAPI:
     )
     app.state.limiteur_connexion = LimiteurDebit(config.api.tentatives_max_par_minute)
 
+    # -----------------------------------------------------------------
+    # En-têtes HTTP de sécurité (chantier C11, cycle 21) : posés sur TOUTE
+    # réponse, API comme écrans statiques sous /app — protection technique
+    # au niveau du navigateur, indépendante des habilitations posées en base
+    # (privilèges par colonne + RLS, cycle 2), qui restent le contrôle qui
+    # compte vraiment (voir deps.py).
+    # -----------------------------------------------------------------
+    @app.middleware("http")
+    async def _en_tetes_securite(request: Request, appel_suivant):
+        reponse = await appel_suivant(request)
+        # Un navigateur ne doit jamais deviner le type MIME d'une réponse à
+        # la place du Content-Type déclaré (empêche un fichier détourné en
+        # script exécutable).
+        reponse.headers["X-Content-Type-Options"] = "nosniff"
+        # Aucun écran de ce projet n'a besoin d'être intégré dans une
+        # <iframe> d'un autre site (architecture "un seul code applicatif
+        # web", même origine) : DENY plutôt que SAMEORIGIN, le plus strict.
+        reponse.headers["X-Frame-Options"] = "DENY"
+        # Ne jamais transmettre l'URL complète (avec un futur jeton en
+        # requête, un identifiant de vente...) au site externe référencé par
+        # un lien sortant.
+        reponse.headers["Referrer-Policy"] = "no-referrer"
+        return reponse
+
     app.include_router(auth.routeur)
     app.include_router(auth.routeur_admin)
     app.include_router(demonstration.routeur)

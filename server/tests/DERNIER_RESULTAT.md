@@ -9,6 +9,56 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 21 — révocation de session et en-têtes HTTP (chantier C11), 2026-09-13
+
+Migration 018 (`revocation_jetons`) : deux des trois lacunes de sécurité
+documentées de longue date (`server/README.md`, chantier C11). La
+troisième (limiteur de débit partagé entre processus) reste délibérément
+hors de ce cycle — voir `server/README.md` pour le pourquoi.
+
+```
+test_deconnexion_revoque_le_jeton_courant PASSED
+test_deconnexion_ne_revoque_que_ce_jeton_precis PASSED
+test_deconnexion_deux_fois_le_meme_jeton_refuse_proprement PASSED
+test_en_tetes_securite_presents_sur_toute_reponse PASSED
+
+======================= 144 passed, 31 warnings in 304.72s =======================
+```
+
+Piège trouvé en écrivant la migration : `NOW() + interval '1 hour'`
+renvoie un `TIMESTAMPTZ`, pas un `TIMESTAMP` — la fonction
+`revoquer_jeton()` a été réécrite pour recevoir l'expiration en secondes
+Unix (`BIGINT`, comme le champ `exp` du jeton lui-même) plutôt qu'un
+`TIMESTAMP`, `to_timestamp()` faisant la conversion dans le fuseau de la
+connexion. Vérifié en SQL direct avant tout code Python : jeton non
+révoqué, révocation, double révocation idempotente (`ON CONFLICT DO
+NOTHING`), jeton vide refusé, et un rôle applicatif (`qf_agent_stock`)
+ne peut PAS appeler ces fonctions directement (réservées à `qf_app`).
+
+**Piège d'exécution rencontré (pas un bug du code)** : un premier passage
+complet du suite pytest a produit 75 échecs et 45 erreurs en cascade,
+tous disparus au second passage sans changer une ligne de code — cause
+identifiée : un processus Python d'un précédent lancement en arrière-plan
+n'avait pas terminé (`Get-Process python` le montrait toujours actif),
+et les deux exécutions se disputaient la même base de test (rechargements
+de jeu d'essai concurrents). Processus tué, suite rejouée proprement :
+**144/144**. Leçon retenue : toujours vérifier qu'aucun processus Python
+ne tourne encore avant de rejouer la suite après un lancement en
+arrière-plan.
+
+### Écran (`maquette/api.js`, `maquette/vente.html`… tous les écrans)
+
+`deconnecter()` appelle désormais `POST /auth/deconnexion` avant
+d'effacer la session locale (meilleur effort : une coupure réseau
+n'empêche jamais de quitter l'écran). `verifier-cablage.mjs` étendu (+3,
+**80/80**) : un jeton intercepté avant la déconnexion, puis rejoué
+directement contre l'API, est refusé (401) — preuve d'une révocation
+réelle côté serveur, pas seulement d'un `sessionStorage.clear()` local.
+Les 5 autres suites Playwright rejouées sans régression : **12/12**,
+**17/17**, **26/26**, **29/29**, **11/11**, **21/21**.
+
+---
+
 ## Cycle 19 — reçu de vente imprimable (chantier C5), 2026-09-13
 
 `GET /ventes/{id}/recu` (`reportlab`, PDF A4) — CDC §3.3/§7.1

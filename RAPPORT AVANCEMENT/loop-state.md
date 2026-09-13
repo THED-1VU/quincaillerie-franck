@@ -54,12 +54,12 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C8 | Tableaux de bord et rapports | **62 %** | Cycles 10, 12 et 14. Alertes de stock, historique des comptages et deux exports Excel/PDF, tous câblés sur un vrai écran (`maquette/rapports.html`, cycle 12). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit pour les 3 rôles au niveau API (cycle 10) et par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12). **Cycle 14** : le cloisonnement par site des deux exports (déjà vérifié deux fois par exécution directe, jamais couvert par un test) a désormais 2 tests dédiés dans `test_rapports.py` — un agent stock du Magasin n'exporte aucun article du Comptoir, un agent comptabilité du Magasin n'exporte aucune vente du Comptoir. Vérifié par exécution : 106/106 pytest (104 + 2 nouveaux), aucun écran ni migration touchés. Manquent : bascule vue consolidée/par site (les données portent déjà `site_id`, la bascule elle-même n'a pas d'écran), clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). |
 | C9 | Ergonomie et UI *(priorité 1)* | **50 %** | Cycle 5. Les 4 écrans ne sont plus une maquette isolée : connexion réelle (`POST /auth/connexion`), jeton, `GET /articles`, `GET /ventes/synthese-jour`, servis par le noyau serveur sous `/app` (même origine). Vérifié par exécution (`verifier-cablage.mjs`, 73/73) : les 3 rôles reçoivent réellement des réponses différentes (aucun prix pour l'agent stock, aucune quantité pour le comptable), la quantité attendue d'un comptage n'apparaît nulle part (page, réseau, code source), messages d'erreur toujours en français près du champ, cibles ≥ 44 px conservées, 36/36 tests serveur toujours au vert. Ce qui n'a pas de route métier encore décidée (validation de vente, alertes stock, écarts d'inventaire, liste à compter) reste **explicitement** simulé à l'écran plutôt qu'inventé. **Toujours plafonné à 60 %** : le tableau de mesures humaines de `UX_BASELINE.md` §4 reste vide (vitesse, compréhension des erreurs par une personne non formée, confort sur téléphone physique). |
 | C10 | Mobile et API web *(priorité 1)* | **38 %** | Cycle 5, complété au cycle 15. Les deux écrans mobile-first sont **la même application web**, testée à 360/390/768 px. **Cycle 15** : trouvé par exécution — le serveur (dev ET paquet Windows) n'écoutait que sur `127.0.0.1`, **injoignable depuis n'importe quel autre appareil**, téléphone compris, même sur le même réseau. Corrigé (`--host 0.0.0.0` en dev, `server/fabrication/lanceur.py` pour le paquet, qui affiche désormais sa propre adresse réseau locale à l'utilisateur). Vérifié par exécution, dev et paquet Windows reconstruit : requête réelle vers l'adresse réseau locale de la machine (pas `127.0.0.1`) répondant correctement sur `/sante` et `/app/connexion.html`. **Non fermé** : la preuve manquante reste un **véritable téléphone physique** — ce que l'agent n'a pas — la couche réseau est prouvée, pas le rendu sur un vrai appareil. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
-| C11 | Sécurité applicative | **55 %** | Cycle 3. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse (vérifié par expression régulière), erreurs SQL jamais renvoyées telles quelles au client. Reste : révocation de session, limiteur de débit partagé (multi-processus), audit de sécurité plus large (dépendances, en-têtes HTTP, TLS — hors périmètre local de dev). |
+| C11 | Sécurité applicative | **68 %** | Cycle 3, complété au cycle 22. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse, erreurs SQL jamais renvoyées telles quelles au client. **Cycle 22** : révocation de session (migration 018, `POST /auth/deconnexion`, `deps.obtenir_session()` vérifie la révocation à chaque requête — un jeton révoqué signature-valide et non expiré est quand même refusé, prouvé en le rejouant après déconnexion) ; en-têtes HTTP de sécurité (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) sur toute réponse. Vérifié par exécution : 4/4 tests pytest dédiés (144/144 au total, 0 régression, coût mesuré ~13 % de temps d'exécution en plus), `verifier-cablage.mjs` +3 (80/80, jeton intercepté avant déconnexion puis rejoué → refusé). Reste : limiteur de débit partagé entre processus (délibérément pas fait ce cycle — mérite sa propre vérification, pas glissé à la suite de deux autres changements de sécurité), audit plus large (dépendances, TLS — hors périmètre local de dev). |
 | C12 | Sauvegarde et exploitation | **45 %** | Cycle 21. `db/outils/sauvegarder.ps1` (`pg_dump -Fc` + `pg_dumpall --roles-only`, rôles applicatifs globaux au serveur) et `restaurer.ps1` (restaure **toujours** vers une base séparée, refuse d'écraser sauf `-Forcer` explicite). Vérifié par exécution réelle : sauvegarde de `quincaillerie_test`, restaurée à côté — comptes de lignes identiques ET **droits par colonne préservés** (`has_column_privilege()` avant/après restauration). Trois pièges PowerShell trouvés et corrigés en écrivant les scripts (caractères accentués, capture `$null` d'une commande sans sortie, `[int]` sur chaîne vide). Manquent : fréquence, conservation, RPO/RTO (addendum, point i, non tranché) ; planification automatique (Tâches planifiées Windows) ; test de restauration sur un second poste physique ; onduleur, mise à jour des postes (addendum i). |
 | C13 | Tests automatisés et qualité | **55 %** | Cycle 20 — correction d'une inexactitude du diagnostic d'origine (comme pour C6 au cycle 16) : le score restait à 0 % alors que **140 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **7 suites Playwright** (193 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant — jamais reflété dans le score. `db/outils/verifier_tout.sh` (nouveau) enchaîne les trois couches en une seule commande, vérifié par exécution (exit code 0, 0 échec). Deux pièges trouvés en l'écrivant : la limite de connexion de `config.ini` (10/min) fait échouer les suites en cascade au-delà de la première ; l'étape de réversibilité SQL recrée `qf_app` sans mot de passe. Manquent : CI automatisée sur chaque push (`server/tests/conftest.py` appelle un chemin Windows en dur, non portable vers un runner Linux sans correction dédiée — chantier à part), couverture des parcours nécessitant une imprimante ou un téléphone réels. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 21 : ≈ 56 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 62, C9 50, C10 38, C11 55, C12 45, C13 55, C14 40).
+**Moyenne indicative après le cycle 22 : ≈ 57 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 62, C9 50, C10 38, C11 68, C12 45, C13 55, C14 40).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -1920,6 +1920,83 @@ aujourd'hui, aucun script ni procédure détectable dans le livré d'origine
   serveur, faute d'un second poste disponible pour l'agent) ; guide
   utilisateur (quand/comment lancer ces scripts sur un poste réel,
   addendum point l) pas encore écrit — relève de C14.
+
+---
+
+### Cycle 22 — Révocation de session et en-têtes HTTP : C11 — 2026-09-13
+
+Troisième des quatre chantiers de ce lot (C13, C12, C11, C8) — deux des
+trois lacunes de sécurité documentées de longue date, la troisième
+(limiteur de débit partagé) volontairement laissée de côté ce cycle.
+
+- **Objectif** : fermer « révocation de session » et « en-têtes HTTP »
+  sans toucher au limiteur de débit — trois changements de sécurité dans
+  le même cycle mériteraient chacun sa propre vérification, pas un
+  empilement sous pression de temps.
+- **Mise en œuvre** : branche `cycle-22-c11-securite-applicative`,
+  empilée sur `cycle-21-c12-sauvegarde-restauration` (même raison que
+  l'empilement précédent : pas de dépendance de CODE, mais le même
+  tableau de scores dans ce fichier).
+  - `db/migrations/018_revocation_jetons.sql` (+ inverse) :
+    `jetons_revoques` (table) + `revoquer_jeton()`/`jeton_est_revoque()`
+    (`SECURITY DEFINER`, sous `qf_app` directement — comme
+    `verifier_connexion()`, pas une donnée cloisonnée par site).
+  - `server/app/securite.py` : chaque jeton porte désormais un `jti`
+    aléatoire (16 octets). Un jeton émis avant ce cycle a `jti=""` — reste
+    vérifiable jusqu'à sa propre expiration, simplement jamais révocable
+    a posteriori (aucune régression).
+  - `server/app/deps.py` : `obtenir_session()` vérifie la révocation à
+    **chaque** requête authentifiée, après la signature/expiration.
+  - `server/app/routes/auth.py` : `POST /auth/deconnexion` (nouveau).
+  - `server/app/main.py` : middleware global posant 3 en-têtes HTTP
+    (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) sur
+    toute réponse. `Strict-Transport-Security` volontairement **pas**
+    posé : le serveur de dev répond en clair, l'annoncer mentirait sur ce
+    que le navigateur reçoit.
+  - `maquette/api.js` : `deconnecter()` appelle `POST /auth/deconnexion`
+    avant d'effacer la session locale (meilleur effort — une coupure
+    réseau n'empêche jamais de quitter l'écran).
+- **Piège trouvé en écrivant la migration, avant tout code Python** :
+  `NOW() + interval '1 hour'` renvoie un `TIMESTAMPTZ`, pas un
+  `TIMESTAMP` — la fonction attendait `TIMESTAMP`, échec de résolution de
+  surcharge au premier appel réel. Corrigée pour recevoir l'expiration en
+  **secondes Unix** (`BIGINT`, comme le champ `exp` du jeton lui-même),
+  `to_timestamp()` faisant la conversion dans le fuseau de la connexion
+  (Africa/Douala) — l'appelant Python n'a alors plus aucun fuseau à gérer.
+- **Piège d'exécution rencontré (pas un bug de code)** : le premier
+  passage complet de la suite pytest a produit 75 échecs et 45 erreurs en
+  cascade, disparus au second passage sans changer une ligne — un
+  processus Python d'un lancement précédent en arrière-plan tournait
+  encore et se disputait la même base de test avec le nouveau lancement
+  (rechargements de jeu d'essai concurrents). Processus tué, suite
+  rejouée proprement. Leçon retenue pour la suite : vérifier qu'aucun
+  processus Python ne tourne encore avant de rejouer une suite après un
+  lancement en arrière-plan.
+- **Vérification par exécution** :
+  - Fonctions de révocation vérifiées en SQL direct avant tout code
+    Python : jeton non révoqué, révocation, double révocation
+    idempotente, jeton vide refusé, `qf_agent_stock` ne peut pas appeler
+    ces fonctions directement (réservées à `qf_app`).
+  - `test_securite.py` : **4/4** nouveaux.
+  - Suite pytest complète : **144/144**, 0 régression (coût mesuré :
+    ~305 s contre ~270 s avant — un aller-retour PostgreSQL de plus par
+    requête authentifiée).
+  - `verifier-cablage.mjs` étendu (+3) : **80/80** — un jeton intercepté
+    AVANT la déconnexion, rejoué directement contre l'API après coup, est
+    refusé (401), preuve d'une révocation réelle côté serveur.
+  - 5 autres suites Playwright rejouées sans régression : **12/12**,
+    **17/17**, **26/26**, **29/29**, **11/11**, **21/21**.
+- **Documentation** : `db/README.md` (ligne migration 018),
+  `server/README.md` (section C11 étendue), `server/tests/
+  DERNIER_RESULTAT.md`, `loop-state.md`.
+- **Score** : C11 **55 % → 68 %**. Commit, PR sur
+  `cycle-22-c11-securite-applicative` — **non fusionnée**, sur
+  instruction du propriétaire.
+- **Reste ouvert** : limiteur de débit partagé entre processus
+  (délibérément pas fait ce cycle — mérite sa propre vérification) ;
+  audit de sécurité plus large (dépendances, TLS — hors périmètre local
+  de dev) ; `Strict-Transport-Security` une fois un déploiement réel en
+  TLS.
 
 ---
 
