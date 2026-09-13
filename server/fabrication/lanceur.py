@@ -52,11 +52,38 @@ from app.config import ErreurConfiguration, charger_config  # noqa: E402
 from app.main import creer_application  # noqa: E402
 
 HOTE = "127.0.0.1"
+
+# Cycle 15 (C10) : le serveur écoute sur TOUTES les interfaces réseau
+# (0.0.0.0), pas seulement la boucle locale — sinon un téléphone sur le
+# même réseau ne peut techniquement pas l'atteindre, quelle que soit
+# l'architecture par ailleurs (« ... via le réseau local ou un tunnel »,
+# décision actée dès le cycle 0). Trouvé par exécution : jusqu'ici, HOTE
+# servait À LA FOIS de socket d'écoute ET d'adresse ouverte dans le
+# navigateur local — deux besoins différents, une seule constante était
+# donc forcément fausse pour l'un des deux. Le navigateur local, lui,
+# reste ouvert sur HOTE (127.0.0.1) : ouvrir un navigateur sur "0.0.0.0"
+# ne fonctionne pas de façon fiable selon les navigateurs.
+HOTE_ECOUTE = "0.0.0.0"
 PORT_PAR_DEFAUT = 8000
 
 # Placeholder documenté ci-dessus — à remplacer par l'écran de connexion une
 # fois C9/C10 fait.
 CHEMIN_A_OUVRIR = "/docs"
+
+
+def _adresse_lan() -> str | None:
+    """Meilleure estimation de l'adresse IP de cette machine sur le réseau
+    local, pour l'indiquer à l'utilisateur (accès depuis un téléphone).
+    Astuce standard : ouvrir un socket UDP vers une adresse externe ne
+    transmet AUCUNE donnée (UDP est sans connexion) — ça ne fait que
+    demander au système quelle interface locale il choisirait pour y
+    aller, sans jamais réellement l'atteindre ni exiger qu'elle réponde."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except OSError:
+        return None
 
 
 def _pause_avant_fermeture() -> None:
@@ -124,8 +151,18 @@ def main() -> int:
     ).start()
 
     print(f"Serveur démarré sur {HOTE}:{port}. Fermez cette fenêtre pour arrêter l'application.")
+    adresse_lan = _adresse_lan()
+    if adresse_lan:
+        print(
+            f"Depuis un téléphone sur le MÊME réseau (Wi-Fi) : "
+            f"http://{adresse_lan}:{port}{CHEMIN_A_OUVRIR}"
+        )
+        print(
+            "Si le téléphone n'y arrive pas, vérifiez le pare-feu Windows "
+            "(profil réseau « privé », autoriser Python/uvicorn en entrée)."
+        )
     try:
-        uvicorn.run(application, host=HOTE, port=port, log_level="info")
+        uvicorn.run(application, host=HOTE_ECOUTE, port=port, log_level="info")
     except KeyboardInterrupt:
         pass
 
