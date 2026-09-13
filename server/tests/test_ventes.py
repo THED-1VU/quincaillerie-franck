@@ -220,3 +220,208 @@ def test_responsable_peut_vendre_pour_un_site_precise(client):
     )
     assert reponse.status_code == 201, reponse.text
     assert reponse.json()["site_id"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Annulation de vente (chantier C5, cycle 17) — migration 017,
+# ``annuler_vente()``. CDC §3.3 : « responsable uniquement ».
+# ---------------------------------------------------------------------------
+
+def test_annuler_vente_restitue_le_stock_et_contre_passe_la_recette(client):
+    """Vente normale (pas de découvert) : 2 sacs de ciment (site 1, stock 30).
+    L'annulation doit restituer EXACTEMENT ces 2 unités, contre-passer la
+    recette par une dépense de même montant, et figer le statut."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6000}],
+        },
+    )
+    assert reponse_vente.status_code == 201, reponse_vente.text
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.post(
+        f"/ventes/{vente_id}/annuler",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"motif": "Erreur de saisie, client jamais venu"},
+    )
+    assert reponse.status_code == 200, reponse.text
+    corps = reponse.json()
+    assert corps == {"vente_id": vente_id, "montant_ttc": 12000, "articles_restitues": 1}
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute("SELECT quantite_stock FROM articles WHERE id = 1")
+            assert cur.fetchone()["quantite_stock"] == 30  # restitué intégralement
+
+            cur.execute(
+                "SELECT statut, annulee_par_id, motif_annulation, date_annulation FROM ventes WHERE id = %s",
+                (vente_id,),
+            )
+            vente = cur.fetchone()
+            assert vente["statut"] == "annulee"
+            assert vente["annulee_par_id"] == 1  # resp
+            assert vente["motif_annulation"] == "Erreur de saisie, client jamais venu"
+            assert vente["date_annulation"] is not None
+
+            cur.execute(
+                "SELECT type, montant FROM transactions WHERE vente_id = %s ORDER BY id",
+                (vente_id,),
+            )
+            transactions = cur.fetchall()
+            assert [t["type"] for t in transactions] == ["recette", "depense"]
+            assert transactions[0]["montant"] == transactions[1]["montant"] == 12000
+
+            cur.execute(
+                "SELECT type, categorie, quantite FROM mouvements_stock "
+                "WHERE vente_id = %s ORDER BY id",
+                (vente_id,),
+            )
+            mouvements = cur.fetchall()
+            assert mouvements[-1] == {"type": "entree", "categorie": "annulation_vente", "quantite": 2}
+
+
+def test_annuler_vente_a_decouvert_ne_restitue_que_le_stock_reellement_decremente(client):
+    """Article rare (stock réel 1) vendu à découvert pour 3 : seule 1 unité a
+    réellement quitté le stock (addendum point e). L'annulation ne doit
+    restituer QUE cette unité — jamais la quantité facturée — et régulariser
+    d'office l'écart devenu sans objet (cycle 17, lien C5/C7)."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 4, "quantite": 3, "prix_unitaire": 2000}],
+        },
+    )
+    assert reponse_vente.status_code == 201, reponse_vente.text
+    vente_id = reponse_vente.json()["vente_id"]
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute("SELECT quantite_stock FROM articles WHERE id = 4")
+            assert cur.fetchone()["quantite_stock"] == 0  # tombé à 0, jamais négatif
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.post(
+        f"/ventes/{vente_id}/annuler",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"motif": "Client reparti sans payer, vente annulée"},
+    )
+    assert reponse.status_code == 200, reponse.text
+    corps = reponse.json()
+    assert corps["montant_ttc"] == 6000
+    assert corps["articles_restitues"] == 1
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute("SELECT quantite_stock FROM articles WHERE id = 4")
+            assert cur.fetchone()["quantite_stock"] == 1  # pas 3 : seul le réel décrémenté
+
+            cur.execute(
+                "SELECT regularise, regularise_par_id, date_regularisation "
+                "FROM ecarts_stock_ventes WHERE vente_id = %s",
+                (vente_id,),
+            )
+            ecart = cur.fetchone()
+            assert ecart["regularise"] is True
+            assert ecart["regularise_par_id"] == 1
+            assert ecart["date_regularisation"] is not None
+
+
+def test_annuler_vente_deja_annulee_refusee(client):
+    """Jamais une seconde fois — CDC : irréversible."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
+        },
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    entetes_resp = entete_autorisation(session_resp["jeton"])
+    premiere = client.post(
+        f"/ventes/{vente_id}/annuler", headers=entetes_resp, json={"motif": "Test"}
+    )
+    assert premiere.status_code == 200, premiere.text
+
+    seconde = client.post(
+        f"/ventes/{vente_id}/annuler", headers=entetes_resp, json={"motif": "Nouvelle tentative"}
+    )
+    assert seconde.status_code == 422
+    assert "déjà annulée" in seconde.json()["detail"].lower() or "annulée" in seconde.json()["detail"].lower()
+
+
+def test_annuler_vente_inexistante_refusee(client):
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.post(
+        "/ventes/999999/annuler",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"motif": "Test"},
+    )
+    assert reponse.status_code == 422
+    assert "introuvable" in reponse.json()["detail"].lower()
+
+
+def test_annuler_vente_motif_blanc_refuse(client):
+    """Pydantic bloque déjà la chaîne vide ; un motif fait uniquement
+    d'espaces passe Pydantic mais est refusé par la base (``btrim``)."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
+        },
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    entetes_resp = entete_autorisation(session_resp["jeton"])
+
+    assert client.post(
+        f"/ventes/{vente_id}/annuler", headers=entetes_resp, json={"motif": ""}
+    ).status_code == 422  # bloqué par Pydantic (min_length=1)
+
+    reponse = client.post(
+        f"/ventes/{vente_id}/annuler", headers=entetes_resp, json={"motif": "   "}
+    )
+    assert reponse.status_code == 422  # bloqué par la base (btrim)
+    assert "motif" in reponse.json()["detail"].lower()
+
+
+def test_agent_stock_et_agent_comptabilite_ne_peuvent_pas_annuler_une_vente(client):
+    """Seul le responsable annule (CDC §3.3) — aucun GRANT EXECUTE sur
+    ``annuler_vente()`` pour les autres rôles (migration 017)."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
+        },
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    for identifiant, mdp in (
+        ("magasin.compta", MOT_DE_PASSE_AGENT_COMPTA),
+        ("magasin.stock", MOT_DE_PASSE_AGENT_STOCK),
+    ):
+        session = se_connecter(client, identifiant, mdp)
+        reponse = client.post(
+            f"/ventes/{vente_id}/annuler",
+            headers=entete_autorisation(session["jeton"]),
+            json={"motif": "Test"},
+        )
+        assert reponse.status_code == 403

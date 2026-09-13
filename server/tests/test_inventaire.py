@@ -228,3 +228,124 @@ def test_ecarts_ventes_du_jour_relie_c5_et_c7(client):
     assert ecarts[0]["vente_id"] == vente_id
     assert ecarts[0]["quantite_manquante"] == 2
     assert ecarts[0]["regularise"] is False
+
+
+# ---------------------------------------------------------------------------
+# Régularisation d'un écart de vente à découvert (chantier C5, cycle 17) —
+# migration 017, ``regulariser_ecart_vente()``.
+# ---------------------------------------------------------------------------
+
+def _creer_ecart_vente_a_decouvert(client) -> int:
+    """Article rare (id 4, site 1, stock réel 1) vendu pour 3 : crée un écart
+    de 2 unités, non régularisé. Renvoie l'identifiant de cet écart."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 4, "quantite": 3, "prix_unitaire": 2000}],
+        },
+    )
+    assert reponse_vente.status_code == 201, reponse_vente.text
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get(
+        "/inventaire/ecarts-ventes", headers=entete_autorisation(session_resp["jeton"])
+    )
+    return reponse.json()["ecarts"][0]["id"]
+
+
+def test_regulariser_ecart_vente_marque_traite(client):
+    ecart_id = _creer_ecart_vente_a_decouvert(client)
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    entetes = entete_autorisation(session_resp["jeton"])
+
+    reponse = client.post(f"/inventaire/ecarts-ventes/{ecart_id}/regulariser", headers=entetes)
+    assert reponse.status_code == 200, reponse.text
+    assert reponse.json() == {"ecart_id": ecart_id, "regularise": True}
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute(
+                "SELECT regularise, regularise_par_id, date_regularisation "
+                "FROM ecarts_stock_ventes WHERE id = %s",
+                (ecart_id,),
+            )
+            ecart = cur.fetchone()
+            assert ecart["regularise"] is True
+            assert ecart["regularise_par_id"] == 1  # resp
+            assert ecart["date_regularisation"] is not None
+
+
+def test_regulariser_ecart_vente_deja_regularise_refuse(client):
+    """Jamais l'inverse (comme un remboursement d'avance) — ni deux fois."""
+    ecart_id = _creer_ecart_vente_a_decouvert(client)
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    entetes = entete_autorisation(session_resp["jeton"])
+
+    premiere = client.post(f"/inventaire/ecarts-ventes/{ecart_id}/regulariser", headers=entetes)
+    assert premiere.status_code == 200, premiere.text
+
+    seconde = client.post(f"/inventaire/ecarts-ventes/{ecart_id}/regulariser", headers=entetes)
+    assert seconde.status_code == 422
+    assert "régularis" in seconde.json()["detail"].lower()
+
+
+def test_regulariser_ecart_vente_inexistant_refuse(client):
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.post(
+        "/inventaire/ecarts-ventes/999999/regulariser",
+        headers=entete_autorisation(session_resp["jeton"]),
+    )
+    assert reponse.status_code == 422
+    assert "introuvable" in reponse.json()["detail"].lower()
+
+
+def test_regulariser_ecart_vente_reserve_au_responsable(client):
+    """Aucun GRANT EXECUTE sur ``regulariser_ecart_vente()`` pour les autres
+    rôles (migration 017) — et pas de simple UPDATE direct possible non
+    plus (aucun GRANT UPDATE sur ``ecarts_stock_ventes``)."""
+    ecart_id = _creer_ecart_vente_a_decouvert(client)
+
+    for identifiant, mdp in (
+        ("magasin.compta", MOT_DE_PASSE_AGENT_COMPTA),
+        ("magasin.stock", MOT_DE_PASSE_AGENT_STOCK),
+    ):
+        session = se_connecter(client, identifiant, mdp)
+        reponse = client.post(
+            f"/inventaire/ecarts-ventes/{ecart_id}/regulariser",
+            headers=entete_autorisation(session["jeton"]),
+        )
+        assert reponse.status_code == 403
+
+
+def test_annulation_vente_regularise_automatiquement_lecart(client):
+    """Lien C5/C7 : annuler une vente rend son écart sans objet — il doit
+    apparaître déjà régularisé, et une régularisation manuelle ultérieure
+    doit être refusée (déjà fait)."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "lignes": [{"article_id": 4, "quantite": 3, "prix_unitaire": 2000}],
+        },
+    )
+    vente_id = reponse_vente.json()["vente_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    entetes_resp = entete_autorisation(session_resp["jeton"])
+
+    ecart_id = client.get("/inventaire/ecarts-ventes", headers=entetes_resp).json()["ecarts"][0]["id"]
+
+    annulation = client.post(
+        f"/ventes/{vente_id}/annuler", headers=entetes_resp, json={"motif": "Test lien C5/C7"}
+    )
+    assert annulation.status_code == 200, annulation.text
+
+    reponse = client.post(f"/inventaire/ecarts-ventes/{ecart_id}/regulariser", headers=entetes_resp)
+    assert reponse.status_code == 422
+    assert "régularis" in reponse.json()["detail"].lower()

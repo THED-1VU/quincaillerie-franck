@@ -22,8 +22,9 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..deps import exiger_role, obtenir_bd
+from ..erreurs import erreur_metier
 from ..roles import role_pg
-from ..schemas import DemandeComptage, ReponseComptage
+from ..schemas import DemandeComptage, ReponseComptage, ReponseRegularisationEcart
 from ..securite import Session
 
 routeur = APIRouter(prefix="/inventaire", tags=["inventaire"])
@@ -229,3 +230,40 @@ def ecarts_ventes_du_jour(
             lignes = cur.fetchall()
 
     return {"ecarts": lignes}
+
+
+@routeur.post(
+    "/ecarts-ventes/{ecart_id}/regulariser",
+    response_model=ReponseRegularisationEcart,
+)
+def regulariser_ecart_vente(
+    ecart_id: int,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Marque un écart de vente à découvert comme traité (chantier C5,
+    cycle 17) — ``regulariser_ecart_vente()``, migration 017. Jamais
+    l'inverse : un écart déjà régularisé, ou introuvable, est refusé par la
+    fonction elle-même (``regulariser_ecart_vente`` ne fait aucun ``UPDATE``
+    direct exposé, réservé au rôle responsable)."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT regulariser_ecart_vente(%s, %s)",
+                    (ecart_id, session.utilisateur_id),
+                )
+            except (psycopg.errors.ForeignKeyViolation, psycopg.errors.RestrictViolation) as exc:
+                raise erreur_metier(exc) from exc
+
+            # regulariser_ecart_vente() renvoie VOID : on relit l'écart pour
+            # confirmer son nouvel état plutôt que de renvoyer un 204 muet.
+            cur.execute(
+                "SELECT regularise FROM ecarts_stock_ventes WHERE id = %s", (ecart_id,)
+            )
+            ligne = cur.fetchone()
+
+    return ReponseRegularisationEcart(ecart_id=ecart_id, regularise=ligne["regularise"])

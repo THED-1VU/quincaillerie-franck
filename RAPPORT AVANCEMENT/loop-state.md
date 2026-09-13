@@ -41,7 +41,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C2 | Authentification et comptes | **65 %** | Cycle 3. Noyau serveur (`server/`, FastAPI) : connexion via `verifier_connexion()` (fonction PostgreSQL `SECURITY DEFINER`, migration 009, seule à lire le hachage, jamais restitué) ; verrouillage après 5 échecs, déverrouillage réservé au responsable, obligation de changement à la première connexion, libre-service limité à sa propre ligne, limitation de débit. **36/36 tests, 0 échec** (`server/tests/DERNIER_RESULTAT.md`). Reste : session à durée limitée = choix technique temporaire (`duree_session_minutes` reste `a_definir` en base — décision propriétaire) ; pas de révocation de jeton avant expiration (limite technique documentée) ; pas d'écran, pas de création de compte via API (hors périmètre du cycle). |
 | C3 | Habilitations et cloisonnement des rôles | **60 %** | Cycle 3. Habilitations appliquées **au niveau des requêtes SQL** (pas de vérification applicative dispersée) : privilèges par colonne + RLS par site posés au cycle 2, exploités par `BaseDeDonnees.connexion_pour()` (point de bascule de rôle unique). Prouvé par exécution en **contournant l'API** : `SELECT ... WHERE site_id=2` sous `qf_agent_stock` renvoie 0 ligne même en le demandant explicitement (`server/tests/test_cloisonnement_site.py`). Rôle « caissier » toujours non tranché (addendum h) — non traité ce cycle. Reste : cloisonnement RH/fournisseurs non testé par une route, pas encore d'écran. |
 | C4 | Articles et stock | **72 %** | Cycles 9, 11 et 13. Six opérations réelles, chacune une fonction PostgreSQL `SECURITY DEFINER`, toutes câblées sur un vrai écran (`maquette/stock.html`, cycle 11). **Constats n°2 et n°3 corrigés (cycle 13)** : un retour client ou fournisseur ne peut plus dépasser, en article et en quantité (cumul de plusieurs retours compris), ce que la vente ou la réception d'origine porte réellement (migration 016) ; `PUT /articles/{id}` ne trace plus de changement de prix dans `historique_prix_articles` quand le prix soumis est identique à l'actuel. `quantite_stock` volontairement jamais modifiable par fiche. **Aucun montant FCFA, aucun champ de prix n'atteint la page ni les réponses réseau de l'agent stock**. Vérifié par exécution : 104/104 tests pytest (100 + 4 nouveaux), suite SQL à jour (44/44, 52/52, 6/6, réversibilité de la migration 016 confirmée, vérifiée en SQL direct avant tout code Python), 6 suites Playwright — 0 régression (aucun écran touché par la correction). Manquent : volumétrie/reprise du stock initial (addendum j, non tranché), remises et conversion d'unités (addendum f, volet non tranché), export dédié à C4. |
-| C5 | Ventes et facturation | **43 %** | Cycle 6, durci par le cycle de correction après C7. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` (`server/app/routes/ventes.py`) enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. Vérifié par exécution : 8/8 tests pytest dédiés (55/55 au total, 0 régression), suite SQL du cycle 2 rejouée à jour (44/44 protections, 52/52 habilitations, **6/6 concurrence — réécrite pour le nouveau comportement anti-survente**, réversibilité des migrations confirmée), et 10/10 contrôles Playwright bout-en-bout sur l'écran de vente réellement câblé (`verifier-vente-reelle.mjs`) : vente normale (aperçu affiché AVANT validation identique à la confirmation serveur), vente à découvert acceptée avec écart affiché, crédit client absent des choix, responsable contraint de choisir un site. **+3 points (cycle de correction)** : fuseau horaire de `/ventes/synthese-jour` fixé à Africa/Douala au lieu d'hériter d'un réglage faux (Europe/Paris) — le « jour » des ventes dépendait silencieusement de l'horloge du poste serveur ; recherche/panier de `vente.html` ne construisent plus le HTML par concaténation non échappée (nom d'article), vérifié par un essai d'injection réel. Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), annulation d'une vente, régularisation d'un écart, documents imprimés (ticket/facture), écarts de stock pas encore affichés au tableau de bord (prévu chantier C7). |
+| C5 | Ventes et facturation | **55 %** | Cycle 6, durci par le cycle de correction après C7, complété par le cycle 17. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. **Cycle 17** : `POST /ventes/{id}/annuler` (migration 017, `annuler_vente()`) restitue le stock RÉELLEMENT décrémenté (pas la quantité facturée), contre-passe la recette par une dépense, régularise d'office l'écart de vente à découvert devenu sans objet — irréversible comme prévu depuis la migration 005 ; `POST /inventaire/ecarts-ventes/{id}/regulariser` marque un écart traité, jamais dans l'autre sens. Faille trouvée par exécution en écrivant ce cycle : `decrementer_stock_vente()` (cycle 6) ne renseignait jamais `mouvements_stock.vente_id`, corrigé dans la même migration. Vérifié par exécution : 19/19 tests pytest dédiés (135/135 au total, 0 régression), suite SQL rejouée à jour (44/44 protections, 52/52 habilitations, 6/6 concurrence, réversibilité de la migration 017 confirmée), 10/10 + 17/17 contrôles Playwright (vente et inventaire, dont le bouton « Régulariser » ajouté à `tableau-bord.html`). Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché — objectif anti-vol volontairement incomplet), documents imprimés (ticket/facture). |
 | C6 | Comptabilité et RH | **45 %** | Cycle 16. `transactions` (recette/dépense **hors vente**, historique filtrable par période), `employes`/`absences_conges`/`avances_salaire` (responsable seul, CDC §3.5) — tables et `GRANT` existant depuis les cycles 1/2, jamais exposés avant ce cycle. `POST /transactions`, `POST/GET /rh/employes\|absences-conges\|avances-salaire`, `POST /rh/avances-salaire/{id}/rembourser`. La carte « Saisie rapide » de `tableau-bord.html` (simulée depuis le cycle 5) câble désormais un vrai formulaire. **Correction d'une inexactitude du diagnostic d'origine** : `transactions.vente_id` porte déjà un index unique partiel (`uq_transactions_recette_par_vente`, cycle 2) empêchant une double recette pour la même vente — ce n'était pas un manque réel. Vérifié par exécution : 18/18 tests pytest dédiés (124/124 au total, 0 régression), `verifier-cablage.mjs` +1 (77/77, recette de 4 500 FCFA réellement retrouvée en base). Manquent : clôture de caisse (point g, non tranché), écran dédié pour la RH (API + tests seulement ce cycle), contre-passation d'annulation, audit des corrections. |
 | C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
 | C8 | Tableaux de bord et rapports | **62 %** | Cycles 10, 12 et 14. Alertes de stock, historique des comptages et deux exports Excel/PDF, tous câblés sur un vrai écran (`maquette/rapports.html`, cycle 12). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit pour les 3 rôles au niveau API (cycle 10) et par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12). **Cycle 14** : le cloisonnement par site des deux exports (déjà vérifié deux fois par exécution directe, jamais couvert par un test) a désormais 2 tests dédiés dans `test_rapports.py` — un agent stock du Magasin n'exporte aucun article du Comptoir, un agent comptabilité du Magasin n'exporte aucune vente du Comptoir. Vérifié par exécution : 106/106 pytest (104 + 2 nouveaux), aucun écran ni migration touchés. Manquent : bascule vue consolidée/par site (les données portent déjà `site_id`, la bascule elle-même n'a pas d'écran), clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). |
@@ -52,7 +52,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **0 %** | Aucun test automatisé détecté (« Tests identifiable : Found » = simple présence du mot « test » dans les guides). Aucune suite exécutable. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 16 : ≈ 48 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 43, C6 45, C7 50, C8 62, C9 50, C10 38, C11 55, C14 40, autres 0).
+**Moyenne indicative après le cycle 17 : ≈ 48 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 55, C6 45, C7 50, C8 62, C9 50, C10 38, C11 55, C14 40, autres 0).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -1600,6 +1600,85 @@ Troisième et dernier chantier du lot validé après le cycle 13.
 - **Reste ouvert** : clôture de caisse (point g), écran dédié pour la RH
   (API + tests seulement ce cycle, comme C4 au cycle 9), contre-passation
   d'annulation, audit des corrections.
+
+---
+
+### Cycle 17 — Annulation de vente, régularisation d'écart : C5 — 2026-09-13
+
+Premier des trois nouveaux chantiers lancés après la fusion du lot de 3
+(cycles 14-16) et le diagnostic complet rejoué (pytest 124/124, suite SQL
+44/44/52/52/6/6, 6 suites Playwright — 0 régression, voir contrôle de
+boucle ci-après).
+
+- **Objectif** : compléter deux mécanismes déjà **décidés** mais jamais
+  finis — l'annulation d'une vente (CDC §3.3, mécanique de statut posée
+  depuis la migration 005, cycle 2, mais rien ne restituait le stock ni ne
+  contre-passait la recette) et la régularisation d'un écart de vente à
+  découvert (`ecarts_stock_ventes.regularise` posé depuis le cycle 6, sans
+  qu'aucune fonction ne l'ait jamais fait passer à `TRUE`). Aucune règle
+  métier nouvelle inventée — les deux complètent une trace déjà tranchée
+  par le propriétaire.
+- **Mise en œuvre** : branche `cycle-17-c5-annulation-regularisation`.
+  - `db/migrations/017_annulation_vente_regularisation_ecart.sql` (+
+    inverse) : `annuler_vente()` (restitue le stock réellement décrémenté,
+    contre-passe la recette par une dépense, régularise d'office l'écart
+    devenu sans objet) et `regulariser_ecart_vente()` — toutes deux
+    `SECURITY DEFINER`, réservées à `qf_responsable`.
+  - `server/app/routes/ventes.py` : `POST /ventes/{vente_id}/annuler`.
+  - `server/app/routes/inventaire.py` : `POST
+    /inventaire/ecarts-ventes/{ecart_id}/regulariser`.
+  - `maquette/tableau-bord.html` : la carte « Écarts de stock (ventes) »
+    (réelle depuis le cycle 8) gagne un bouton « Régulariser » par ligne
+    non régularisée.
+  - `server/tests/test_ventes.py` (6) et `server/tests/test_inventaire.py`
+    (5) — 11 nouveaux tests.
+- **Faille trouvée par exécution en écrivant ce cycle, avant tout code
+  Python** : `decrementer_stock_vente()` (cycle 6) recevait bien
+  `p_vente_id` en paramètre mais ne l'écrivait **jamais** dans
+  `mouvements_stock.vente_id` — seul un motif texte (« vente #123 »)
+  portait ce lien, jamais une vraie clé étrangère. Sans correction,
+  `annuler_vente()` n'aurait rien trouvé à restituer pour aucune vente
+  réelle. Corrigée dans la migration 017 même (`CREATE OR REPLACE`,
+  comportement inchangé sinon) ; colonne laissée NULLABLE pour la
+  catégorie « vente » — aucun moyen fiable de reconstruire ce lien pour
+  les mouvements d'avant ce cycle.
+- **Vérification par exécution** :
+  - Migration 017 vérifiée en SQL direct (annulation normale, annulation
+    à découvert restituant EXACTEMENT le stock réel et non la quantité
+    facturée, double annulation refusée, motif blanc refusé,
+    régularisation refusée si déjà faite, permissions par rôle) avant tout
+    code Python.
+  - `test_ventes.py` + `test_inventaire.py` : **11/11** nouveaux.
+  - Suite pytest complète : **135/135**, 0 régression.
+  - Suite SQL rejouée à jour (000 à 017) : **44/44** protections, **52/52**
+    habilitations, **6/6** concurrence, réversibilité de la migration 017
+    confirmée.
+  - 6 suites Playwright rejouées sans régression : `cablage` **77/77**,
+    `inventaire` **17/17** (le bouton « Régulariser » apparaît bien dans la
+    ligne rendue), `vente` **10/10**, `stock` **26/26**, `rapports`
+    **29/29**, `echappement` **11/11** (nom d'article malveillant toujours
+    échappé avec le bouton ajouté).
+  - **Piège rencontré et corrigé en cours de route** : le mot de passe du
+    rôle `qf_app` sur l'instance PostgreSQL locale ne correspondait plus à
+    `server/config.ini` (`ALTER ROLE ... WITH PASSWORD` corrigé — mot de
+    passe de développement local, jamais un secret réel, voir
+    `db/README.md`) ; la base `quincaillerie_test` doit être reconstruite
+    à la main (schéma d'origine + migrations + jeu d'essai) après le passage
+    de `db/tests/executer_tests.sh`, qui la supprime délibérément à l'étape
+    7 (comparaison de réversibilité).
+- **Documentation** : `db/README.md` (ligne migration 017),
+  `db/tests/DERNIER_RESULTAT.md`, `server/README.md` (section C5 étendue),
+  `server/tests/DERNIER_RESULTAT.md`, `loop-state.md`.
+- **Score** : C5 **43 % → 55 %**. Commit, PR sur
+  `cycle-17-c5-annulation-regularisation` — **non fusionnée**, sur
+  instruction du propriétaire (à confirmer avant fusion, comme pour les
+  cycles précédents).
+- **Reste ouvert** : n° facturier + vendeur obligatoires (addendum point
+  c, non tranché — objectif anti-vol volontairement incomplet), documents
+  imprimés (ticket/facture), régularisation des écarts de COMPTAGE
+  (`comptages_stock`, distincts des écarts de vente traités ici —
+  volontairement pas touchés, inventer un mécanisme de correction de
+  quantité y serait une règle métier nouvelle, non demandée).
 
 ---
 
