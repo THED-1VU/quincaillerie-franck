@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Écran câblé (cycles 7 et 8) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour » et « Écarts de stock (ventes) » sont toutes réelles.</div>
+<div class="simu">Écran câblé (cycles 7, 8 et 16) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour », « Écarts de stock (ventes) » et « Saisie rapide » (recette/dépense) sont toutes réelles.</div>
 <div class="page">
   <header class="bandeau">
     <span class="bandeau__marque">Quincaillerie Franck</span>
@@ -58,13 +58,32 @@
 
       <section class="carte">
         <h2>Saisie rapide</h2>
-        <p style="color:var(--c-texte-doux);">Enregistrer une opération de caisse hors vente.</p>
+        <p style="color:var(--c-texte-doux);">Enregistrer une opération de caisse hors vente (une vente crée déjà sa propre recette).</p>
         <div class="actions-rapides">
-          <button class="btn btn--primaire" type="button" onclick="ouvrir('recette')">+ Recette</button>
-          <button class="btn btn--secondaire" type="button" onclick="ouvrir('depense')">+ Dépense</button>
+          <button class="btn btn--primaire" type="button" id="btn-recette">+ Recette</button>
+          <button class="btn btn--secondaire" type="button" id="btn-depense">+ Dépense</button>
         </div>
-        <div id="zone-saisie" class="erreur-champ" hidden
-             style="background:var(--c-neutre-info-clair); color:var(--c-neutre-info); border-color:var(--c-neutre-info);"></div>
+        <div id="bloc-saisie" hidden style="margin-top:var(--e-4);">
+          <div class="champ">
+            <label class="champ__label" for="saisie-montant">Montant (FCFA)</label>
+            <input class="champ__saisie" id="saisie-montant" type="number" min="1" step="1">
+          </div>
+          <div class="champ">
+            <label class="champ__label" for="saisie-description">Description</label>
+            <input class="champ__saisie" id="saisie-description" type="text">
+          </div>
+          <div class="champ" id="champ-site-saisie" hidden>
+            <label class="champ__label" for="saisie-site">Site</label>
+            <select class="champ__select" id="saisie-site">
+              <option value="">— Choisir —</option>
+              <option value="1">Magasin de stock</option>
+              <option value="2">Comptoir</option>
+            </select>
+          </div>
+          <button class="btn btn--primaire" id="saisie-valider" type="button">Enregistrer</button>
+        </div>
+        <div id="zone-erreur-saisie" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+        <div id="zone-succes-saisie" class="erreur-champ" hidden style="margin-top:var(--e-3); background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
       </section>
 
     </div>
@@ -176,14 +195,39 @@
   } catch (erreur) {
     afficherErreurServeur("zone-erreur-ecarts-ventes", erreur);
   }
-})();
 
-function ouvrir(type) {
-  const z = document.getElementById("zone-saisie");
-  z.hidden = false;
-  z.textContent = (type === "recette" ? "Saisie d'une recette" : "Saisie d'une dépense")
-    + " : l'écran dédié (montant, description, site, date) sera câblé dans un cycle ultérieur.";
-}
+  // --- Saisie rapide (recette/dépense hors vente) : RÉEL, via POST /transactions ---
+  // (chantier C6, cycle 16 ; la clôture de caisse — addendum point g —
+  // n'est pas traitée : cette carte enregistre une transaction, elle ne
+  // rapproche rien avec un comptage d'espèces.)
+  let typeSaisie = null;
+  function ouvrirSaisie(type) {
+    typeSaisie = type;
+    $("bloc-saisie").hidden = false;
+    $("zone-erreur-saisie").hidden = true;
+    $("zone-succes-saisie").hidden = true;
+    $("saisie-valider").textContent = type === "recette" ? "Enregistrer la recette" : "Enregistrer la dépense";
+    if (!session.site_id) $("champ-site-saisie").hidden = false;
+    $("saisie-montant").focus();
+  }
+  $("btn-recette").addEventListener("click", () => ouvrirSaisie("recette"));
+  $("btn-depense").addEventListener("click", () => ouvrirSaisie("depense"));
+  $("saisie-valider").addEventListener("click", async () => {
+    $("zone-erreur-saisie").hidden = true;
+    const corps = { type: typeSaisie, montant: Number($("saisie-montant").value) };
+    if ($("saisie-description").value.trim()) corps.description = $("saisie-description").value.trim();
+    if (!session.site_id) corps.site_id = Number($("saisie-site").value);
+    try {
+      await appelApi("/transactions", { method: "POST", body: JSON.stringify(corps) });
+      $("zone-succes-saisie").hidden = false;
+      $("zone-succes-saisie").textContent = (typeSaisie === "recette" ? "Recette" : "Dépense") + " enregistrée.";
+      $("saisie-montant").value = "";
+      $("saisie-description").value = "";
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-saisie", erreur);
+    }
+  });
+})();
 </script>
 </body>
 </html>
