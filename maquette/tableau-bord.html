@@ -16,6 +16,13 @@
   @media (max-width: 820px) {
     .bandeau { flex-wrap: wrap; }
   }
+
+  /* UX-4 (UX_BASELINE.md §4 bis, B3) : chiffres des cartes trop petits pour
+     être lus sans zoomer sur téléphone — taille minimale garantie, scopée à
+     cet écran (.kv/.pastille sont partagées avec rapports.html/rh.html/
+     stock.html, qui n'ont pas ce constat et ne doivent pas changer). */
+  .tb-grille .kv dd { font-size: var(--t-md); font-weight: var(--poids-demi); }
+  .tb-grille .pastille { font-size: var(--t-base); }
 </style>
 </head>
 <body>
