@@ -21,7 +21,15 @@ from fastapi.testclient import TestClient
 
 RACINE_DEPOT = Path(__file__).resolve().parent.parent.parent
 RACINE_SERVEUR = RACINE_DEPOT / "server"
+# `_pgdev/` n'est jamais versionné (voir .gitignore) : dans un worktree Git
+# (RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md, ex. `_worktrees/piste-ux/`), il
+# n'existe que dans le dépôt PRINCIPAL — l'instance PostgreSQL de dev est
+# partagée entre les pistes (db/README.md, « Bases dédiées au travail en
+# parallèle »). On utilise celui du worktree s'il existe, sinon celui du
+# dépôt principal deux niveaux au-dessus de `_worktrees/<piste>/`.
 PGDEV = RACINE_DEPOT / "_pgdev"
+if not PGDEV.exists():
+    PGDEV = RACINE_DEPOT.parent.parent / "_pgdev"
 PSQL_EXE = PGDEV / "pgsql" / "bin" / "psql.exe"
 
 # Au niveau du MODULE (pas d'une fixture) : certains tests importent `app.*`
@@ -32,9 +40,16 @@ if str(RACINE_SERVEUR) not in sys.path:
 
 # Connexion ADMINISTRATIVE de test (postgres, jamais utilisée par
 # l'application elle-même — voir server/app/config.py qui refuse ce compte).
+#
+# Nom de base surchargeable par QF_TEST_DBNAME (défaut inchangé :
+# quincaillerie_test) — nécessaire pour la piste UX du travail en parallèle
+# (RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md) : elle n'a pas le droit de
+# toucher quincaillerie_test et doit pouvoir rejouer cette suite sur
+# quincaillerie_ux. Défaut identique pour toute autre invocation.
 PG_HOST = "127.0.0.1"
 PG_PORT = 5433
-PG_ADMIN_DSN = f"host={PG_HOST} port={PG_PORT} dbname=quincaillerie_test user=postgres password=qf_dev_local"
+PG_TEST_DBNAME = os.environ.get("QF_TEST_DBNAME", "quincaillerie_test")
+PG_ADMIN_DSN = f"host={PG_HOST} port={PG_PORT} dbname={PG_TEST_DBNAME} user=postgres password=qf_dev_local"
 
 # Mots de passe de test, en clair, UNIQUEMENT valables sur la base de test
 # locale (_pgdev, jamais versionnée, jamais partagée).
@@ -67,7 +82,7 @@ def base_reinitialisee():
     environnement = {**os.environ, "PGPASSWORD": "qf_dev_local"}
     resultat = subprocess.run(
         [str(PSQL_EXE), "-h", PG_HOST, "-p", str(PG_PORT), "-U", "postgres",
-         "-d", "quincaillerie_test", "-v", "ON_ERROR_STOP=1", "-q",
+         "-d", PG_TEST_DBNAME, "-v", "ON_ERROR_STOP=1", "-q",
          "-f", str(RACINE_DEPOT / "db" / "tests" / "00_jeu_essai.sql")],
         env=environnement,
         capture_output=True, text=True,
@@ -111,7 +126,7 @@ def app(base_reinitialisee):
 
     config = Config(
         base=ConfigBase(
-            host=PG_HOST, port=PG_PORT, dbname="quincaillerie_test",
+            host=PG_HOST, port=PG_PORT, dbname=PG_TEST_DBNAME,
             user="qf_app", password="qf_app_dev_local",
         ),
         api=ConfigApi(
