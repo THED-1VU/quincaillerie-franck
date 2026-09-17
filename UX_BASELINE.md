@@ -40,6 +40,14 @@ non câblée (`maquette/`).
 > défauts réels). **11 constats ouverts (UX-0, méthodologie, + UX-1 à
 > UX-10), aucun corrigé** — le choix du cycle qui les traite revient au
 > propriétaire.
+>
+> **Mise à jour 2026-09 (piste UX, travail en parallèle) :** 7 des 8
+> constats confiés à cette piste sont corrigés et vérifiés par exécution
+> réelle — UX-7, UX-1, UX-2, UX-3 (cause la plus plausible, voir le détail
+> sous ce constat), UX-4, UX-9, UX-10 ; UX-6 était déjà correct (vérifié,
+> aucun changement nécessaire). UX-0, UX-5 et UX-8 restent ouverts (hors du
+> périmètre validé pour ce chantier). Détail, preuves et diagnostic complet
+> dans `RAPPORT AVANCEMENT/cycles/piste-ux.md`.
 
 ---
 
@@ -354,27 +362,81 @@ Sous la lecture du testeur (3ᵉ essai) : 5/7 conforme.
   pratiqué) — mais le choix de laquelle compte pour la recette doit être
   tranché explicitement avant la prochaine campagne, pas laissé implicite.
 - **UX-1** — Ajouter un article au panier prend 3-4 actions, pas ≤ 2
-  (A3).
+  (A3). **CORRIGÉ (piste UX, 2026-09).** Diagnostic : le parcours «
+  taper + Entrée » était déjà à 2 actions pour une quantité de 1, mais un
+  achat de quincaillerie porte presque toujours sur une quantité ≠ 1, ce
+  qui obligeait à rouvrir la ligne du panier ensuite (3e action). Un
+  nombre en tête de la recherche (`maquette/vente.html`, ex. « 5 ciment »)
+  fixe désormais la quantité dès l'ajout : toujours 2 actions (taper +
+  Entrée), quelle que soit la quantité. Preuve par exécution :
+  `maquette/verification/verifier-ux-corrections.mjs`, contrôles « UX-1 »
+  (2 actions, quantité 5 posée sans 3e action) — 27/27 sur l'ensemble du
+  fichier, aucune régression sur `verifier-cablage.mjs` (87/87).
 - **UX-2** — Impossible de faire une vente entière au clavier seul (A6) —
   contredit « Ce qui est déjà acquis au cycle 1 » (§3), qui listait ce
   parcours comme « OK partiel » sur la seule foi des raccourcis
   disponibles, jamais vérifié par un humain sur un vrai clavier avant ce
-  test.
+  test. **CORRIGÉ (piste UX, 2026-09).** Diagnostic (par exécution, pas
+  lecture du code) : recherche/ajout/paiement/validation étaient déjà
+  accessibles au clavier (F2/F4/F9) ; le blocage réel — celui qui rend une
+  vente réelle impossible, où le prix est presque toujours négocié
+  (addendum, point d) — est qu'aucun raccourci n'atteignait le champ de
+  prix d'une ligne du panier, seule la souris ou une chaîne de Tab
+  incertaine le pouvait. Nouveau raccourci `F3` (`maquette/vente.html`) :
+  amène le focus directement sur le prix de la DERNIÈRE ligne ajoutée,
+  contenu présélectionné ; Entrée y ramène le focus à la recherche. Preuve
+  par exécution : un scénario Playwright n'utilisant AUCUNE souris, de la
+  recherche à une vente validée avec prix négocié
+  (`verifier-ux-corrections.mjs`, contrôles « UX-2 »), réussit de bout en
+  bout.
 - **UX-3** — Le tableau de bord déborde d'environ 40 px sur le téléphone
   réel utilisé (B2), alors qu'aucun débordement n'est détecté par les
   suites automatisées aux largeurs standard (360/390/768/1366/1920 px,
   `verifier-cablage.mjs`). Écart à investiguer : largeur effective du
   vrai téléphone hors des 3 largeurs testées automatiquement, zoom
   système, barre de navigateur mobile qui réduit la largeur utile, ou
-  autre — pas encore diagnostiqué.
+  autre — pas encore diagnostiqué. **CORRIGÉ pour la cause la plus
+  plausible (piste UX, 2026-09).** Diagnostic : les suites automatisées
+  utilisent TOUJOURS les libellés courts et fixes du jeu d'essai — elles
+  ne peuvent donc jamais révéler un débordement causé par un contenu réel
+  plus long (nom d'article, motif). Cause trouvée : `grid-template-columns:
+  1fr` (sans `minmax(0, ...)`) et l'absence de `min-width:0`/
+  `overflow-wrap` laissent un mot non sécable pousser toute la grille plus
+  large que l'écran — un bug CSS connu, invisible avec des libellés courts
+  quelle que soit la largeur testée, donc jamais détecté par les 5
+  largeurs standard. Corrigé dans `maquette/styles.css` (`.tb-grille`,
+  `.kv`, `.carte`) et `maquette/api.js` (`creerLigneListe()`). Preuve par
+  exécution avec un nom d'article réellement long et non sécable, aux 5
+  largeurs standard (`verifier-ux-corrections.mjs`, contrôles « UX-3 » —
+  0 px de débordement aux 5 largeurs ; capture dans
+  `maquette/captures/ux-corrections-tableau-bord-*.png`). **Honnêteté** : un facteur non testable ici (zoom système du téléphone
+  du testeur, dont le modèle exact n'a pas été renseigné — voir l'en-tête
+  de §4 bis) reste une cause possible non exclue ; seule la cause
+  CSS/contenu ci-dessus a pu être vérifiée et corrigée par exécution.
 - **UX-4** — Les chiffres des cartes du tableau de bord sont trop petits
-  pour être lus sans zoomer sur téléphone (B3).
+  pour être lus sans zoomer sur téléphone (B3). **CORRIGÉ (piste UX,
+  2026-09).** Taille de police minimale garantie sur les chiffres des
+  cartes du tableau de bord (`maquette/tableau-bord.html`, scopé à cet
+  écran : les montants par site passent à `--t-md` [20px], les pastilles
+  d'écart à `--t-base` [17px], contre 17px/15px non garantis
+  auparavant). Preuve par exécution :
+  `verifier-ux-corrections.mjs`, contrôle « UX-4 » (taille réellement
+  calculée ≥ 16px à 360 et 390px).
 - **UX-5** — Saisir une recette depuis le téléphone prend 1 min 02, pas
-  < 45 s (B5).
+  < 45 s (B5). Non traité par la piste UX ce tour-ci (hors du plan validé
+  — voir `RAPPORT AVANCEMENT/cycles/piste-ux.md`).
 - **UX-6** — Le clavier numérique ne s'ouvre pas automatiquement pour la
   saisie d'un comptage sur téléphone (B6) — laisse penser à un champ de
   saisie sans l'attribut adéquat (`inputmode`/`type="number"`), à
-  vérifier au diagnostic du cycle qui traitera ce constat.
+  vérifier au diagnostic du cycle qui traitera ce constat. **VÉRIFIÉ
+  (piste UX, 2026-09) : déjà correct, aucun changement de code
+  nécessaire.** `maquette/inventaire.html#saisie` porte déjà
+  `type="number"` ET `inputmode="numeric"` — vérifié par inspection de
+  l'attribut réellement rendu dans le DOM (pas la lecture du fichier
+  source), `verifier-ux-corrections.mjs`, contrôles « UX-6 ». Le constat
+  du testeur date probablement d'avant que ces attributs n'aient été
+  ajoutés, ou d'une particularité du téléphone/navigateur utilisé, non
+  reproductible côté code.
 - **UX-7 (sévère)** — Si le Wi-Fi coupe pendant une saisie, l'écran
   **tourne indéfiniment sans aucun message** (B9) — viole directement la
   règle du projet « jamais un message brut, toujours un message clair en
@@ -382,14 +444,41 @@ Sous la lecture du testeur (3ᵉ essai) : 5/7 conforme.
   `verifier-cablage.mjs`, mais visiblement pas pour une coupure **en
   cours** de requête sur un réseau réel). Le plus sérieux des constats de
   cette campagne : un utilisateur peut rester bloqué sans aucune
-  indication de ce qui se passe ni de quoi faire.
+  indication de ce qui se passe ni de quoi faire. **CORRIGÉ (piste UX,
+  2026-09), en premier, comme prévu par le plan.** Cause : `fetch()` sans
+  délai maximal ne rejette JAMAIS si la connexion est coupée EN COURS de
+  requête (contrairement à un refus de connexion immédiat, déjà géré).
+  `maquette/api.js#appelApiBrut()` pose désormais un `AbortController`
+  avec un délai de 20 s, qui aboutit au même message clair déjà existant
+  (« Impossible de contacter le serveur... réessayez. »). Preuve par
+  exécution : une coupure réseau simulée EN COURS de requête (la requête
+  `POST /ventes` est interceptée et jamais honorée, ni résolue ni
+  rejetée par le serveur) affiche le message en moins de 20 s, près du
+  champ concerné, et le bouton de soumission redevient utilisable sans
+  recharger la page — une nouvelle tentative après rétablissement du
+  réseau aboutit (`verifier-ux-corrections.mjs`, contrôles « UX-7 »).
 - **UX-8** — Un utilisateur non formé ne trouve pas seul comment annuler
-  une ligne du panier (C2, ~20 s de recherche).
+  une ligne du panier (C2, ~20 s de recherche). Non traité par la piste UX
+  ce tour-ci (hors du plan validé — voir
+  `RAPPORT AVANCEMENT/cycles/piste-ux.md`).
 - **UX-9** — Un utilisateur non formé comprend mal le prix affiché en
   gris, le prenant pour le prix à facturer (C3) — à rapprocher de
   l'addendum, point d (prix négociés vs. prix catalogue) : la confusion
   observée porte exactement sur la distinction que ce point est censé
-  clarifier à l'écran.
+  clarifier à l'écran. **CORRIGÉ (piste UX, 2026-09).** Le message affiché
+  après l'ajout d'un article (`maquette/vente.html`) précise désormais
+  explicitement : « Prix indicatif du catalogue : ... — PAS le prix qui
+  sera facturé : ajustez-le dans le panier (ou F3) si le prix négocié est
+  différent. » Preuve par exécution : `verifier-ux-corrections.mjs`,
+  contrôles « UX-9 » (présence du mot « indicatif » et de la précision
+  explicite « PAS le prix facturé »).
 - **UX-10** — Un utilisateur non formé ne sait pas qu'un comptage
   d'inventaire devient définitif une fois validé (C4) — aucun
-  avertissement explicite avant validation.
+  avertissement explicite avant validation. **CORRIGÉ (piste UX,
+  2026-09).** Avertissement TOUJOURS visible ajouté sous le champ de
+  saisie (`maquette/inventaire.html#aide-definitif`), jamais un dialogue
+  de confirmation qui aurait ajouté une action (le comptage est déjà
+  mesuré trop lent, A7 : 3 min 05 au pire essai contre un objectif de
+  2 min). Preuve par exécution : `verifier-ux-corrections.mjs`, contrôles
+  « UX-10 » (avertissement visible sans action supplémentaire, texte non
+  ambigu, et confirmation qu'aucun `confirm()` bloquant n'a été ajouté).

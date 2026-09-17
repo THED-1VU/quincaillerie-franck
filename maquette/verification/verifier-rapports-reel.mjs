@@ -23,13 +23,21 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 const RACINE_DEPOT = resolve(ICI, "..", "..");
 const CAPTURES = resolve(ICI, "..", "captures") + "/";
 
 const SERVEUR_URL = process.env.SERVEUR_URL || "http://127.0.0.1:8010";
-const PGDEV = resolve(RACINE_DEPOT, "_pgdev");
+const DB_PISTE = process.env.PGDATABASE_PISTE || "quincaillerie_test";
+let PGDEV = resolve(RACINE_DEPOT, "_pgdev");
+if (!existsSync(PGDEV)) {
+  // _pgdev/ n'existe que dans le dépôt principal, pas dans un worktree Git
+  // (RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md) : on bascule sur celui du dépôt
+  // principal, deux niveaux au-dessus de _worktrees/<piste>/.
+  PGDEV = resolve(RACINE_DEPOT, "..", "..", "_pgdev");
+}
 const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
 
 const MDP_AGENT_STOCK = "AgentStockTest123";
@@ -41,13 +49,13 @@ const verifier = (cond, libelle) => (cond ? ok : ko).push(libelle);
 
 function psql(sql) {
   execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", "quincaillerie_test", "-q", "-c", sql,
+    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE, "-q", "-c", sql,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }
 
 console.log("== Préparation de la base (jeu d'essai + comptes de test) ==");
 execFileSync(PSQL, [
-  "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", "quincaillerie_test",
+  "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
   "-v", "ON_ERROR_STOP=1", "-q", "-f", resolve(RACINE_DEPOT, "db", "tests", "00_jeu_essai.sql"),
 ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_AGENT_STOCK}', gen_salt('bf', 12)) WHERE identifiant='magasin.stock';`);

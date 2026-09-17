@@ -17,6 +17,17 @@ const CLE_SESSION = "qf_session";
 const RESEAU_INACCESSIBLE =
   "Impossible de contacter le serveur. Vérifiez qu'il est démarré, puis réessayez.";
 
+// Délai maximal d'attente d'une réponse (UX-7, UX_BASELINE.md §4 bis, B9) :
+// sans lui, fetch() ne rejette JAMAIS si la connexion est coupée EN COURS de
+// requête (Wi-Fi qui tombe pendant une saisie) — contrairement au cas déjà
+// géré d'un serveur injoignable dès le départ (refus de connexion immédiat).
+// Constaté par un essai réel : une coupure simulée en cours de requête
+// laissait l'écran tourner indéfiniment, sans aucun message, en violation de
+// la règle du projet (jamais un écran figé sans indication). 20 s : assez
+// large pour un export volumineux sur un réseau de boutique lent, assez
+// court pour rester perçu comme "quelque chose ne va pas" par l'agent.
+const DELAI_MAXI_REQUETE_MS = 20000;
+
 // Libellés des deux sites. Fixes : creation_base_donnees.sql amorce
 // exactement ces deux lignes dans la table "sites", immuables selon le
 // cahier des charges (deux emplacements physiques, pas davantage à ce jour).
@@ -72,13 +83,25 @@ async function appelApiBrut(chemin, options = {}) {
   if (session && session.jeton) entetes["Authorization"] = "Bearer " + session.jeton;
   if (options.body && !entetes["Content-Type"]) entetes["Content-Type"] = "application/json";
 
+  // AbortController : seul moyen de faire échouer fetch() par nous-mêmes
+  // quand le réseau se coupe SANS refus explicite (voir DELAI_MAXI_REQUETE_MS
+  // ci-dessus) — sans lui, la requête resterait en attente indéfiniment.
+  const limiteur = new AbortController();
+  const declencheurDelai = setTimeout(() => limiteur.abort(), DELAI_MAXI_REQUETE_MS);
+
   let reponse;
   try {
-    reponse = await fetch(chemin, Object.assign({}, options, { headers: entetes }));
+    reponse = await fetch(chemin, Object.assign({}, options, { headers: entetes, signal: limiteur.signal }));
   } catch {
+    // Refus de connexion immédiat (serveur éteint) ET dépassement du délai
+    // (coupure en cours de requête, AbortError) aboutissent au même message
+    // clair : dans les deux cas, l'agent ne peut rien faire de plus qu'un
+    // simple "réessayez" — jamais un écran qui tourne sans explication.
     const erreur = new Error(RESEAU_INACCESSIBLE);
     erreur.reseauIndisponible = true;
     throw erreur;
+  } finally {
+    clearTimeout(declencheurDelai);
   }
 
   if (!reponse.ok) {
@@ -204,6 +227,13 @@ function creerLigneListe(libellePrincipal, sousTexte, texteAside, classeAside) {
   const li = document.createElement("li");
 
   const spanPrincipal = document.createElement("span");
+  // UX-3 (UX_BASELINE.md §4 bis, B2) : sans ceci, un libellé réel un peu
+  // plus long que le jeu d'essai des suites automatisées (nom d'article,
+  // motif) peut forcer TOUTE la ligne — et donc la grille de cartes qui la
+  // contient — plus large que l'écran sur un vrai téléphone, sans jamais se
+  // reproduire avec les libellés courts et fixes utilisés par les tests.
+  spanPrincipal.style.minWidth = "0";
+  spanPrincipal.style.overflowWrap = "anywhere";
   spanPrincipal.appendChild(document.createTextNode(libellePrincipal));
   spanPrincipal.appendChild(document.createElement("br"));
   const spanSous = document.createElement("span");

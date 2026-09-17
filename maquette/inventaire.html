@@ -7,6 +7,12 @@
 <link rel="icon" href="favicon.svg">
 <link rel="stylesheet" href="theme.css">
 <link rel="stylesheet" href="styles.css">
+<style>
+  /* UX-10 (UX_BASELINE.md §4 bis) : avertissement de caractère définitif,
+     scopé à cet écran seul — jamais un dialogue bloquant (voir le
+     commentaire HTML sur #aide-definitif). */
+  .champ__aide--attention { color: var(--c-attention); font-weight: var(--poids-demi); }
+</style>
 </head>
 <body>
 <div class="simu">Écran câblé (cycle 7) : la liste à compter et l'enregistrement de chaque comptage sont réels (<code>GET/POST /inventaire/...</code>). Ce que le système escompte pour chaque article n'existe toujours ni à l'écran, ni dans le code de la page, ni dans aucune réponse du serveur — c'est le principe même de la route.</div>
@@ -46,6 +52,14 @@
         <input class="compte-saisie" id="saisie" type="number" inputmode="numeric" min="0" step="1"
                autocomplete="off" autofocus aria-describedby="aide-saisie">
         <p class="champ__aide" id="aide-saisie">Comptez ce que vous voyez réellement, sans chercher à deviner un total « attendu ».</p>
+        <!-- UX-10 (UX_BASELINE.md §4 bis, C4) : un utilisateur non formé ne
+             savait pas qu'un comptage devient définitif une fois validé —
+             avertissement TOUJOURS visible ici, jamais un dialogue de
+             confirmation qui ajouterait un clic (le comptage est déjà
+             mesuré trop lent, voir A7). -->
+        <p class="champ__aide champ__aide--attention" id="aide-definitif">
+          Une fois enregistré ci-dessous, ce comptage est <strong>définitif</strong> : il ne pourra plus être modifié.
+        </p>
         <div id="zone-erreur-saisie" class="erreur-champ" hidden></div>
 
         <div class="compte-nav">
