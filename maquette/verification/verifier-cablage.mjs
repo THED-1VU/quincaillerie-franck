@@ -31,8 +31,13 @@ const RACINE_DEPOT = resolve(ICI, "..", "..");
 const CAPTURES = resolve(ICI, "..", "captures") + "/";
 
 const SERVEUR_URL = process.env.SERVEUR_URL || "http://127.0.0.1:8010";
-const PGDEV = resolve(RACINE_DEPOT, "_pgdev");
+// PGDATABASE_PISTE / PGDEV_RACINE (travail en parallèle, RAPPORT AVANCEMENT/
+// TRAVAIL_PARALLELE.md) : chaque piste rejoue ce script sur SA PROPRE base
+// (jamais quincaillerie_test) sans modifier ce fichier commun aux trois —
+// valeurs par défaut inchangées pour le dépôt principal.
+const PGDEV = resolve(process.env.PGDEV_RACINE || RACINE_DEPOT, "_pgdev");
 const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
+const BASE = process.env.PGDATABASE_PISTE || "quincaillerie_test";
 
 const MDP_RESPONSABLE = "ResponsableTest123";
 const MDP_AGENT_STOCK = "AgentStockTest123";
@@ -43,13 +48,13 @@ const verifier = (cond, libelle) => (cond ? ok : ko).push(libelle);
 
 function psql(sql) {
   execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", "quincaillerie_test", "-q", "-c", sql,
+    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", BASE, "-q", "-c", sql,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }
 
 function psqlFichier(chemin) {
   execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", "quincaillerie_test",
+    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", BASE,
     "-v", "ON_ERROR_STOP=1", "-q", "-f", chemin,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }

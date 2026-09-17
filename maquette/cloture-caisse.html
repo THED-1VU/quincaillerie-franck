@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clôture de caisse — Quincaillerie Franck</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Écran câblé (piste C6, 2026-09) : clôture de caisse PAR SITE (<code>server/app/routes/caisse.py</code>). Réservé au responsable. L'attendu par mode de paiement et l'écart sont calculés par le serveur (fonction PostgreSQL <code>cloturer_caisse</code>), jamais recalculés ici. Accessible par son URL propre (pas de lien depuis le tableau de bord ce tour-ci — voir RAPPORT AVANCEMENT/cycles/piste-c6.md).</div>
+<div class="page">
+  <header class="bandeau">
+    <span class="bandeau__marque">Quincaillerie Franck</span>
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <a class="btn btn--fantome" href="tableau-bord.html">Retour</a>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
+  </header>
+
+  <main class="contenu">
+    <h1>Clôture de caisse</h1>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2>Nouvelle clôture</h2>
+      </div>
+
+      <div class="champ">
+        <label class="champ__label" for="f-site">Site</label>
+        <select class="champ__select" id="f-site">
+          <option value="1">Magasin de stock</option>
+          <option value="2">Comptoir</option>
+        </select>
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="f-date">Date à clôturer</label>
+        <input class="champ__saisie" id="f-date" type="date">
+      </div>
+
+      <div id="zone-erreur-attendu" class="erreur-champ" hidden></div>
+      <div id="bloc-attendu" hidden>
+        <p class="champ__aide">Total attendu, calculé par le serveur à partir des ventes déjà encaissées ce jour-là — jamais saisi.</p>
+        <ul class="liste-nue" id="liste-attendu"></ul>
+      </div>
+
+      <div id="bloc-cloture-existante" class="erreur-champ" hidden style="background:var(--c-neutre-info-clair); color:var(--c-neutre-info); border-color:var(--c-neutre-info);"></div>
+
+      <hr style="border:none; border-top:1px solid var(--c-bordure); margin:var(--e-4) 0;">
+
+      <div class="champ">
+        <label class="champ__label" for="f-especes">Espèces réellement comptées (FCFA)</label>
+        <input class="champ__saisie champ__saisie--caisse" id="f-especes" type="number" min="0" step="1">
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="f-orange">Relevé Orange Money compté (optionnel)</label>
+        <input class="champ__saisie" id="f-orange" type="number" min="0" step="1">
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="f-mtn">Relevé MTN MoMo compté (optionnel)</label>
+        <input class="champ__saisie" id="f-mtn" type="number" min="0" step="1">
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="f-autre">Autre mode compté (optionnel)</label>
+        <input class="champ__saisie" id="f-autre" type="number" min="0" step="1">
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="f-commentaire">Commentaire (obligatoire si l'écart dépasse le seuil toléré)</label>
+        <input class="champ__saisie" id="f-commentaire" type="text" maxlength="500">
+        <p class="champ__aide" id="aide-commentaire">Seuil de tolérance : non encore fixé par le propriétaire — tout écart non nul doit donc être commenté.</p>
+      </div>
+
+      <div id="zone-erreur-cloture" class="erreur-champ" hidden></div>
+      <div id="zone-succes-cloture" class="erreur-champ" hidden
+           style="background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+
+      <button class="btn btn--primaire btn--large" id="bouton-cloturer" type="button">Clôturer la caisse</button>
+    </div>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2>Historique des clôtures</h2>
+      </div>
+      <div id="zone-erreur-historique" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-clotures"></ul>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+(async function () {
+  "use strict";
+
+  // Réservé au responsable — même périmètre que rh.html (caisse et
+  // rémunération sont des données au moins aussi sensibles, CDC §3.5).
+  const session = await exigerSession(["responsable"]);
+  if (!session) return;
+
+  const $ = (id) => document.getElementById(id);
+
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+
+  const MODES = [
+    ["especes", "Espèces"],
+    ["orange_money", "Orange Money"],
+    ["mtn_momo", "MTN MoMo"],
+    ["autre", "Autre"],
+  ];
+
+  const aujourdHui = new Date().toISOString().slice(0, 10);
+  $("f-date").value = aujourdHui;
+
+  let attenduCourant = null;
+  let clotures = [];
+
+  function clotureExistante() {
+    const site = Number($("f-site").value);
+    const jour = $("f-date").value;
+    return clotures.find((c) => c.site_id === site && c.date_cloture === jour && !c.cloture_rectificative_de);
+  }
+
+  function afficherClotureExistante() {
+    const existante = clotureExistante();
+    if (existante) {
+      $("bloc-cloture-existante").hidden = false;
+      $("bloc-cloture-existante").textContent =
+        "Une clôture existe déjà pour ce site et cette date (écart espèces : " + fcfa(existante.ecart_especes) +
+        "). Toute nouvelle validation ci-dessous sera une CLÔTURE RECTIFICATIVE.";
+    } else {
+      $("bloc-cloture-existante").hidden = true;
+    }
+  }
+
+  // --- Prévisualisation de l'attendu (GET /caisse/attendu, lecture seule) ---
+  async function chargerAttendu() {
+    $("zone-erreur-attendu").hidden = true;
+    $("bloc-attendu").hidden = true;
+    const site = $("f-site").value;
+    const jour = $("f-date").value;
+    if (!jour) return;
+    try {
+      attenduCourant = await appelApi("/caisse/attendu?site_id=" + site + "&date_cloture=" + jour);
+      const ul = $("liste-attendu");
+      ul.innerHTML = "";
+      MODES.forEach(([cle, libelle]) => {
+        const li = document.createElement("li");
+        const span = document.createElement("span");
+        span.textContent = libelle;
+        const montant = document.createElement("span");
+        montant.textContent = fcfa(attenduCourant["attendu_" + cle]);
+        li.appendChild(span);
+        li.appendChild(montant);
+        ul.appendChild(li);
+      });
+      $("bloc-attendu").hidden = false;
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-attendu", erreur);
+    }
+    afficherClotureExistante();
+  }
+
+  $("f-site").addEventListener("change", chargerAttendu);
+  $("f-date").addEventListener("change", chargerAttendu);
+
+  // --- Historique (GET /caisse) ---
+  async function chargerHistorique() {
+    try {
+      const donnees = await appelApi("/caisse");
+      clotures = donnees.clotures;
+      const ul = $("liste-clotures");
+      ul.innerHTML = "";
+      if (clotures.length === 0) {
+        ul.innerHTML = "<li><span>Aucune clôture enregistrée.</span></li>";
+      } else {
+        clotures.forEach((c) => {
+          const ecartMax = Math.max(
+            Math.abs(c.ecart_especes),
+            Math.abs(c.ecart_orange_money || 0),
+            Math.abs(c.ecart_mtn_momo || 0),
+            Math.abs(c.ecart_autre || 0)
+          );
+          const sousTexte = [
+            LIBELLE_SITE[c.site_id] || ("Site " + c.site_id),
+            "espèces : attendu " + fcfa(c.attendu_especes) + ", compté " + fcfa(c.compte_especes),
+            c.cloture_rectificative_de ? "rectificative de la clôture n°" + c.cloture_rectificative_de : "clôture originale",
+          ].join(" · ");
+          ul.appendChild(creerLigneListe(
+            c.date_cloture + " — clôture n°" + c.cloture_id,
+            sousTexte + (c.commentaire ? " · " + c.commentaire : ""),
+            (ecartMax === 0 ? "écart nul" : "écart " + fcfa(ecartMax)),
+            ecartMax === 0 ? "pastille--ok" : "pastille--alerte"
+          ));
+        });
+      }
+      afficherClotureExistante();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-historique", erreur);
+    }
+  }
+
+  // --- Validation de la clôture (POST /caisse) ---
+  $("bouton-cloturer").addEventListener("click", async () => {
+    $("zone-erreur-cloture").hidden = true;
+    $("zone-succes-cloture").hidden = true;
+
+    const especes = $("f-especes").value;
+    if (especes === "") {
+      afficherErreurServeur("zone-erreur-cloture", new Error("Le montant d'espèces comptées est obligatoire."));
+      return;
+    }
+
+    const corps = {
+      site_id: Number($("f-site").value),
+      date_cloture: $("f-date").value,
+      espece_comptee: Number(especes),
+    };
+    if ($("f-orange").value !== "") corps.orange_money_compte = Number($("f-orange").value);
+    if ($("f-mtn").value !== "") corps.mtn_momo_compte = Number($("f-mtn").value);
+    if ($("f-autre").value !== "") corps.autre_compte = Number($("f-autre").value);
+    if ($("f-commentaire").value.trim()) corps.commentaire = $("f-commentaire").value.trim();
+
+    const existante = clotureExistante();
+    if (existante) corps.cloture_rectificative_de = existante.cloture_id;
+
+    const bouton = $("bouton-cloturer");
+    bouton.disabled = true;
+    try {
+      const reponse = await appelApi("/caisse", { method: "POST", body: JSON.stringify(corps) });
+      $("zone-succes-cloture").hidden = false;
+      $("zone-succes-cloture").textContent =
+        "Clôture n°" + reponse.cloture_id + " enregistrée — écart espèces : " + fcfa(reponse.ecart_especes) + ".";
+      $("f-especes").value = "";
+      $("f-orange").value = "";
+      $("f-mtn").value = "";
+      $("f-autre").value = "";
+      $("f-commentaire").value = "";
+      await chargerHistorique();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-cloture", erreur);
+    } finally {
+      bouton.disabled = false;
+    }
+  });
+
+  await chargerHistorique();
+  await chargerAttendu();
+})();
+</script>
+</body>
+</html>

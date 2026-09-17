@@ -316,3 +316,54 @@ class ReponseAvanceSalaire(BaseModel):
     montant: float
     motif: Optional[str] = None
     remboursee: bool
+
+
+# ---------------------------------------------------------------------------
+# Clôture de caisse (addendum, point g, décidé le 2026-09-13) — une clôture
+# PAR SITE. L'attendu et l'écart ne sont JAMAIS saisis ni recalculés côté
+# client : ``cloturer_caisse()`` (migration 019) les calcule seule.
+# ---------------------------------------------------------------------------
+
+class DemandeClotureCaisse(BaseModel):
+    """``espece_comptee`` est seul obligatoire (la caisse physique certaine) ;
+    les montants Mobile Money comptés restent optionnels (addendum, question 4
+    non tranchée : aucun relevé d'opérateur n'est rapproché automatiquement).
+    ``site_id`` suit le même principe que pour une vente ou un article :
+    obligatoire pour un responsable (deux sites), jamais lu pour un autre rôle
+    (de toute façon seul le responsable a accès à cette route).
+    ``cloture_rectificative_de`` : identifiant de la clôture à corriger — NULL
+    pour une clôture normale."""
+
+    site_id: Optional[int] = None
+    date_cloture: _date
+    espece_comptee: float = Field(ge=0)
+    orange_money_compte: Optional[float] = Field(default=None, ge=0)
+    mtn_momo_compte: Optional[float] = Field(default=None, ge=0)
+    autre_compte: Optional[float] = Field(default=None, ge=0)
+    commentaire: Optional[str] = Field(default=None, max_length=500)
+    cloture_rectificative_de: Optional[int] = None
+
+
+class ReponseClotureCaisse(BaseModel):
+    """Reflète exactement la ligne renvoyée par ``cloturer_caisse()`` — aucun
+    champ recalculé par l'application : l'attendu et l'écart viennent tels
+    quels de la fonction PostgreSQL."""
+
+    cloture_id: int
+    site_id: int
+    date_cloture: _date
+    attendu_especes: float
+    attendu_orange_money: float
+    attendu_mtn_momo: float
+    attendu_autre: float
+    compte_especes: float
+    compte_orange_money: Optional[float] = None
+    compte_mtn_momo: Optional[float] = None
+    compte_autre: Optional[float] = None
+    ecart_especes: float
+    ecart_orange_money: Optional[float] = None
+    ecart_mtn_momo: Optional[float] = None
+    ecart_autre: Optional[float] = None
+    commentaire: Optional[str] = None
+    utilisateur_id: int
+    cloture_rectificative_de: Optional[int] = None
