@@ -69,7 +69,13 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
  'Nombre d''échecs consécutifs avant verrouillage du compte. Valeur proposée, '
  'à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
 ('duree_session_minutes', 'a_definir', 'entier',
- 'Durée d''inactivité au bout de laquelle la session se ferme.', TRUE, TRUE, 'dossier de recette §6, session inactive');
+ 'Durée d''inactivité au bout de laquelle la session se ferme.', TRUE, TRUE, 'dossier de recette §6, session inactive'),
+('seuil_ecart_caisse_tolere', 'a_definir', 'decimal',
+ 'Écart de caisse toléré (FCFA, par mode de paiement) au-delà duquel un '
+ 'commentaire devient obligatoire à la clôture. Tant que ce n''est pas '
+ 'tranché, cloturer_caisse() applique une tolérance NULLE (tout écart non '
+ 'nul exige un commentaire) — jamais un chiffre inventé.',
+ TRUE, TRUE, 'addendum point g, question 5');
 
 INSERT INTO fournisseurs (id, nom, contact, telephone) VALUES
   (1, 'Cimenterie du Cameroun', 'M. Ateba', '+237 6 99 00 11 22');

@@ -51,6 +51,7 @@ from .database import BaseDeDonnees
 from .routes import (
     articles,
     auth,
+    caisse,
     demonstration,
     exploitation,
     inventaire,
@@ -131,6 +132,7 @@ def creer_application(config: Config | None = None) -> FastAPI:
     app.include_router(rapports.routeur)
     app.include_router(transactions.routeur)
     app.include_router(rh.routeur)
+    app.include_router(caisse.routeur)
     app.include_router(exploitation.routeur)
 
     if MAQUETTE_DIR.is_dir():

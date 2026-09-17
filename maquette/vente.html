@@ -44,6 +44,7 @@
                  aria-controls="suggestions" aria-expanded="false" role="combobox">
           <p class="champ__aide">
             Tapez, puis <kbd>Entrée</kbd> pour ajouter au panier. <kbd>↑</kbd> <kbd>↓</kbd> pour choisir, <kbd>Échap</kbd> pour effacer.
+            Un nombre au début fixe la quantité directement, ex. « 5 ciment ».
           </p>
           <ul class="suggestions" id="suggestions" role="listbox" hidden></ul>
           <div id="zone-erreur-catalogue" class="erreur-champ" hidden></div>
@@ -111,6 +112,7 @@
   <footer class="aide-clavier">
     <span><kbd>F2</kbd> Chercher</span>
     <span><kbd>Entrée</kbd> Ajouter au panier</span>
+    <span><kbd>F3</kbd> Négocier le prix du dernier article</span>
     <span><kbd>F4</kbd> Mode de paiement</span>
     <span><kbd>Échap</kbd> Effacer la recherche</span>
     <span><kbd>F9</kbd> Valider la vente</span>
@@ -192,6 +194,21 @@
   }
 
   // --- Recherche + suggestions ---
+
+  // Un nombre suivi d'un espace en tête de la recherche fixe la quantité à
+  // ajouter (UX-1, UX_BASELINE.md §4 bis, A3 : ajouter un article prenait
+  // 3-4 actions au lieu de ≤ 2 dès qu'il en fallait plus d'un — le cas
+  // courant en quincaillerie). "5 ciment" ajoute 5 unités en une seule
+  // frappe + Entrée, exactement comme "ciment" en ajoute 1 : jamais un
+  // changement d'écran ni une deuxième interaction avec la ligne du panier.
+  let quantiteRecherche = 1;
+  function analyserRecherche(texte) {
+    const correspondance = /^(\d+)\s+(.+)/.exec(texte.trim());
+    return correspondance
+      ? { quantite: Math.max(1, parseInt(correspondance[1], 10)), texte: correspondance[2] }
+      : { quantite: 1, texte: texte.trim() };
+  }
+
   function filtrer(q) {
     q = q.trim().toLowerCase();
     if (!q) return [];
@@ -216,7 +233,7 @@
       spanUnite.textContent = a.unite;
       li.appendChild(spanNom);
       li.appendChild(spanUnite);
-      li.addEventListener("click", () => ajouter(a));
+      li.addEventListener("click", () => ajouter(a, quantiteRecherche));
       suggestions.appendChild(li);
     });
     suggestions.hidden = false;
@@ -224,7 +241,9 @@
   }
 
   recherche.addEventListener("input", () => {
-    resultats = filtrer(recherche.value);
+    const analyse = analyserRecherche(recherche.value);
+    quantiteRecherche = analyse.quantite;
+    resultats = filtrer(analyse.texte);
     selIndex = resultats.length ? 0 : -1;
     rendreSuggestions();
   });
@@ -232,26 +251,36 @@
   recherche.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); if (resultats.length) { selIndex = (selIndex + 1) % resultats.length; rendreSuggestions(); } }
     else if (e.key === "ArrowUp") { e.preventDefault(); if (resultats.length) { selIndex = (selIndex - 1 + resultats.length) % resultats.length; rendreSuggestions(); } }
-    else if (e.key === "Enter") { e.preventDefault(); if (selIndex >= 0) ajouter(resultats[selIndex]); }
+    else if (e.key === "Enter") { e.preventDefault(); if (selIndex >= 0) ajouter(resultats[selIndex], quantiteRecherche); }
     else if (e.key === "Escape") { e.preventDefault(); viderRecherche(); }
   });
 
   function viderRecherche() {
-    recherche.value = ""; resultats = []; selIndex = -1; rendreSuggestions();
+    recherche.value = ""; resultats = []; selIndex = -1; quantiteRecherche = 1; rendreSuggestions();
   }
 
   // --- Panier ---
-  function ajouter(article) {
+  let dernierArticleAjouteId = null;
+  function ajouter(article, quantite) {
+    quantite = quantite && quantite > 0 ? quantite : 1;
     const existante = panier.find((l) => l.id === article.id);
     if (existante) {
-      existante.quantite += 1;
+      existante.quantite += quantite;
     } else {
       panier.push({
         id: article.id, nom: article.nom, unite: article.unite,
-        quantite: 1, prixUnitaire: article.prixCatalogue,
+        quantite: quantite, prixUnitaire: article.prixCatalogue,
       });
     }
-    $("dernier-ajout").textContent = article.nom + " ajouté (quantité 1, prix " + fcfa(article.prixCatalogue) + " — modifiable dans le panier).";
+    dernierArticleAjouteId = article.id;
+    // Libellé non ambigu (UX-9, UX_BASELINE.md §4 bis, C3) : un utilisateur
+    // non formé a pris ce prix GRIS pour le prix à facturer alors que c'est
+    // seulement celui du catalogue, avant toute négociation — jamais ce qui
+    // sera réellement encaissé tant que la ligne du panier n'a pas été
+    // ajustée (champ « Prix unitaire », ou F3).
+    $("dernier-ajout").textContent = article.nom + " ajouté (quantité " + quantite + "). Prix indicatif du "
+      + "catalogue : " + fcfa(article.prixCatalogue) + " — PAS le prix qui sera facturé : ajustez-le dans le "
+      + "panier (ou F3) si le prix négocié est différent.";
     viderRecherche();
     recherche.focus();
     rendrePanier();
@@ -300,6 +329,11 @@
         prixInput.type = "number"; prixInput.min = "0"; prixInput.step = "50";
         prixInput.value = l.prixUnitaire;
         prixInput.setAttribute("aria-label", "Prix unitaire pour " + l.nom);
+        // Cible du raccourci F3 (UX-2, UX_BASELINE.md §4 bis, A6) : négocier
+        // le prix d'une ligne sans jamais toucher la souris ni chercher le
+        // champ au Tab.
+        prixInput.dataset.articleId = String(l.id);
+        prixInput.classList.add("panier__mini--prix");
 
         const btnSup = document.createElement("button");
         btnSup.className = "panier__sup";
@@ -424,9 +458,24 @@
 
   btnValider.addEventListener("click", valider);
 
+  // Négocier le prix de la DERNIÈRE ligne ajoutée sans toucher la souris
+  // (UX-2, UX_BASELINE.md §4 bis, A6) : une vente au comptoir négocie
+  // presque toujours le prix (addendum, point d) — sans ce raccourci, la
+  // seule façon d'atteindre le champ de prix était la souris ou une chaîne
+  // de <kbd>Tab</kbd> peu fiable, ce qui rendait une vente entière au
+  // clavier seul impossible en pratique dès qu'un prix était négocié.
+  function modifierPrixDernier() {
+    if (dernierArticleAjouteId === null) return;
+    const champ = panierEl.querySelector('.panier__mini--prix[data-article-id="' + dernierArticleAjouteId + '"]');
+    if (!champ) return;
+    champ.focus();
+    champ.select();
+  }
+
   // --- Raccourcis globaux ---
   document.addEventListener("keydown", (e) => {
     if (e.key === "F2")      { e.preventDefault(); recherche.focus(); recherche.select(); }
+    else if (e.key === "F3") { e.preventDefault(); modifierPrixDernier(); }
     else if (e.key === "F4") { e.preventDefault(); paiementEl.selectedIndex = (paiementEl.selectedIndex + 1) % paiementEl.options.length; }
     else if (e.key === "F9") { e.preventDefault(); valider(); }
   });
