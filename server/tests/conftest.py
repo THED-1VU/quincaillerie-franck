@@ -34,7 +34,12 @@ if str(RACINE_SERVEUR) not in sys.path:
 # l'application elle-même — voir server/app/config.py qui refuse ce compte).
 PG_HOST = "127.0.0.1"
 PG_PORT = 5433
-PG_ADMIN_DSN = f"host={PG_HOST} port={PG_PORT} dbname=quincaillerie_test user=postgres password=qf_dev_local"
+# Base de test surchargeable (travail en parallèle, RAPPORT AVANCEMENT/
+# TRAVAIL_PARALLELE.md) : chaque piste possède sa propre base
+# (quincaillerie_ux, quincaillerie_c6, quincaillerie_c12...) — défaut
+# inchangé pour ne rien casser hors de ce contexte.
+QF_TEST_DBNAME = os.environ.get("QF_TEST_DBNAME", "quincaillerie_test")
+PG_ADMIN_DSN = f"host={PG_HOST} port={PG_PORT} dbname={QF_TEST_DBNAME} user=postgres password=qf_dev_local"
 
 # Mots de passe de test, en clair, UNIQUEMENT valables sur la base de test
 # locale (_pgdev, jamais versionnée, jamais partagée).
@@ -67,7 +72,7 @@ def base_reinitialisee():
     environnement = {**os.environ, "PGPASSWORD": "qf_dev_local"}
     resultat = subprocess.run(
         [str(PSQL_EXE), "-h", PG_HOST, "-p", str(PG_PORT), "-U", "postgres",
-         "-d", "quincaillerie_test", "-v", "ON_ERROR_STOP=1", "-q",
+         "-d", QF_TEST_DBNAME, "-v", "ON_ERROR_STOP=1", "-q",
          "-f", str(RACINE_DEPOT / "db" / "tests" / "00_jeu_essai.sql")],
         env=environnement,
         capture_output=True, text=True,
@@ -111,7 +116,7 @@ def app(base_reinitialisee):
 
     config = Config(
         base=ConfigBase(
-            host=PG_HOST, port=PG_PORT, dbname="quincaillerie_test",
+            host=PG_HOST, port=PG_PORT, dbname=QF_TEST_DBNAME,
             user="qf_app", password="qf_app_dev_local",
         ),
         api=ConfigApi(
