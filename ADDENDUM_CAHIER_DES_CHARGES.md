@@ -132,11 +132,31 @@ rapprochement de caisse.
 
 > **Décidé (2026-09-13).** Un facturier **par site**, avec préfixe
 > (`MAG-####` au Magasin, `CPT-####` au Comptoir) : `numero_facturier`
-> et `vendeur_id` deviennent obligatoires sur chaque vente. Les questions
-> 2 à 5 (format exact du numéro au-delà du préfixe, vendeurs sans compte,
-> blocage vs. alerte à la saisie sans numéro, seuil de validation d'un
-> écart de prix) restent à trancher au moment de l'implémentation
-> (chantier dédié, diagnostic puis plan avant tout code).
+> et `vendeur_id` deviennent obligatoires sur chaque vente. **Livré au
+> cycle 27** (socle réduit, voir `db/migrations/020_facturier_vendeur.sql`) —
+> les questions 2 et 4 (format au-delà du préfixe, blocage) sont
+> couvertes par ce socle (préfixe vérifié en base ; « obligatoire »
+> revient à un blocage).
+>
+> **Décidé (2026-09-18), question 5.** Seuil de signalement d'un prix
+> négocié : **10 % sous le prix catalogue**, valeur de **configuration**
+> (pas une constante figée dans le code — modifiable sans redéploiement,
+> même principe que `taux_tva`/`seuil_ecart_caisse_tolere`). Un écart au-delà
+> de ce seuil **signale** la vente dans le futur rapport « écarts de prix
+> par vendeur » — il ne bloque **jamais** la vente elle-même, cohérent avec
+> le principe du projet qu'un encaissement déjà fait n'est jamais remis en
+> cause. Chantier de construction du rapport lui-même **pas encore
+> démarré** : reste bloqué sur la question 3 ci-dessous (voir note),
+> toujours ouverte — coder le rapport sans y répondre exclurait
+> silencieusement les ventes d'un vendeur sans compte, si le cas existe
+> réellement.
+>
+> **Question 3 toujours ouverte, réponse attendue du propriétaire :** un
+> vendeur qui négocie un prix a-t-il, dans les faits, toujours un compte
+> de connexion dans l'application (responsable, agent stock ou agent
+> comptabilité) ? Ou une personne sans compte (apprenti, extra, aide
+> familiale) négocie-t-elle parfois un prix elle-même ? Aucun code n'en
+> dépend tant que la réponse n'est pas connue.
 
 **Contexte.** La saisie des ventes est faite **a posteriori** par le comptable, d'après le
 **facturier papier** tenu par le responsable après négociation. Le schéma ne stocke ni la
@@ -177,8 +197,10 @@ catalogue et prix facturé ne peut être rattaché à personne.
    faut-il une liste de vendeurs à part ?
 4. Veut-on **bloquer** la saisie d'une vente sans numéro de facturier, ou seulement
    **alerter** ?
-5. L'écart prix catalogue / prix négocié doit-il déclencher une **validation du responsable**
-   au-delà d'un certain seuil (ex. remise > 15 %) ?
+5. ~~L'écart prix catalogue / prix négocié doit-il déclencher une **validation du responsable**
+   au-delà d'un certain seuil (ex. remise > 15 %) ?~~ **Tranché le 2026-09-18** :
+   seuil de 10 %, en configuration, signale sans jamais bloquer (voir le
+   callout en tête de section).
 
 ---
 
