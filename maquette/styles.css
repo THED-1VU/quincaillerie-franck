@@ -51,6 +51,11 @@ a { color: var(--c-primaire); }
   font-weight: var(--poids-fort); color: var(--c-primaire);
   white-space: nowrap;
 }
+/* Logo de la boutique cliente (cycle 28), distinct de la marque Akuma —
+   posé par afficherLogoBoutiqueDansBandeau() (api.js), retiré du DOM par
+   son propre onerror si aucun logo n'est téléversé. Hauteur bornée à celle
+   d'un bandeau standard, jamais plus large que ce que sa hauteur impose. */
+.logo-boutique-bandeau { height: 32px; width: auto; margin-left: var(--e-2); }
 .bandeau__pousse { margin-left: auto; }
 .bandeau__role {
   font-size: var(--t-sm); color: var(--c-texte-doux);

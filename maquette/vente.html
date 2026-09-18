@@ -214,6 +214,7 @@
   document.getElementById("titre-ecran").textContent =
     "Enregistrer une vente — " + (session.site_id ? LIBELLE_SITE[session.site_id] : "tous sites");
   document.getElementById("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
 
   // Panier vide au départ : la validation étant désormais réelle (cycle 6),
   // un panier pré-rempli créerait une vraie vente au premier F9.

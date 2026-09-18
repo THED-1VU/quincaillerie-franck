@@ -58,6 +58,7 @@
 
   $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
   $("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
   $("lien-retour").href = estResponsable ? "tableau-bord.html" : "inventaire.html";
 
   let articles = [];

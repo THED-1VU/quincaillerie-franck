@@ -52,6 +52,7 @@ from .routes import (
     articles,
     auth,
     caisse,
+    configuration,
     demonstration,
     exploitation,
     inventaire,
@@ -134,6 +135,7 @@ def creer_application(config: Config | None = None) -> FastAPI:
     app.include_router(rh.routeur)
     app.include_router(caisse.routeur)
     app.include_router(exploitation.routeur)
+    app.include_router(configuration.routeur)
 
     if MAQUETTE_DIR.is_dir():
         app.mount("/app", StaticFiles(directory=str(MAQUETTE_DIR), html=True), name="maquette")

@@ -12,6 +12,15 @@ bcrypt==4.2.1
 pytest==8.3.5
 httpx==0.28.1
 
+# Chantier "logo du client" (cycle 28) : FastAPI exige python-multipart pour
+# analyser un envoi de fichier (UploadFile/File). Pillow était déjà présent en
+# dépendance TRANSITIVE de reportlab (export PDF, cycle 10) ; épinglé ici en
+# direct puisque server/app/routes/configuration.py l'importe désormais
+# lui-même (valide/réencode le logo téléversé) — ne plus dépendre du choix de
+# version fait par reportlab pour un usage qui n'a rien à voir avec le sien.
+python-multipart==0.0.20
+Pillow==12.3.0
+
 # Chantier C8 (cycle 10) : exports de rapports.
 openpyxl==3.1.5    # Excel — production ET tests (relit le classeur produit).
 reportlab==5.0.1   # PDF — production uniquement.

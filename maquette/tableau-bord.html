@@ -122,6 +122,22 @@
         <p class="champ__aide">État écrit par <code>db/outils/sauvegarder.ps1</code> à chaque tentative (succès ou échec) — chantier C12.</p>
       </section>
 
+      <section class="carte">
+        <h2>Logo de la boutique</h2>
+        <p class="champ__aide">
+          Affiché en en-tête de l'application et sur les reçus, à côté du nom de la boutique.
+          PNG ou JPEG, 2 Mo maximum. Sans logo, seul le nom s'affiche — jamais une image cassée.
+        </p>
+        <div id="apercu-logo-boutique" style="margin:var(--e-3) 0;"></div>
+        <input type="file" id="fichier-logo-boutique" accept="image/png,image/jpeg" style="display:none;">
+        <div class="actions-rapides">
+          <button class="btn btn--secondaire" type="button" id="btn-choisir-logo">Choisir un fichier</button>
+          <button class="btn btn--fantome" type="button" id="btn-retirer-logo" hidden>Retirer le logo</button>
+        </div>
+        <div id="zone-erreur-logo" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+        <div id="zone-succes-logo" class="erreur-champ" hidden style="margin-top:var(--e-3); background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+      </section>
+
     </div>
   </main>
 </div>
@@ -143,6 +159,7 @@
     weekday: "long", year: "numeric", month: "long", day: "numeric",
   });
   $("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
 
   // --- Bascule vue consolidée / par site (chantier C8, cycle 23) ---
   // Les données portent déjà site_id sur CHAQUE ligne (les 4 routes ci-
@@ -385,6 +402,73 @@
   } catch (erreur) {
     afficherErreurServeur("zone-erreur-sauvegarde", erreur);
   }
+
+  // --- Logo de la boutique : RÉEL, via POST/GET/DELETE /configuration/logo
+  // (cycle 28) — distinct du logo Akuma (marque de l'éditeur, fichier
+  // statique de la maquette, jamais remplaçable ici). GET est public (pas
+  // de jeton nécessaire) : on affiche l'image directement par son URL,
+  // l'attribut onerror masque proprement l'absence — jamais une image
+  // cassée, jamais un espace vide (voir server/app/routes/configuration.py).
+  const apercuLogo   = $("apercu-logo-boutique");
+  const inputLogo    = $("fichier-logo-boutique");
+  const btnChoisir   = $("btn-choisir-logo");
+  const btnRetirer   = $("btn-retirer-logo");
+  const zoneErrLogo  = $("zone-erreur-logo");
+  const zoneOkLogo   = $("zone-succes-logo");
+
+  function rafraichirApercuLogo() {
+    apercuLogo.innerHTML = "";
+    const img = document.createElement("img");
+    img.alt = "Logo de la boutique";
+    img.style.maxHeight = "80px";
+    img.style.maxWidth = "100%";
+    img.src = "/configuration/logo?t=" + Date.now(); // évite un cache après remplacement
+    img.onerror = () => {
+      apercuLogo.innerHTML = "";
+      const p = document.createElement("p");
+      p.style.color = "var(--c-texte-doux)";
+      p.textContent = "Aucun logo téléversé pour le moment.";
+      apercuLogo.appendChild(p);
+      btnRetirer.hidden = true;
+    };
+    img.onload = () => { btnRetirer.hidden = false; };
+    apercuLogo.appendChild(img);
+  }
+  rafraichirApercuLogo();
+
+  btnChoisir.addEventListener("click", () => inputLogo.click());
+
+  inputLogo.addEventListener("change", async () => {
+    const fichier = inputLogo.files[0];
+    if (!fichier) return;
+    zoneErrLogo.hidden = true;
+    zoneOkLogo.hidden = true;
+    const corps = new FormData();
+    corps.append("fichier", fichier);
+    try {
+      await appelApi("/configuration/logo", { method: "POST", body: corps });
+      zoneOkLogo.hidden = false;
+      zoneOkLogo.textContent = "Logo mis à jour.";
+      rafraichirApercuLogo();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-logo", erreur);
+    } finally {
+      inputLogo.value = "";
+    }
+  });
+
+  btnRetirer.addEventListener("click", async () => {
+    zoneErrLogo.hidden = true;
+    zoneOkLogo.hidden = true;
+    try {
+      await appelApi("/configuration/logo", { method: "DELETE" });
+      zoneOkLogo.hidden = false;
+      zoneOkLogo.textContent = "Logo retiré.";
+      rafraichirApercuLogo();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-logo", erreur);
+    }
+  });
 })();
 </script>
 </body>

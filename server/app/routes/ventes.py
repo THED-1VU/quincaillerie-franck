@@ -46,10 +46,12 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.platypus import Image as ImagePDF
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from ..deps import exiger_role, obtenir_bd
 from ..erreurs import erreur_metier
+from .configuration import DOSSIER_LOGO
 from ..roles import role_pg
 from ..schemas import (
     DemandeAnnulationVente,
@@ -371,6 +373,19 @@ def _construire_recu_pdf(boutique: dict, vente: dict, lignes: list[dict]) -> byt
     # document ni s'y injecter (même discipline que l'échappement HTML des
     # écrans, vérifié par exécution ailleurs — verifier-echappement-html.mjs).
     elements = []
+    # Logo DE LA BOUTIQUE (cycle 28) — pas le logo Akuma (marque de
+    # l'éditeur, n'apparaît pas sur un document destiné au client final).
+    # Absent (aucun téléversement) : rien n'est ajouté, jamais un espace
+    # réservé ni une image cassée sur un document imprimé.
+    for extension, _fmt in (("png", "PNG"), ("jpg", "JPEG")):
+        chemin_logo = DOSSIER_LOGO / f"logo.{extension}"
+        if chemin_logo.is_file():
+            logo = ImagePDF(str(chemin_logo))
+            logo._restrictSize(30 * mm, 20 * mm)  # proportions gardées, hauteur bornée
+            logo.hAlign = "CENTER"
+            elements.append(logo)
+            elements.append(Spacer(1, 2 * mm))
+            break
     elements.append(Paragraph(_echapper_xml(boutique.get("boutique_nom") or "Quincaillerie Franck"), style_titre))
     sous_entete = [t for t in (boutique.get("boutique_ville"), boutique.get("boutique_telephone")) if t]
     if sous_entete:

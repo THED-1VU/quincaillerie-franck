@@ -89,6 +89,7 @@
 
   $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
   $("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
   $("lien-retour").href = PAGE_RETOUR[session.role];
 
   const aujourdhui = new Date().toISOString().slice(0, 10);

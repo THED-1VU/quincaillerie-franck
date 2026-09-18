@@ -76,6 +76,7 @@
 
   $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
   $("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
 
   let employes = [];
 

@@ -29,6 +29,25 @@
     a fournir seulement pour restaurer sur un serveur qui n'a pas encore
     les roles applicatifs.
 
+.PARAMETER FichierLogo
+    Chemin du fichier _logo.* produit par sauvegarder.ps1 (cycle 28),
+    optionnel -- absent si la sauvegarde n'incluait aucun logo de boutique.
+    Restaure dans -DossierLogoCible (par defaut
+    server\donnees\logo_boutique\).
+
+.PARAMETER DossierLogoCible
+    Dossier de destination du logo restaure. Par defaut
+    server\donnees\logo_boutique\ (voir server/app/routes/configuration.py).
+
+.PARAMETER PhraseChiffrement
+    Phrase de chiffrement utilisee a la sauvegarde (voir sauvegarder.ps1).
+    OBLIGATOIRE si les fichiers fournis se terminent par ".enc" (toute
+    sauvegarde produite depuis le cycle 28). SANS cette phrase, la
+    restauration est IMPOSSIBLE -- aucun mecanisme de recuperation
+    n'existe en son absence (voir GUIDE_SAUVEGARDE_RESTAURATION.md,
+    section 6). Un fichier .dump/.sql SANS ".enc" (sauvegarde anterieure
+    au cycle 28) est restaure directement, sans phrase.
+
 .PARAMETER NomBaseCible
     Nom de la NOUVELLE base a creer et restaurer. Doit etre different de
     la base source.
@@ -55,6 +74,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$FichierBase,
     [string]$FichierRoles = $null,
+    [string]$FichierLogo = $null,
+    [string]$DossierLogoCible = $null,
+    [string]$PhraseChiffrement = $null,
     [Parameter(Mandatory = $true)]
     [string]$NomBaseCible,
     [string]$PgHost = '127.0.0.1',
@@ -70,6 +92,62 @@ if (-not (Test-Path $FichierBase)) {
 }
 
 $Racine = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+if (-not $DossierLogoCible) {
+    $DossierLogoCible = Join-Path $Racine 'server\donnees\logo_boutique'
+}
+
+# ----------------------------------------------------------------------------
+# Dechiffrement AES-256 -- contrepartie exacte de Chiffrer-Fichier
+# (sauvegarder.ps1) : sel (16 octets) + IV (16 octets) en tete du fichier,
+# cle re-derivee de la MEME phrase par PBKDF2. Une phrase incorrecte produit
+# un flux illisible -- CryptographicException, jamais une restauration
+# partielle ou silencieusement corrompue.
+# ----------------------------------------------------------------------------
+function Dechiffrer-Fichier([string]$CheminChiffre, [string]$Phrase) {
+    if (-not $CheminChiffre.EndsWith('.enc')) {
+        return $CheminChiffre  # sauvegarde d'avant le cycle 28 : deja en clair
+    }
+    if (-not $Phrase) {
+        throw "'$CheminChiffre' est chiffre (.enc) : -PhraseChiffrement est obligatoire pour le restaurer."
+    }
+    $CheminClair = $CheminChiffre.Substring(0, $CheminChiffre.Length - 4)
+
+    $FluxSource = [System.IO.File]::OpenRead($CheminChiffre)
+    try {
+        $Sel = New-Object byte[] 16
+        $Iv  = New-Object byte[] 16
+        [void]$FluxSource.Read($Sel, 0, 16)
+        [void]$FluxSource.Read($Iv, 0, 16)
+
+        $Derivation = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+            $Phrase, $Sel, 100000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+        $Cle = $Derivation.GetBytes(32)
+
+        $Aes = [System.Security.Cryptography.Aes]::Create()
+        $Aes.Key = $Cle
+        $Aes.IV  = $Iv
+
+        $FluxSortie = [System.IO.File]::Create($CheminClair)
+        try {
+            $Dechiffreur = $Aes.CreateDecryptor()
+            $FluxCrypto = New-Object System.Security.Cryptography.CryptoStream(
+                $FluxSource, $Dechiffreur, [System.Security.Cryptography.CryptoStreamMode]::Read)
+            try {
+                $FluxCrypto.CopyTo($FluxSortie)
+            } catch [System.Security.Cryptography.CryptographicException] {
+                throw "Dechiffrement impossible -- phrase de chiffrement incorrecte, ou fichier corrompu."
+            } finally {
+                $FluxCrypto.Close()
+            }
+        } finally {
+            $FluxSortie.Close()
+            $Aes.Dispose()
+        }
+    } finally {
+        $FluxSource.Close()
+    }
+    return $CheminClair
+}
 
 function Resoudre-Binaire([string]$Nom) {
     $Candidat = Join-Path $Racine "_pgdev\pgsql\bin\$Nom.exe"
@@ -83,6 +161,28 @@ $Psql      = Resoudre-Binaire 'psql'
 $PgRestore = Resoudre-Binaire 'pg_restore'
 
 $env:PGPASSWORD = $env:PGPASSWORD  # transmis tel quel si deja positionne par l'appelant
+
+# Dechiffrement AVANT tout usage -- les variables sont reaffectees au
+# chemin CLAIR (ou inchangees si le fichier n'etait pas chiffre, voir
+# Dechiffrer-Fichier). Fichiers clairs temporaires supprimes en fin de
+# script (voir la fin du fichier) : jamais laisses sur le disque au-dela
+# de cette restauration.
+$FichiersClairsTemporaires = @()
+
+$AvantBase = $FichierBase
+$FichierBase = Dechiffrer-Fichier $FichierBase $PhraseChiffrement
+if ($FichierBase -ne $AvantBase) { $FichiersClairsTemporaires += $FichierBase }
+
+if ($FichierRoles) {
+    $AvantRoles = $FichierRoles
+    $FichierRoles = Dechiffrer-Fichier $FichierRoles $PhraseChiffrement
+    if ($FichierRoles -ne $AvantRoles) { $FichiersClairsTemporaires += $FichierRoles }
+}
+if ($FichierLogo) {
+    $AvantLogo = $FichierLogo
+    $FichierLogo = Dechiffrer-Fichier $FichierLogo $PhraseChiffrement
+    if ($FichierLogo -ne $AvantLogo) { $FichiersClairsTemporaires += $FichierLogo }
+}
 
 $BaseExisteBrut = & $Psql -h $PgHost -p $PgPort -U $Utilisateur -d postgres -tAc `
     "SELECT 1 FROM pg_database WHERE datname = '$NomBaseCible'"
@@ -114,10 +214,19 @@ if ($FichierRoles) {
     & $Psql -h $PgHost -p $PgPort -U $Utilisateur -d postgres -f $FichierRoles
 }
 
+# Fichiers clairs temporaires (issus du dechiffrement) : jamais laisses sur
+# le disque au-dela de cette restauration, quelle que soit l'issue.
+function Nettoyer-FichiersClairs {
+    foreach ($f in $FichiersClairsTemporaires) {
+        Remove-Item -Path $f -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host "Creation de la base '$NomBaseCible' ..."
 & $Psql -h $PgHost -p $PgPort -U $Utilisateur -d postgres -q -c "CREATE DATABASE $NomBaseCible;"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Echec de la creation de la base (code $LASTEXITCODE)." -ForegroundColor Red
+    Nettoyer-FichiersClairs
     exit 1
 }
 
@@ -137,7 +246,23 @@ if ($null -eq $NbTablesBrut) {
 $NbTablesEntier = 0
 [void][int]::TryParse($NbTables, [ref]$NbTablesEntier)
 
+# Logo de la boutique (cycle 28) : restaure APRES la base, independamment
+# de son resultat -- un logo perdu a la restauration serait une regression,
+# meme si par ailleurs quelque chose d'autre echoue.
+if ($FichierLogo -and (Test-Path $FichierLogo)) {
+    if (-not (Test-Path $DossierLogoCible)) {
+        New-Item -ItemType Directory -Path $DossierLogoCible -Force | Out-Null
+    }
+    Get-ChildItem -Path $DossierLogoCible -Filter 'logo.*' -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force
+    $Extension = [System.IO.Path]::GetExtension($FichierLogo)
+    $CibleLogo = Join-Path $DossierLogoCible "logo$Extension"
+    Copy-Item -Path $FichierLogo -Destination $CibleLogo -Force
+    Write-Host "Logo de la boutique restaure : $CibleLogo" -ForegroundColor Green
+}
+
 Write-Host ""
+Nettoyer-FichiersClairs
 if ($NbTablesEntier -gt 0) {
     Write-Host "Restauration terminee : $NbTables table(s) restauree(s) dans '$NomBaseCible'." -ForegroundColor Green
     if ($CodeRestore -ne 0) {

@@ -81,7 +81,12 @@ async function appelApiBrut(chemin, options = {}) {
   const session = Session.lire();
   const entetes = Object.assign({}, options.headers || {});
   if (session && session.jeton) entetes["Authorization"] = "Bearer " + session.jeton;
-  if (options.body && !entetes["Content-Type"]) entetes["Content-Type"] = "application/json";
+  // FormData (téléversement de fichier, cycle 28) : jamais fixer nous-mêmes
+  // Content-Type — le navigateur doit poser lui-même la frontière multipart
+  // (boundary), qu'il calcule à l'envoi. Un Content-Type ici, même correct
+  // en apparence, casserait l'analyse côté serveur (frontière manquante).
+  const estFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (options.body && !estFormData && !entetes["Content-Type"]) entetes["Content-Type"] = "application/json";
 
   // AbortController : seul moyen de faire échouer fetch() par nous-mêmes
   // quand le réseau se coupe SANS refus explicite (voir DELAI_MAXI_REQUETE_MS
@@ -249,4 +254,31 @@ function creerLigneListe(libellePrincipal, sousTexte, texteAside, classeAside) {
   li.appendChild(spanPrincipal);
   li.appendChild(spanAside);
   return li;
+}
+
+/**
+ * Insère le logo DE LA BOUTIQUE CLIENTE (cycle 28) dans le bandeau de
+ * l'écran courant, juste après la marque Akuma (bandeau__marque) — distinct
+ * du logo Akuma lui-même, jamais remplaçable par l'utilisateur, qui reste
+ * un fichier statique de la maquette.
+ *
+ * GET /configuration/logo est PUBLIC (voir server/app/routes/
+ * configuration.py) : aucun jeton nécessaire, appelable même avant
+ * connexion. `onerror` retire l'élément proprement si aucun logo n'a été
+ * téléversé — jamais une image cassée, jamais un espace vide réservé.
+ */
+function afficherLogoBoutiqueDansBandeau() {
+  const bandeau = document.querySelector(".bandeau");
+  if (!bandeau) return;
+  const img = document.createElement("img");
+  img.alt = "Logo de la boutique";
+  img.className = "logo-boutique-bandeau";
+  img.onerror = () => img.remove();
+  img.src = "/configuration/logo?t=" + Date.now();
+  const marque = bandeau.querySelector(".bandeau__marque");
+  if (marque && marque.parentNode) {
+    marque.insertAdjacentElement("afterend", img);
+  } else {
+    bandeau.prepend(img);
+  }
 }

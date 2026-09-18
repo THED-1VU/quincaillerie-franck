@@ -98,6 +98,7 @@
 
   $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
   $("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
   $("site-date").textContent = (session.site_id ? LIBELLE_SITE[session.site_id] : "—") + " · "
     + new Date().toLocaleDateString("fr-FR", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 

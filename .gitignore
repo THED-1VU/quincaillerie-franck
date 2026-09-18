@@ -41,6 +41,13 @@ package-lock.json
 # télécharge et ne se recrée qu'en local : ~1 Go, aucune donnée à versionner.
 _pgdev/
 
+# --- Fichiers téléversés par l'application (cycle 28) ---
+# Logo de la boutique cliente (server/app/routes/configuration.py) : jamais
+# versionné (donnée réelle propre à chaque installation), inclus dans la
+# sauvegarde/restauration (db/outils/sauvegarder.ps1/restaurer.ps1) à la
+# place.
+server/donnees/
+
 # --- Worktrees Git du travail en parallèle (voir RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md) ---
 # Chaque worktree est un checkout complet d'une branche de piste ; le
 # contenu suivi vit dans le dépôt principal via ces branches, jamais ici.

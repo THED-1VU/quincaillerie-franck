@@ -101,11 +101,32 @@
     privileges necessaires pour lire toutes les tables sans restriction).
     Par defaut "postgres".
 
-.EXAMPLE
-    powershell -File db\outils\sauvegarder.ps1
+.PARAMETER PhraseChiffrement
+    OBLIGATOIRE (decision du proprietaire, 2026-09-18) : chaque fichier
+    produit (.dump, _roles.sql, _logo.*) est chiffre en AES-256 avant meme
+    d'etre copie hors-site -- y compris la copie LOCALE, qui contient deja
+    les salaires et les prix d'achat. Sans cette phrase, le script s'arrete
+    net plutot que de produire une sauvegarde en clair par defaut (meme
+    principe que la sentinelle "a_definir" : un arret franc vaut mieux
+    qu'une regle de securite silencieusement absente).
+
+    JAMAIS ecrite en ligne de commande d'une tache planifiee (visible via
+    Get-ScheduledTask) : lue depuis config.ini (meme emplacement que les
+    autres secrets de l'application), jamais ce script qui la stocke.
+    Sans cette phrase, AUCUNE restauration n'est possible -- voir
+    GUIDE_SAUVEGARDE_RESTAURATION.md, section 6, page dediee a la
+    conservation de cette phrase HORS de la boutique.
+
+    Outil retenu : AES-256 via System.Security.Cryptography, deja integre
+    a PowerShell -- aucune installation sur le poste boutique (7-Zip
+    verifie absent de ce depot ; BitLocker To Go ecarte, exige Windows
+    Pro/Enterprise que le poste boutique n'aura probablement pas).
 
 .EXAMPLE
-    powershell -File db\outils\sauvegarder.ps1 -Dossier "D:\Sauvegardes" -DossierDistant "\\poste-secours\sauvegardes" -NomBase quincaillerie -PgPort 5432 -RetentionJours 30
+    powershell -File db\outils\sauvegarder.ps1 -PhraseChiffrement (Get-Content config.ini | Select-String 'phrase_chiffrement_sauvegarde' ...)
+
+.EXAMPLE
+    powershell -File db\outils\sauvegarder.ps1 -PhraseChiffrement $Phrase -Dossier "D:\Sauvegardes" -DossierDistant "\\poste-secours\sauvegardes" -NomBase quincaillerie -PgPort 5432 -RetentionJours 30
 #>
 
 [CmdletBinding()]
@@ -118,10 +139,18 @@ param(
     [string]$NomBase = 'quincaillerie_test',
     [string]$PgHost = '127.0.0.1',
     [int]$PgPort = 5433,
-    [string]$Utilisateur = 'postgres'
+    [string]$Utilisateur = 'postgres',
+    [string]$DossierLogo = $null,
+    [string]$PhraseChiffrement = $null
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (-not $PhraseChiffrement) {
+    Write-Host "ERREUR : -PhraseChiffrement est obligatoire (decision du proprietaire, 2026-09-18)." -ForegroundColor Red
+    Write-Host "Aucune sauvegarde n'est produite en clair par defaut. Voir GUIDE_SAUVEGARDE_RESTAURATION.md, section 6."
+    exit 1
+}
 
 $Racine = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 if (-not $Dossier) {
@@ -135,6 +164,62 @@ if (-not $FichierJournal) {
 }
 if (-not $FichierEtat) {
     $FichierEtat = Join-Path $Dossier 'dernier_etat_sauvegarde.json'
+}
+if (-not $DossierLogo) {
+    # server/donnees/logo_boutique/ (cycle 28) -- voir server/app/routes/configuration.py.
+    $DossierLogo = Join-Path $Racine 'server\donnees\logo_boutique'
+}
+
+# ----------------------------------------------------------------------------
+# Chiffrement AES-256 (cycle 28, decision du proprietaire 2026-09-18) --
+# System.Security.Cryptography, deja integre a PowerShell/.NET, aucune
+# installation. Format du fichier produit (<source>.enc) :
+#   [16 octets sel PBKDF2][16 octets IV][... texte chiffre AES-256-CBC ...]
+# Sel et IV sont ALEATOIRES a CHAQUE fichier (jamais reutilises), stockes en
+# clair en tete du fichier chiffre -- ce n'est pas un secret, seule la
+# PHRASE l'est ; c'est le motif standard pour permettre le dechiffrement
+# sans stocker le sel/IV ailleurs. Cle derivee par PBKDF2
+# (Rfc2898DeriveBytes, 100000 iterations, SHA-256) -- jamais la phrase
+# utilisee directement comme cle.
+# ----------------------------------------------------------------------------
+function Chiffrer-Fichier([string]$CheminSource, [string]$Phrase) {
+    $CheminCible = "$CheminSource.enc"
+    $Sel = New-Object byte[] 16
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($Sel)
+
+    $Derivation = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+        $Phrase, $Sel, 100000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+    $Cle = $Derivation.GetBytes(32)
+
+    $Aes = [System.Security.Cryptography.Aes]::Create()
+    $Aes.Key = $Cle
+    $Aes.GenerateIV()
+
+    $FluxSortie = [System.IO.File]::Create($CheminCible)
+    try {
+        $FluxSortie.Write($Sel, 0, $Sel.Length)
+        $FluxSortie.Write($Aes.IV, 0, $Aes.IV.Length)
+        $Chiffreur = $Aes.CreateEncryptor()
+        $FluxCrypto = New-Object System.Security.Cryptography.CryptoStream(
+            $FluxSortie, $Chiffreur, [System.Security.Cryptography.CryptoStreamMode]::Write)
+        $FluxSource = [System.IO.File]::OpenRead($CheminSource)
+        try {
+            $FluxSource.CopyTo($FluxCrypto)
+        } finally {
+            $FluxSource.Close()
+        }
+        $FluxCrypto.FlushFinalBlock()
+        $FluxCrypto.Close()
+    } finally {
+        $FluxSortie.Close()
+        $Aes.Dispose()
+    }
+
+    # Le fichier LOCAL reste protege lui aussi (decision explicite du
+    # proprietaire) : jamais de copie en clair laissee sur le disque, y
+    # compris celle qui ne part jamais hors-site.
+    Remove-Item -Path $CheminSource -Force
+    return $CheminCible
 }
 
 $script:MessagesEtat = @()
@@ -255,6 +340,13 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $FichierBase)) {
 } else {
     $TailleBase = (Get-Item $FichierBase).Length
     Ecrire-Journal 'INFO' ("Dump de la base OK : {0} ({1} Ko)" -f $FichierBase, [math]::Round($TailleBase / 1KB, 1))
+    try {
+        $FichierBase = Chiffrer-Fichier $FichierBase $PhraseChiffrement
+        Ecrire-Journal 'INFO' "Dump de la base chiffre (AES-256) : $FichierBase"
+    } catch {
+        Ecrire-Journal 'ERREUR' "Echec du chiffrement du dump de la base : $($_.Exception.Message)"
+        $Echec = $true
+    }
 }
 
 if (-not $Echec) {
@@ -265,6 +357,35 @@ if (-not $Echec) {
         $Echec = $true
     } else {
         Ecrire-Journal 'INFO' "Dump des roles OK : $FichierRoles"
+        try {
+            $FichierRoles = Chiffrer-Fichier $FichierRoles $PhraseChiffrement
+            Ecrire-Journal 'INFO' "Dump des roles chiffre (AES-256) : $FichierRoles"
+        } catch {
+            Ecrire-Journal 'ERREUR' "Echec du chiffrement du dump des roles : $($_.Exception.Message)"
+            $Echec = $true
+        }
+    }
+}
+
+# Logo de la boutique (cycle 28, server/donnees/logo_boutique/) : inclus
+# dans CETTE sauvegarde -- un logo perdu a la restauration serait une
+# regression. Absent (aucun logo televerse) : pas une erreur, simplement
+# rien a copier.
+$FichierLogo = $null
+if (-not $Echec) {
+    $LogoSource = Get-ChildItem -Path $DossierLogo -Filter 'logo.*' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($LogoSource) {
+        $FichierLogoClair = Join-Path $Dossier "${NomBase}_${Horodatage}_logo$($LogoSource.Extension)"
+        Copy-Item -Path $LogoSource.FullName -Destination $FichierLogoClair -Force
+        try {
+            $FichierLogo = Chiffrer-Fichier $FichierLogoClair $PhraseChiffrement
+            Ecrire-Journal 'INFO' "Logo de la boutique inclus et chiffre : $FichierLogo"
+        } catch {
+            Ecrire-Journal 'ERREUR' "Echec du chiffrement du logo : $($_.Exception.Message)"
+            $Echec = $true
+        }
+    } else {
+        Ecrire-Journal 'INFO' "Aucun logo de boutique televerse -- rien a inclure."
     }
 }
 
@@ -284,11 +405,21 @@ if (-not $Echec) {
             }
             Copy-Item -Path $FichierBase -Destination $DossierDistant -Force
             Copy-Item -Path $FichierRoles -Destination $DossierDistant -Force
+            if ($FichierLogo) {
+                Copy-Item -Path $FichierLogo -Destination $DossierDistant -Force
+            }
 
             $CopieBase  = Join-Path $DossierDistant (Split-Path $FichierBase -Leaf)
             $CopieRoles = Join-Path $DossierDistant (Split-Path $FichierRoles -Leaf)
-            if ((Test-Path $CopieBase) -and (Test-Path $CopieRoles)) {
-                Ecrire-Journal 'INFO' "Copie hors-site OK vers '$DossierDistant' : $(Split-Path $CopieBase -Leaf), $(Split-Path $CopieRoles -Leaf)"
+            $CopieLogoOk = $true
+            $NomsCopies = @((Split-Path $CopieBase -Leaf), (Split-Path $CopieRoles -Leaf))
+            if ($FichierLogo) {
+                $CopieLogo = Join-Path $DossierDistant (Split-Path $FichierLogo -Leaf)
+                $CopieLogoOk = Test-Path $CopieLogo
+                if ($CopieLogoOk) { $NomsCopies += (Split-Path $CopieLogo -Leaf) }
+            }
+            if ((Test-Path $CopieBase) -and (Test-Path $CopieRoles) -and $CopieLogoOk) {
+                Ecrire-Journal 'INFO' "Copie hors-site OK vers '$DossierDistant' : $($NomsCopies -join ', ')"
             } else {
                 Ecrire-Journal 'ERREUR' "Copie hors-site incomplete vers '$DossierDistant' -- fichier(s) absent(s) apres copie."
                 $Echec = $true
@@ -312,7 +443,14 @@ function Purger-Dossier([string]$Chemin) {
     if (-not (Test-Path $Chemin)) { return }
     $Limite = (Get-Date).AddDays(-$RetentionJours)
     $Candidats = Get-ChildItem -Path $Chemin -File |
-        Where-Object { $_.Name -like "${NomBase}_*.dump" -or $_.Name -like "${NomBase}_*_roles.sql" } |
+        Where-Object {
+            $_.Name -like "${NomBase}_*.dump.enc" -or $_.Name -like "${NomBase}_*_roles.sql.enc" -or
+            $_.Name -like "${NomBase}_*_logo.*.enc" -or
+            # Motifs sans ".enc" : compatibilite avec des sauvegardes d'avant
+            # le chiffrement (cycle 28), pour que la purge continue de les
+            # couvrir plutot que de les laisser s'accumuler indefiniment.
+            $_.Name -like "${NomBase}_*.dump" -or $_.Name -like "${NomBase}_*_roles.sql"
+        } |
         Where-Object { $_.LastWriteTime -lt $Limite }
     foreach ($Fichier in $Candidats) {
         try {
@@ -344,6 +482,7 @@ Ecrire-Journal 'INFO' "=== Sauvegarde de '$NomBase' terminee avec SUCCES. ==="
 Ecrire-EtatFichier $false $script:MessagesEtat
 Ecrire-EvenementWindows 'Information' "Sauvegarde Quincaillerie Franck ($NomBase) reussie : $FichierBase"
 Write-Host ""
-Write-Host "Sauvegarde terminee. Pour restaurer :" -ForegroundColor Green
-Write-Host "  powershell -File db\outils\restaurer.ps1 -FichierBase `"$FichierBase`" -FichierRoles `"$FichierRoles`" -NomBaseCible <nouvelle_base>"
+Write-Host "Sauvegarde terminee (fichiers chiffres, AES-256). Pour restaurer :" -ForegroundColor Green
+Write-Host "  powershell -File db\outils\restaurer.ps1 -FichierBase `"$FichierBase`" -FichierRoles `"$FichierRoles`" -PhraseChiffrement <la_meme_phrase> -NomBaseCible <nouvelle_base>"
+Write-Host "SANS la phrase de chiffrement, aucune restauration n'est possible -- voir GUIDE_SAUVEGARDE_RESTAURATION.md, section 6."
 exit 0
