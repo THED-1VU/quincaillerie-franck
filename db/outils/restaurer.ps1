@@ -172,7 +172,16 @@ function Dechiffrer-Fichier([string]$CheminChiffre, [string]$Phrase) {
     } finally {
         $Hmac.Dispose()
     }
-    if (-not [System.Security.Cryptography.CryptographicOperations]::FixedTimeEquals($HmacStocke, $HmacCalcule)) {
+    # CryptographicOperations.FixedTimeEquals n'existe pas dans le .NET
+    # Framework 4.x de Windows PowerShell 5.1 (introduit seulement en .NET
+    # Core 2.1+) -- comparaison manuelle a temps constant : parcourt TOUJOURS
+    # les 32 octets, jamais un retour anticipe au premier octet different
+    # (qui fuiterait la position du desaccord par le temps d'execution).
+    $Difference = 0
+    for ($i = 0; $i -lt 32; $i++) {
+        $Difference = $Difference -bor ($HmacStocke[$i] -bxor $HmacCalcule[$i])
+    }
+    if ($Difference -ne 0) {
         throw "Dechiffrement de '$CheminChiffre' impossible -- phrase de chiffrement incorrecte, ou fichier corrompu."
     }
 
