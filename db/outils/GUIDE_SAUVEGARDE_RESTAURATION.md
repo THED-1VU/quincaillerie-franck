@@ -19,9 +19,10 @@ faite, son contenu a vocation à être repris (en tout ou partie) dans
 
 | Élément | Depuis | Rôle |
 |---|---|---|
-| `db/outils/sauvegarder.ps1` | Cycle 21, étendu cycle 22 | Produit une sauvegarde complète (contenu + rôles), la copie hors du poste serveur, purge les sauvegardes de plus de 30 jours, journalise chaque étape |
-| `db/outils/restaurer.ps1` | Cycle 21 | Restaure une sauvegarde vers une base **séparée**, jamais par-dessus une base existante |
-| `db/outils/planifier_sauvegarde.ps1` | Cycle 22 (nouveau) | Enregistre une tâche planifiée Windows qui déclenche `sauvegarder.ps1` automatiquement (RPO 1 heure) |
+| `db/outils/sauvegarder.ps1` | Cycle 21, étendu cycles 22 et 28 | Produit une sauvegarde complète (contenu + rôles + logo de la boutique), **chiffrée (AES-256)**, la copie hors du poste serveur, purge les sauvegardes de plus de 30 jours, journalise chaque étape |
+| `db/outils/restaurer.ps1` | Cycle 21, étendu cycle 28 | Déchiffre puis restaure une sauvegarde vers une base **séparée**, jamais par-dessus une base existante ; restaure aussi le logo |
+| `db/outils/planifier_sauvegarde.ps1` | Cycle 22, étendu cycle 28 | Enregistre une tâche planifiée Windows qui déclenche `sauvegarder.ps1` automatiquement (RPO 1 heure), **sans exiger de session ouverte** (`-CompteSysteme`) |
+| `db/outils/enregistrer_service_pg.ps1` | Cycle 28 (nouveau) | Enregistre PostgreSQL comme **service Windows**, avec reprise automatique après un plantage |
 
 Décision du propriétaire (2026-09-13, `ADDENDUM_CAHIER_DES_CHARGES.md`,
 point i, question 1) : **RPO cible 1 heure** — une sauvegarde automatique
@@ -29,19 +30,51 @@ point i, question 1) : **RPO cible 1 heure** — une sauvegarde automatique
 journée**. C'est exactement ce que `planifier_sauvegarde.ps1` met en
 place.
 
+**Mise à jour cycle 28 (2026-09-18)** : trois failles opérationnelles
+identifiées par le propriétaire ont été traitées ici — la sauvegarde
+exigeait une session Windows ouverte (résolu, voir section 2) ; la copie
+hors-site n'était pas chiffrée alors qu'elle contient les salaires et les
+prix d'achat (résolu, voir section 6) ; et PostgreSQL, sur un plantage,
+ne redémarrait jamais tout seul (résolu, voir section 2 également).
+
 ---
 
 ## 2. Installation en une fois (à faire par le prestataire, une seule fois)
 
-Sur le poste serveur réel (PostgreSQL déjà installé, pas `_pgdev`) :
+Sur le poste serveur réel (PostgreSQL déjà installé, pas `_pgdev`), **en
+tant qu'administrateur** (deux des quatre étapes l'exigent) :
 
 ```powershell
-# 1. Vérifier que le mécanisme de base fonctionne (facultatif mais recommandé)
-powershell -File db\outils\sauvegarder.ps1 -Dossier "D:\Sauvegardes" -DossierDistant "\\poste-secours\sauvegardes" -NomBase quincaillerie -PgPort 5432
+# 1. PostgreSQL en service Windows, avec reprise automatique après un
+#    plantage (cycle 28) -- point le plus critique de cette liste : sans
+#    lui, un arrêt anormal peut immobiliser la boutique jusqu'à ce qu'un
+#    humain sache intervenir. Exige l'administrateur.
+powershell -File db\outils\enregistrer_service_pg.ps1 -PgPort 5432
 
-# 2. Planifier l'automatisation (RPO 1 heure, addendum point i)
-powershell -File db\outils\planifier_sauvegarde.ps1 -Dossier "D:\Sauvegardes" -DossierDistant "\\poste-secours\sauvegardes" -NomBase quincaillerie -PgPort 5432 -HeureOuverture "08:00" -HeureFermeture "18:00" -HeureFinJournee "20:00"
+# 2. La phrase de chiffrement des sauvegardes (voir section 6 -- À LIRE
+#    avant cette étape) -- un fichier local, jamais versionné.
+"Une phrase longue et unique, choisie par le responsable" | Out-File -Encoding utf8 "C:\QuincaillerieFranck\phrase_chiffrement.txt"
+icacls "C:\QuincaillerieFranck\phrase_chiffrement.txt" /inheritance:r /grant:r "SYSTEM:(R)"
+
+# 3. Vérifier que le mécanisme de base fonctionne (facultatif mais recommandé)
+powershell -File db\outils\sauvegarder.ps1 -Dossier "D:\Sauvegardes" -DossierDistant "\\poste-secours\sauvegardes" -NomBase quincaillerie -PgPort 5432 -FichierPhrase "C:\QuincaillerieFranck\phrase_chiffrement.txt"
+
+# 4. Planifier l'automatisation (RPO 1 heure, addendum point i), SANS exiger
+#    de session Windows ouverte (cycle 28) -- exige l'administrateur.
+powershell -File db\outils\planifier_sauvegarde.ps1 -CompteSysteme -Dossier "D:\Sauvegardes" -DossierDistant "\\poste-secours\sauvegardes" -NomBase quincaillerie -PgPort 5432 -HeureOuverture "08:00" -HeureFermeture "18:00" -HeureFinJournee "20:00" -FichierPhrase "C:\QuincaillerieFranck\phrase_chiffrement.txt"
 ```
+
+> **Protection anti-rançongiciel de Windows (« Accès contrôlé aux
+> dossiers »).** Si elle est active sur le poste, elle peut bloquer
+> `sauvegarder.ps1` : le script lit un fichier, produit une version chiffrée,
+> puis supprime l'original — un comportement qui ressemble, de l'extérieur,
+> à un rançongiciel. Si les sauvegardes s'arrêtent de fonctionner sans
+> message d'erreur clair après cette installation, ouvrir *Sécurité
+> Windows → Protection contre les virus et menaces → Gérer la protection
+> contre les rançongiciels → Autoriser une application via l'accès contrôlé
+> aux dossiers*, et y ajouter `powershell.exe` (ou l'exécutable
+> `Akuma.exe` si la sauvegarde est un jour déclenchée depuis l'application
+> elle-même).
 
 Adapter `-HeureOuverture`/`-HeureFermeture` aux horaires réels de la
 boutique. `-DossierDistant` doit être un emplacement **physiquement
@@ -126,8 +159,10 @@ explicite) — mais même avec `-Forcer`, restaurer d'abord à côté pour
 vérifier reste la procédure à suivre :
 
 ```powershell
-# 1. Restaurer À CÔTÉ (jamais sur la base réelle)
-powershell -File db\outils\restaurer.ps1 -FichierBase "D:\Sauvegardes\quincaillerie_20260913_180000.dump" -NomBaseCible quincaillerie_verification -PgPort 5432
+# 1. Restaurer À CÔTÉ (jamais sur la base réelle) -- -PhraseChiffrement
+#    obligatoire depuis le cycle 28 pour un fichier .dump.enc (SANS elle,
+#    aucune restauration n'est possible, voir section 6).
+powershell -File db\outils\restaurer.ps1 -FichierBase "D:\Sauvegardes\quincaillerie_20260913_180000.dump.enc" -FichierRoles "D:\Sauvegardes\quincaillerie_20260913_180000_roles.sql.enc" -FichierLogo "D:\Sauvegardes\quincaillerie_20260913_180000_logo.png.enc" -PhraseChiffrement (Get-Content "C:\QuincaillerieFranck\phrase_chiffrement.txt" -Raw).Trim() -NomBaseCible quincaillerie_verification -PgPort 5432
 
 # 2. Vérifier (avec psql, ou en pointant temporairement un config.ini de test dessus) :
 #    - les 10 dernières ventes sont bien là et cohérentes
@@ -160,29 +195,18 @@ ouverte).
   l'Observateur d'événements Windows) — voir section 3. Câbler une vraie
   alerte (WhatsApp Business API, ou un simple envoi SMTP) est un chantier
   distinct, qui suppose que le propriétaire fournisse un compte réel.
-- **Voyant de tableau de bord non câblé visuellement.**
-  `server/app/routes/exploitation.py` expose la donnée
-  (`GET /exploitation/derniere-sauvegarde`), mais `maquette/tableau-bord.html`
-  est exclusivement réservé à la piste UX pour ce tour (voir
-  `RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md`) — ce cycle ne le modifie pas.
-  Le câblage visuel est un point d'intégration en attente, à faire
-  **après** la fusion de la piste UX (même principe de report déjà
-  appliqué à la piste C6 pour son propre lien de clôture de caisse).
-- **Chiffrement de la copie hors-site non fait.** L'addendum le propose ;
-  aucune décision (algorithme, gestion de la clé) n'a été prise par le
-  propriétaire. Un dossier réseau ou une clé USB non chiffrés restent
-  lisibles par quiconque y a accès physique.
-- **Tâche planifiée en mode « utilisateur connecté ».**
-  `planifier_sauvegarde.ps1` enregistre la tâche avec
-  `-LogonType Interactive` (pas de mot de passe requis, pas de droits
-  administrateur nécessaires) — elle ne se déclenche que si une session
-  Windows de cet utilisateur est ouverte. Sur le poste serveur réel
-  (allumé en continu pendant les heures d'ouverture), il faut soit
-  laisser une session ouverte en permanence, soit — mieux — qu'un
-  administrateur crée un compte de service dédié et relance
-  l'enregistrement avec `-LogonType Password` ou `ServiceAccount`
-  (nécessite un mot de passe réel, saisi une fois à l'installation,
-  jamais stocké dans ce dépôt).
+- ~~Voyant de tableau de bord non câblé visuellement.~~ **Fait au cycle
+  27** : `maquette/tableau-bord.html` affiche désormais une carte
+  « Dernière sauvegarde » lisant `GET /exploitation/derniere-sauvegarde`.
+- ~~Chiffrement de la copie hors-site non fait.~~ **Fait au cycle 28** :
+  AES-256 (voir section 6), appliqué au fichier local ET à la copie
+  hors-site — pas seulement celle qui voyage.
+- ~~Tâche planifiée en mode « utilisateur connecté ».~~ **Résolu au cycle
+  28** : `planifier_sauvegarde.ps1 -CompteSysteme` enregistre la tâche
+  sous `NT AUTHORITY\SYSTEM`, sans session ni mot de passe requis (voir
+  section 2). L'ancien mode `-LogonType Interactive` reste disponible par
+  défaut pour un poste où l'installateur ne dispose pas de droits
+  administrateur.
 - **Source d'événements Windows dédiée non enregistrée par défaut.**
   Créer une NOUVELLE source d'événements (`QuincaillerieFranck_Sauvegarde`)
   exige des droits administrateur (écriture dans le Registre, `HKLM`).
@@ -201,10 +225,74 @@ ouverte).
   fait qu'appliquer le mécanisme logiciel qui protégera les données une
   fois ce matériel en place.
 - **Restauration testée sur le MÊME serveur uniquement** (voir section 4).
+- **La CAUSE des plantages PostgreSQL n'est pas éliminée, seulement la
+  reprise après coup.** `enregistrer_service_pg.ps1` (cycle 28) fait
+  redémarrer PostgreSQL automatiquement après un plantage, mais le
+  plantage lui-même (« could not reserve shared memory region », bug
+  connu de PostgreSQL sous Windows, 15 occurrences observées en 6 jours
+  sur le poste de développement) reste possible. Mitigation documentée,
+  pas garantie : exclure `postgres.exe` (et le dossier `_pgdev`/
+  l'installation PostgreSQL réelle) de l'antivirus du poste — une
+  collision d'adressage mémoire est parfois aggravée par un antivirus qui
+  injecte du code dans chaque processus.
+- **`sauvegarder.ps1` peut être bloqué par la protection anti-rançongiciel
+  de Windows** (« Accès contrôlé aux dossiers ») — voir l'encart en
+  section 2. Observé sur le poste de développement : le script continue de
+  fonctionner à l'exécution directe, mais le fichier de script lui-même a
+  disparu du disque à plusieurs reprises, quelques secondes après une
+  exécution réussie qui chiffre puis supprime l'original — un
+  comportement qui ressemble, de l'extérieur, à un rançongiciel. Si les
+  sauvegardes planifiées s'arrêtent de fonctionner sans qu'aucune erreur
+  n'apparaisse, vérifier D'ABORD que `db\outils\sauvegarder.ps1` existe
+  toujours sur le disque avant de chercher plus loin.
 
 ---
 
-## 6. En cas de coupure de courant en pleine écriture
+## 6. La phrase de chiffrement des sauvegardes — À LIRE avant toute installation
+
+Depuis le cycle 28, chaque fichier de sauvegarde (contenu de la base,
+rôles, logo de la boutique) est **chiffré** avant d'être écrit sur le
+disque — y compris la copie qui reste sur le poste serveur, pas seulement
+celle qui part sur une clé USB. C'est nécessaire : ces fichiers contiennent
+les salaires du personnel et les prix d'achat des articles.
+
+**Ce que cela veut dire concrètement, en français simple :**
+
+- La sauvegarde est protégée par une **phrase de chiffrement**, choisie
+  par le responsable au moment de l'installation (voir section 2).
+- **Sans cette phrase, personne — ni l'éditeur du logiciel, ni un
+  prestataire, ni qui que ce soit d'autre — ne peut lire le contenu
+  d'une sauvegarde ni la restaurer.** Ce n'est pas une limite du
+  logiciel : c'est le principe même du chiffrement, et c'est ce qui rend
+  la sauvegarde utile sur une clé USB qui pourrait être perdue ou volée.
+- **Il n'existe aucun moyen de récupérer une sauvegarde si cette phrase
+  est perdue.** Une sauvegarde sans sa phrase n'est plus qu'un fichier
+  illisible. Autant dire qu'elle n'existe plus.
+- Cette phrase **ne doit jamais être notée dans ce dépôt, ni envoyée par
+  e-mail ou WhatsApp, ni collée sur l'écran du poste serveur.** Elle vit
+  dans un fichier local sur le poste serveur (voir section 2), lu
+  automatiquement par les scripts — le responsable n'a pas besoin de la
+  ressaisir à chaque sauvegarde.
+
+**Où conserver cette phrase, HORS de la boutique :**
+
+- Un endroit physique différent du magasin (domicile du responsable,
+  coffre, ou tout lieu où un incendie ou un vol dans la boutique ne
+  l'atteindrait pas en même temps que les postes).
+- Idéalement, **écrite sur papier** plutôt que dans un fichier numérique
+  facilement copiable ou perdu avec un téléphone.
+- Si plusieurs personnes doivent pouvoir restaurer une sauvegarde en
+  l'absence du responsable, prévoir une copie chez une seconde personne de
+  confiance, au même titre qu'un double des clés du magasin.
+
+**Que faire si la phrase a été changée ou si un doute existe** : garder
+l'ANCIENNE phrase tant que d'anciennes sauvegardes chiffrées avec elle
+existent encore — une sauvegarde reste liée à la phrase utilisée AU
+MOMENT où elle a été produite, jamais à la phrase actuelle.
+
+---
+
+## 7. En cas de coupure de courant en pleine écriture
 
 ### Ce que PostgreSQL fait nativement (rien à configurer)
 
@@ -267,13 +355,14 @@ par défaut, sans réglage à faire pour ce projet) :
 
 ---
 
-## 7. Référence rapide des scripts
+## 8. Référence rapide des scripts
 
 | Script | Ce qu'il fait | Ne fait jamais |
 |---|---|---|
-| `sauvegarder.ps1` | dump + rôles + copie hors-site + purge 30 j + journal + fichier d'état + événement Windows | ne modifie jamais la base source (lecture pure) |
-| `restaurer.ps1` | restaure vers une base **nouvelle** | ne restaure jamais par-dessus une base existante sans `-Forcer` explicite |
-| `planifier_sauvegarde.ps1` | enregistre/supprime une tâche planifiée Windows qui appelle `sauvegarder.ps1` | ne modifie jamais `sauvegarder.ps1` ni `restaurer.ps1` — seulement QUAND ils sont lancés |
+| `sauvegarder.ps1` | dump + rôles + logo + **chiffrement AES-256** + copie hors-site + purge 30 j + journal + fichier d'état + événement Windows | ne modifie jamais la base source (lecture pure) ; ne produit jamais de fichier en clair sans `-PhraseChiffrement`/`-FichierPhrase` |
+| `restaurer.ps1` | déchiffre puis restaure vers une base **nouvelle** ; restaure le logo | ne restaure jamais par-dessus une base existante sans `-Forcer` explicite ; ne déchiffre jamais sans la bonne phrase (rejet garanti par HMAC, pas seulement probable) |
+| `planifier_sauvegarde.ps1` | enregistre/supprime une tâche planifiée Windows qui appelle `sauvegarder.ps1`, avec ou sans session ouverte (`-CompteSysteme`) | ne modifie jamais `sauvegarder.ps1` ni `restaurer.ps1` — seulement QUAND ils sont lancés |
+| `enregistrer_service_pg.ps1` | enregistre PostgreSQL comme service Windows, avec reprise automatique après un plantage | n'élimine jamais la CAUSE d'un plantage (voir section 5) — seulement la reprise après coup |
 
 Voir l'en-tête (`Get-Help -Full`) de chaque script pour la liste complète
 des paramètres :
@@ -282,4 +371,5 @@ des paramètres :
 Get-Help .\db\outils\sauvegarder.ps1 -Full
 Get-Help .\db\outils\restaurer.ps1 -Full
 Get-Help .\db\outils\planifier_sauvegarde.ps1 -Full
+Get-Help .\db\outils\enregistrer_service_pg.ps1 -Full
 ```
