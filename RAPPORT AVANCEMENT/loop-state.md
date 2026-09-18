@@ -4,7 +4,33 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 23 — bascule vue consolidée/site, C8**,
+- Dernier cycle fusionné : **Cycles 24/25/26 — travail en parallèle, trois
+  pistes simultanées** (voir `RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md`),
+  2026-09-14 → 2026-09-18 : **Cycle 24 — piste UX, corrections
+  `UX_BASELINE.md` §4 bis, C9/C10** (PR #28, fusionnée en premier —
+  branche `piste-ux-corrections`), **Cycle 25 — piste C6, clôture de
+  caisse par site, addendum point g** (PR #27 — branche
+  `piste-c6-comptabilite-rh`, rebasée sur `main` après la fusion de la
+  PR #28, conflits résolus sur 3 fichiers d'infrastructure de test
+  partagés — voir note ci-dessous), **Cycle 26 — piste C12, automatisation
+  et durcissement de la sauvegarde, addendum point i** (PR #26 — branche
+  `piste-c12-sauvegarde`, rebasée sur `main` après la fusion de la PR #27,
+  2 fichiers en conflit résolus). Les trois PR ont été fusionnées dans
+  l'ordre décidé à l'avance (UX → C6 → C12), chacune rebasée sur `main`
+  juste avant sa fusion, jamais deux fusions en même temps. **Chaque
+  fusion a été revérifiée par ré-exécution réelle par la session qui
+  fusionne**, pas seulement en relisant le rapport de la piste : base
+  reconstruite depuis zéro (schéma + migrations 000→019 + jeu d'essai),
+  suite pytest complète rejouée (163/163 à chaque étape — dépôt principal
+  compris, base `quincaillerie_test`), 9 suites Playwright rejouées
+  (`cablage` 87/87, `caisse` 24/24, `echappement` 11/11, `vente` 12/12,
+  `inventaire` 17/17, `stock` 26/26, `rapports` 29/29, `rh` 21/21,
+  `ux-corrections` 27/27 — nouveau), route `GET /exploitation/derniere-
+  sauvegarde` et sauvegarde réelle de C12 revérifiées par requêtes HTTP
+  directes après la fusion. Voir le détail complet, diagnostic et preuves
+  de chaque piste dans `RAPPORT AVANCEMENT/cycles/piste-ux.md`,
+  `piste-c6.md`, `piste-c12.md`. Précédé du
+  **Cycle 23 — bascule vue consolidée/site, C8**,
   2026-09-13 (PR #25, fast-forward, commit `87603d4`) ; précédé du
   **Cycle 22 — sécurité applicative, C11** (PR #24, commit `58d3845`), du
   **Cycle 21 — sauvegarde et restauration, C12** (PR #23, commit
@@ -58,17 +84,17 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C3 | Habilitations et cloisonnement des rôles | **60 %** | Cycle 3. Habilitations appliquées **au niveau des requêtes SQL** (pas de vérification applicative dispersée) : privilèges par colonne + RLS par site posés au cycle 2, exploités par `BaseDeDonnees.connexion_pour()` (point de bascule de rôle unique). Prouvé par exécution en **contournant l'API** : `SELECT ... WHERE site_id=2` sous `qf_agent_stock` renvoie 0 ligne même en le demandant explicitement (`server/tests/test_cloisonnement_site.py`). Rôle « caissier » toujours non tranché (addendum h) — non traité ce cycle. Reste : cloisonnement RH/fournisseurs non testé par une route, pas encore d'écran. |
 | C4 | Articles et stock | **72 %** | Cycles 9, 11 et 13. Six opérations réelles, chacune une fonction PostgreSQL `SECURITY DEFINER`, toutes câblées sur un vrai écran (`maquette/stock.html`, cycle 11). **Constats n°2 et n°3 corrigés (cycle 13)** : un retour client ou fournisseur ne peut plus dépasser, en article et en quantité (cumul de plusieurs retours compris), ce que la vente ou la réception d'origine porte réellement (migration 016) ; `PUT /articles/{id}` ne trace plus de changement de prix dans `historique_prix_articles` quand le prix soumis est identique à l'actuel. `quantite_stock` volontairement jamais modifiable par fiche. **Aucun montant FCFA, aucun champ de prix n'atteint la page ni les réponses réseau de l'agent stock**. Vérifié par exécution : 104/104 tests pytest (100 + 4 nouveaux), suite SQL à jour (44/44, 52/52, 6/6, réversibilité de la migration 016 confirmée, vérifiée en SQL direct avant tout code Python), 6 suites Playwright — 0 régression (aucun écran touché par la correction). Manquent : volumétrie/reprise du stock initial (addendum j, non tranché), remises et conversion d'unités (addendum f, volet non tranché), export dédié à C4. |
 | C5 | Ventes et facturation | **62 %** | Cycle 6, durci par le cycle de correction après C7, complété par les cycles 17 et 19. Décisions du propriétaire obtenues et appliquées (addendum, points b/d/e) : régime réel, TVA 19,25 % sur prix TTC, arrondi arithmétique sur le total ; une vente déjà encaissée n'est **jamais bloquée**, l'écart de stock est consigné et réservé au responsable ; crédit client explicitement désactivé. `POST /ventes` enregistre une vraie vente : décrément atomique anti-survente, une recette par vente, calcul de TVA faisant foi côté serveur. **Cycle 17** : `POST /ventes/{id}/annuler` (migration 017) restitue le stock RÉELLEMENT décrémenté, contre-passe la recette, régularise d'office l'écart devenu sans objet ; `POST /inventaire/ecarts-ventes/{id}/regulariser` marque un écart traité. Faille trouvée par exécution : `decrementer_stock_vente()` (cycle 6) ne renseignait jamais `mouvements_stock.vente_id`, corrigée dans la même migration. **Cycle 19** : `GET /ventes/{id}/recu` — reçu PDF (`reportlab`) téléchargeable depuis l'écran de vente (CDC §3.3/§7.1) ; n'affiche que ce qui est décidé (téléphone/n° contribuable omis tant que `a_definir`, aucun numéro de facturier fabriqué) ; une vente annulée porte une mention explicite. Vérifié par exécution : 24/24 tests pytest dédiés (140/140 au total, 0 régression), suite SQL à jour (44/44/52/52/6/6, réversibilité confirmée), 12/12 + 17/17 contrôles Playwright (dont un vrai téléchargement PDF intercepté après la vente). Manquent : n° facturier + vendeur obligatoires (addendum c, non tranché), ticket thermique / code-barres (non demandés), impression physique sur une imprimante réelle (non vérifiable par l'agent). |
-| C6 | Comptabilité et RH | **55 %** | Cycle 16, complété au cycle 18. `transactions` (recette/dépense **hors vente**, historique filtrable par période), `employes`/`absences_conges`/`avances_salaire` (responsable seul, CDC §3.5) — tables et `GRANT` existant depuis les cycles 1/2, jamais exposés avant le cycle 16. `POST /transactions`, `POST/GET /rh/employes\|absences-conges\|avances-salaire`, `POST /rh/avances-salaire/{id}/rembourser`. La carte « Saisie rapide » de `tableau-bord.html` (simulée depuis le cycle 5) câble un vrai formulaire. **Cycle 18** : `maquette/rh.html`, écran dédié pour les trois routes RH (employés, absences/congés, avances sur salaire), lien ajouté au tableau de bord. **Correction d'une inexactitude du diagnostic d'origine** (cycle 16) : `transactions.vente_id` porte déjà un index unique partiel (`uq_transactions_recette_par_vente`, cycle 2) empêchant une double recette pour la même vente. Vérifié par exécution : 18/18 tests pytest dédiés (135/135 au total, 0 régression), `verifier-cablage.mjs` 77/77, `verifier-rh-reel.mjs` 21/21 (nouveau — employé/absence/avance créés depuis l'écran et retrouvés en base, remboursement réel). Manquent : clôture de caisse (point g, non tranché), contre-passation d'annulation, audit des corrections. |
+| C6 | Comptabilité et RH | **85 %** | Cycle 16, complété au cycle 18, puis au **cycle 25** (piste C6, travail en parallèle, addendum point g). `transactions` (recette/dépense **hors vente**, historique filtrable par période), `employes`/`absences_conges`/`avances_salaire` (responsable seul, CDC §3.5). **Cycle 25** : clôture de caisse **par site** (décision du 2026-09-13) — migration 019, table `clotures_caisse` **totalement immuable** (`UPDATE`/`DELETE` refusés même pour `postgres` en direct), seul point d'écriture `cloturer_caisse()` (`SECURITY DEFINER`, aucun `GRANT` même au responsable), attendu calculé serveur (`calculer_attendu_caisse()`, exclut le crédit client), écart calculé serveur, clôture rectificative tracée en cas d'erreur. Seuil de tolérance d'écart (`seuil_ecart_caisse_tolere`) amorcé à `a_definir` (question 5 non tranchée) : tolérance **nulle** appliquée tant que le propriétaire ne fixe pas de valeur — pas de chiffre inventé, mécanique déjà prête pour le jour où il le fera. Écran dédié `maquette/cloture-caisse.html` (aperçu de l'attendu avant saisie, historique). Vérifié par exécution, **rejoué intégralement par la session qui fusionne** (pas seulement le rapport de la piste) : 163/163 tests pytest (144 + 19 dédiés à la caisse), `verifier-cablage.mjs` 87/87, `verifier-rh-reel.mjs` 21/21, `verifier-caisse-reel.mjs` 24/24 (SQL direct et API réelle : refus d'écart sans commentaire, acceptation avec commentaire, clôture rectificative, cloisonnement par rôle prouvé aux deux niveaux — 403 API + `InsufficientPrivilege` SQL). Manquent : lien depuis `tableau-bord.html` (réservé à la piste UX ce tour, maintenant fusionnée — reste à câbler), fond de caisse initial (question 2, absent du modèle, sous-estime l'attendu en espèces s'il en existe un réellement), rattachement d'une vente saisie en retard (question 3), rapprochement Mobile Money exact (question 4), seuil d'écart à fixer par le propriétaire (question 5), blocage d'une saisie après clôture (question 6), rôle caissier (point h, chantier C3 séparé). |
 | C7 | Inventaire et écarts | **50 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. |
 | C8 | Tableaux de bord et rapports | **70 %** | Cycles 10, 12, 14 et 23. Alertes de stock, historique des comptages et deux exports Excel/PDF, tous câblés sur un vrai écran (`maquette/rapports.html`, cycle 12). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit pour les 3 rôles au niveau API (cycle 10) et par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12). **Cycle 14** : cloisonnement par site des exports, 2 tests dédiés. **Cycle 23** : bascule vue consolidée/par site sur `tableau-bord.html` — chaque route renvoyait déjà `site_id` par ligne, la bascule est un filtre purement d'affichage (aucune route ni migration nouvelle, aucun appel réseau au changement de vue). Vérifié par exécution : `verifier-cablage.mjs` +7 (87/87) — filtrer sur un site recalcule le total exactement (8 500 / 3 200 FCFA) et fait disparaître l'autre site de chaque carte, retour à « Les deux sites » retrouve le total consolidé identique (11 700 FCFA). Manquent : clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). |
-| C9 | Ergonomie et UI *(priorité 1)* | **40 %** | Cycle 5, **réévalué à la baisse le 2026-09-13** par la première campagne humaine réelle (`UX_BASELINE.md` §4 bis). Les 4 écrans ne sont plus une maquette isolée (connexion, jeton, câblage réel — `verifier-cablage.mjs`, 87/87), messages d'erreur français vérifiés automatiquement, mais **le protocole documenté depuis le cycle 1 (§1, « on garde le pire des 3 essais ») donne 1/7 mesures chronométrées conformes** : l'objectif principal lui-même (vente de 3 articles < 60 s) n'est **pas** atteint au pire essai (2 min 10), seulement au 3ᵉ essai pratiqué (58 s) — un écart de méthode que le testeur a résolu autrement, consigné comme constat UX-0, pas tranché unilatéralement ici. 1/4 contrôles de compréhension conformes (un utilisateur non formé ne trouve pas seul comment annuler une ligne, confond le prix négocié affiché en gris avec le prix à facturer, ignore qu'un comptage devient définitif). **10 constats UX ouverts (UX-1 à UX-10), aucun corrigé** — le choix du cycle qui les traite revient au propriétaire. Ce que les vérifications automatiques ne mesurent toujours pas (vitesse perçue, compréhension) est désormais mesuré, et le résultat est **moins bon** que le score précédent ne le supposait. |
-| C10 | Mobile et API web *(priorité 1)* | **42 %** | Cycle 5, complété au cycle 15, **réévalué à la hausse le 2026-09-13** par la première campagne sur un vrai téléphone physique (`UX_BASELINE.md` §4 bis, section B) — la preuve manquante explicitement citée depuis le cycle 15 (« l'agent n'a pas de téléphone ») existe enfin, et confirme l'essentiel : connexion, boutons atteignables au pouce, mode paysage et confidentialité des montants pour l'agent stock fonctionnent réellement sur un appareil réel (4/9 contrôles). Mais révèle aussi des défauts réels non anticipés : le tableau de bord déborde d'environ 40 px sur ce téléphone alors qu'aucune suite automatisée (5 largeurs standard) ne l'a jamais détecté — écart non diagnostiqué (UX-3) ; chiffres illisibles sans zoom (UX-4) ; saisie d'une recette trop lente (UX-5) ; clavier numérique qui ne s'ouvre pas seul pour un comptage (UX-6) ; et surtout, **le plus sérieux constat de la campagne** : une coupure Wi-Fi en cours de saisie laisse l'écran tourner indéfiniment, sans aucun message (UX-7) — viole directement le principe du projet « jamais un message brut », jamais vérifié jusqu'ici pour une coupure réseau **en cours** de requête sur un réseau réel. **5 constats ouverts (UX-3 à UX-7), aucun corrigé.** Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
+| C9 | Ergonomie et UI *(priorité 1)* | **58 %** | Cycle 5, réévalué à la baisse le 2026-09-13 par la première campagne humaine réelle, puis **à la hausse au cycle 24** (piste UX, travail en parallèle) : 4 des 6 constats de cette catégorie corrigés et **vérifiés par exécution réelle** — UX-1 (ajouter un article en ≤ 2 actions **quelle que soit la quantité**, un nombre en tête de la recherche fixe la quantité dès l'ajout), UX-2 (vente entière au clavier seul **avec un prix négocié**, nouveau raccourci `F3`), UX-9 (le prix affiché en gris précise désormais explicitement « indicatif », « PAS le prix qui sera facturé »), UX-10 (avertissement toujours visible : un comptage validé est définitif, sans dialogue bloquant supplémentaire). Rejoué par la session qui fusionne : `verifier-ux-corrections.mjs` 27/27, aucune régression sur les 8 suites existantes. **Reste ouvert** : UX-0 (le désaccord de méthode lui-même — pire des 3 essais vs 3ᵉ essai — reste à trancher par le propriétaire, aucun code n'y répond), UX-8 (annuler une ligne du panier toujours introuvable seul, hors du plan de cette piste). **Important : l'objectif chronométré principal (vente de 3 articles < 60 s, pire des 3 essais) n'a PAS été re-mesuré avec un vrai testeur humain** — seules les frictions structurelles identifiées ont été supprimées et prouvées par exécution automatisée réelle (Playwright + backend réel), pas par une seconde campagne humaine. Une deuxième campagne réelle reste nécessaire avant de considérer C9 proche de 100 %. |
+| C10 | Mobile et API web *(priorité 1)* | **55 %** | Cycle 5, complété au cycle 15, réévalué à la hausse le 2026-09-13 par la première campagne sur un vrai téléphone physique, puis **de nouveau à la hausse au cycle 24** (piste UX, travail en parallèle) : 3 des 5 constats mobiles corrigés et vérifiés par exécution réelle — UX-3 (débordement du tableau de bord : cause CSS identifiée et corrigée — `grid-template-columns` sans `minmax(0, ...)` laissait un contenu long, non couvert par le jeu d'essai de test, pousser la grille hors écran ; 0 px de débordement mesuré aux 5 largeurs avec un nom d'article réellement long et non sécable), UX-4 (taille de police minimale garantie sur les chiffres des cartes, mesurée ≥ 16px à 360/390px), UX-7 — **le plus sérieux constat de la campagne** — (coupure réseau en cours de requête : `AbortController` à 20 s autour de `fetch()`, message français affiché, formulaire réutilisable sans recharger la page). UX-6 (clavier numérique) était en réalité **déjà correct** à l'inspection (`type="number"` + `inputmode="numeric"` déjà posés) — pas un vrai défaut, confirmé par lecture directe du DOM rendu. **Honnêteté conservée sur UX-3/4** : l'identité exacte du téléphone/navigateur du testeur original n'a jamais été renseignée ; un facteur non reproductible propre à cet appareil n'est pas formellement exclu comme cause additionnelle — seule la cause CSS a pu être diagnostiquée et corrigée par exécution. **Reste ouvert** : UX-5 (saisie d'une recette toujours trop lente au téléphone, 1 min 02 mesuré contre un objectif de 45 s — hors du plan de cette piste, non traité). Une deuxième campagne sur un vrai téléphone physique reste nécessaire pour confirmer ces corrections dans les conditions réelles d'origine. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **68 %** | Cycle 3, complété au cycle 22. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse, erreurs SQL jamais renvoyées telles quelles au client. **Cycle 22** : révocation de session (migration 018, `POST /auth/deconnexion`, `deps.obtenir_session()` vérifie la révocation à chaque requête — un jeton révoqué signature-valide et non expiré est quand même refusé, prouvé en le rejouant après déconnexion) ; en-têtes HTTP de sécurité (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) sur toute réponse. Vérifié par exécution : 4/4 tests pytest dédiés (144/144 au total, 0 régression, coût mesuré ~13 % de temps d'exécution en plus), `verifier-cablage.mjs` +3 (80/80, jeton intercepté avant déconnexion puis rejoué → refusé). Reste : limiteur de débit partagé entre processus (délibérément pas fait ce cycle — mérite sa propre vérification, pas glissé à la suite de deux autres changements de sécurité), audit plus large (dépendances, TLS — hors périmètre local de dev). |
-| C12 | Sauvegarde et exploitation | **45 %** | Cycle 21. `db/outils/sauvegarder.ps1` (`pg_dump -Fc` + `pg_dumpall --roles-only`, rôles applicatifs globaux au serveur) et `restaurer.ps1` (restaure **toujours** vers une base séparée, refuse d'écraser sauf `-Forcer` explicite). Vérifié par exécution réelle : sauvegarde de `quincaillerie_test`, restaurée à côté — comptes de lignes identiques ET **droits par colonne préservés** (`has_column_privilege()` avant/après restauration). Trois pièges PowerShell trouvés et corrigés en écrivant les scripts (caractères accentués, capture `$null` d'une commande sans sortie, `[int]` sur chaîne vide). Manquent : fréquence, conservation, RPO/RTO (addendum, point i, non tranché) ; planification automatique (Tâches planifiées Windows) ; test de restauration sur un second poste physique ; onduleur, mise à jour des postes (addendum i). |
+| C12 | Sauvegarde et exploitation | **80 %** | Cycle 21, complété au **cycle 26** (piste C12, travail en parallèle, addendum point i — RPO cible 1 heure décidé le 2026-09-13). `sauvegarder.ps1` étendu : `-DossierDistant` (copie hors-site vérifiée par `Test-Path` après copie), `-RetentionJours` (purge glissante, testée avec des fichiers réellement vieillis), **fichier d'état daté** (`dernier_etat_sauvegarde.json`, écrasé à chaque tentative succès/échec — durcissement explicitement exigé : « une sauvegarde qui échoue en silence est pire que pas de sauvegarde »), **trace dans le journal d'événements Windows** (source dédiée si enregistrée par un administrateur, repli sur la source générique sinon — vérifié dans le XML brut de l'événement). `planifier_sauvegarde.ps1` (nouveau) : tâche planifiée Windows, deux déclencheurs (horaire pendant les heures d'ouverture + un déclenchement de fin de journée), **déclenchement réel prouvé** (pas seulement l'enregistrement de la tâche — fichiers produits par CE déclenchement, tâche de test supprimée après preuve). Nouvelle route `GET /exploitation/derniere-sauvegarde` (réservée au responsable) : **donnée prête pour le voyant du tableau de bord**, revérifiée par la session qui fusionne avec de vraies requêtes HTTP (fichier absent → `configure:false` ; sauvegarde réelle relancée → `configure:true, resultat:SUCCES` ; jeton agent stock → 403). Exécutable reconstruit (26 Mo, `openpyxl`/`reportlab`/`pypdf`), testé **isolé** (dossier hors dépôt) : export Excel et PDF réels, reçu de vente PDF relu avec son contenu vérifié. **Preuve de restauration non négociable** : sauvegarde avec copie hors-site puis restauration **depuis la copie hors-site elle-même** (pas le fichier local) — comptes de lignes et droits par colonne identiques, contenu réel vérifié ligne à ligne, base de preuve supprimée après coup. Manquent : câblage visuel du voyant sur `tableau-bord.html` (la donnée existe déjà côté serveur — bloqué jusqu'à la fusion de la piste UX, **maintenant fusionnée**, reste à câbler) ; alerte WhatsApp/e-mail réelle (hors de portée sans compte réel à notifier) ; chiffrement de la copie hors-site ; test de restauration sur un second poste physique ; tâche planifiée en mode utilisateur connecté seulement (pas de compte de service) ; onduleur, mise à jour des postes (addendum i). |
 | C13 | Tests automatisés et qualité | **55 %** | Cycle 20 — correction d'une inexactitude du diagnostic d'origine (comme pour C6 au cycle 16) : le score restait à 0 % alors que **140 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **7 suites Playwright** (193 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant — jamais reflété dans le score. `db/outils/verifier_tout.sh` (nouveau) enchaîne les trois couches en une seule commande, vérifié par exécution (exit code 0, 0 échec). Deux pièges trouvés en l'écrivant : la limite de connexion de `config.ini` (10/min) fait échouer les suites en cascade au-delà de la première ; l'étape de réversibilité SQL recrée `qf_app` sans mot de passe. Manquent : CI automatisée sur chaque push (`server/tests/conftest.py` appelle un chemin Windows en dur, non portable vers un runner Linux sans correction dédiée — chantier à part), couverture des parcours nécessitant une imprimante ou un téléphone réels. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après la campagne UX du 2026-09-13 : ≈ 57 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 55, C7 50, C8 70, C9 40, C10 42, C11 68, C12 45, C13 55, C14 40).
+**Moyenne indicative après la fusion des trois pistes du travail en parallèle (cycles 24-26, 2026-09-18) : ≈ 64 %** (C0 55, C1 80, C2 65, C3 60, C4 72, C5 62, C6 85, C7 50, C8 70, C9 58, C10 55, C11 68, C12 80, C13 55, C14 40).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -2127,6 +2153,110 @@ qui les traite revient au propriétaire.
 
 ---
 
+### Cycles 24/25/26 — Travail en parallèle : trois pistes simultanées — 2026-09-14 → 2026-09-18
+
+Première exécution de trois sessions Claude Code **réellement simultanées**
+sur ce dépôt, chacune dans son propre worktree Git, sur sa propre base
+PostgreSQL (`quincaillerie_ux`/`_c6`/`_c12`, même instance partagée
+127.0.0.1:5433, isolation prouvée par exécution — voir `db/README.md`,
+`RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md`). Coordination : plan de
+non-collision écrit et validé avant démarrage (périmètre de fichiers
+exclusif par piste, fichiers transversaux gelés, convergence obligatoire
+sur un même motif de variable d'environnement pour les fichiers de test
+partagés, ordre de fusion décidé à l'avance UX → C6 → C12).
+
+**Consigne de sécurité relayée aux trois pistes** : aucune ne devait
+arrêter, redémarrer ou reconfigurer PostgreSQL (instance partagée,
+redémarrer coupe les deux autres en plein test) — respectée par les trois
+sans exception. Un crash PostgreSQL réel (« could not reserve shared
+memory region », bug Windows connu, sans rapport avec ce travail) est
+survenu en cours de route : signalé par la piste concernée sans action de
+sa part, corrigé par la session de coordination (`demarrer_pg.ps1`,
+reprise WAL automatique), intégrité vérifiée (comptes de tables/lignes
+identiques sur les 4 bases) avant de reprendre les trois pistes.
+
+#### Cycle 24 — Piste UX : corrections `UX_BASELINE.md` §4 bis (C9, C10)
+
+Détail complet, diagnostic et preuves : `RAPPORT AVANCEMENT/cycles/piste-ux.md`.
+Résumé : 7 des 8 constats confiés corrigés et vérifiés par exécution
+réelle (UX-1, UX-2, UX-3, UX-4, UX-7, UX-9, UX-10), UX-6 confirmé déjà
+correct à l'inspection. UX-0 (méthodologie), UX-5, UX-8 restent hors
+périmètre. Nouvelle suite `verifier-ux-corrections.mjs` (27/27). Adaptation
+convergée avec les deux autres pistes sur `server/tests/conftest.py` et
+les suites Playwright partagées (variable d'environnement, défaut
+inchangé). Fragilité intermittente pré-existante trouvée dans
+`verifier-inventaire-reel.mjs` (course dans le script de test lui-même,
+sans rapport avec ce chantier), signalée sans être corrigée (fichier
+commun, règle « ajout seulement »).
+
+- **Score** : C9 **40 % → 58 %**, C10 **42 % → 55 %** (détail par constat
+  dans le tableau des scores ci-dessus — **une deuxième campagne humaine
+  réelle reste nécessaire** avant de considérer ces deux chantiers proches
+  de 100 %, les preuves de ce cycle sont automatisées, pas humaines).
+- PR #28, fusionnée en premier dans `main` (commit de fusion `95d4ede`).
+
+#### Cycle 25 — Piste C6 : clôture de caisse par site (addendum point g)
+
+Détail complet, diagnostic et preuves : `RAPPORT AVANCEMENT/cycles/piste-c6.md`.
+Résumé : migration 019 (`clotures_caisse`, immuable, seul point d'écriture
+`cloturer_caisse()` `SECURITY DEFINER`), écran `cloture-caisse.html`, 19
+tests pytest dédiés, 24 contrôles Playwright (`verifier-caisse-reel.mjs`).
+Seuil d'écart toléré amorcé à `a_definir` (tolérance nulle appliquée,
+aucun chiffre inventé). Rebasée sur `main` après la fusion de la PR #28 :
+3 fichiers en conflit (`server/tests/conftest.py`,
+`maquette/verification/verifier-cablage.mjs`,
+`maquette/verification/verifier-rh-reel.mjs`), tous la même cause (deux
+implémentations indépendantes du même motif convergé) — résolus en
+gardant la version déjà fusionnée de la piste UX, confirmée sans perte de
+contenu propre à C6 (`git diff` ciblé avant résolution).
+
+- **Score** : C6 **55 % → 85 %**. Détail dans le tableau des scores
+  ci-dessus.
+- PR #27, fusionnée en second (commit de fusion `250f5b6`).
+
+#### Cycle 26 — Piste C12 : automatisation et durcissement de la sauvegarde (addendum point i)
+
+Détail complet, diagnostic et preuves : `RAPPORT AVANCEMENT/cycles/piste-c12.md`.
+Résumé : `sauvegarder.ps1` étendu (copie hors-site vérifiée, rétention,
+fichier d'état daté, journal d'événements Windows — durcissement exigé
+explicitement en cours de cycle après le constat que « une sauvegarde qui
+échoue en silence est pire que pas de sauvegarde »), `planifier_sauvegarde.ps1`
+(nouveau, déclenchement réel prouvé), route `GET /exploitation/derniere-
+sauvegarde`, exécutable reconstruit et testé isolé, restauration prouvée
+depuis la copie hors-site elle-même. Rebasée sur `main` après la fusion de
+la PR #27 : 2 fichiers en conflit (`server/tests/conftest.py` — même cause
+que ci-dessus, résolu pareil ; `server/app/main.py` — deux routeurs
+distincts à enregistrer, fusion additive des deux imports).
+
+- **Score** : C12 **45 % → 80 %**. Détail dans le tableau des scores
+  ci-dessus.
+- PR #26, fusionnée en dernier (commit de fusion `ecc9967`).
+
+#### Vérification finale, par la session de coordination (pas par les pistes)
+
+Après les trois fusions : worktrees et branches de piste supprimés, les
+trois bases de piste supprimées (jeu d'essai uniquement, plus nécessaires),
+`quincaillerie_test` reconstruite intégralement (schéma + migrations
+000→019 + jeu d'essai) et **revérifiée de bout en bout sur le dépôt
+principal fusionné** : suite pytest complète **163/163**, 8 suites
+Playwright obligatoires (`db/outils/verifier_tout.sh`) toutes au vert
+(`cablage` 87/87, `caisse` 24/24, `echappement` 11/11, `vente` 12/12,
+`inventaire` 17/17, `stock` 26/26, `rapports` 29/29, `rh` 21/21) plus la
+nouvelle `ux-corrections` 27/27 — **0 régression sur l'intégration des
+trois pistes**. Route `GET /exploitation/derniere-sauvegarde` revérifiée
+par requêtes HTTP réelles après fusion (fichier absent puis présent,
+cloisonnement par rôle). `quincaillerie_test` laissée dans un état de jeu
+d'essai propre.
+
+- **Reste ouvert, signalé mais non traité ce cycle** (nécessite son propre
+  diagnostic/plan avant tout code, comme d'habitude) : lien visuel
+  `cloture-caisse.html` ↔ `tableau-bord.html` (C6), voyant visuel
+  « dernière sauvegarde » sur `tableau-bord.html` (C12) — les deux étaient
+  explicitement reportés par leur piste jusqu'à la fusion de la piste UX,
+  **maintenant fusionnée** : les deux ne sont plus bloqués.
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
@@ -2141,7 +2271,12 @@ branche se sont enchaînées sans accroc cette fois). Le lot de 4 chantiers
 suivant (cycles 20 à 23 — correction diagnostic C13, sauvegarde/
 restauration C12, sécurité applicative C11, bascule vue C8) est
 **terminé et fusionné** (PR #22/#23/#24/#25, empilées dans l'ordre,
-mêmes garanties que ci-dessus).
+mêmes garanties que ci-dessus). Le **travail en parallèle** (cycles 24 à
+26 — corrections UX C9/C10, clôture de caisse C6, sauvegarde C12) est
+**terminé et fusionné** (PR #28/#27/#26, dans l'ordre décidé à l'avance,
+chacune rebasée sur `main` juste avant sa fusion — voir le journal
+ci-dessus pour le détail des conflits résolus et la revérification
+complète effectuée par la session de coordination).
 
 ### Décisions du propriétaire obtenues le 2026-09-13 (hors cycle de code)
 
@@ -2155,16 +2290,20 @@ avant tout code (voir `ADDENDUM_CAHIER_DES_CHARGES.md`, callouts
   (préfixe `MAG-`/`CPT-`), les deux obligatoires sur chaque vente. Débloque
   un chantier C5.
 - **Point g** (clôture de caisse) : une clôture **par site**, écran de
-  rapprochement espèces/recettes tel que proposé dans l'addendum. Débloque
-  un chantier C6.
+  rapprochement espèces/recettes tel que proposé dans l'addendum.
+  **Livré au cycle 25** (C6 85 %) — reste le lien visuel depuis le tableau
+  de bord et les sous-questions non bloquantes (fond de caisse initial,
+  seuil d'écart à fixer).
 - **Point h** (rôle caissier) : créé, **fusionné** avec le périmètre de
   l'agent comptabilité (encaisse ET saisit) — la cohérence exacte avec le
   rôle `agent_comptabilite` existant (fusion des deux, ou rôle distinct à
   droits identiques) reste à trancher au diagnostic du chantier. Débloque
   un chantier C3.
-- **Point i** (RPO/RTO) : RPO cible **1 heure** — le mécanisme de
-  sauvegarde/restauration existe déjà (cycle 21) ; reste à l'automatiser
-  (planification horaire). Débloque un chantier C12 (suite).
+- **Point i** (RPO/RTO) : RPO cible **1 heure**. **Livré au cycle 26**
+  (C12 80 %) — planification automatique réelle, fichier d'état daté,
+  journal d'événements Windows, route serveur prête pour un voyant ;
+  reste le câblage visuel du voyant et un test sur un second poste
+  physique.
 - **Point l** (propriété du code) : déjà résolu en pratique, formalisé
   dans `OWNERSHIP.md` (nouveau) — audit de l'historique Git complet
   confirmant qu'aucun secret réel n'y a jamais été committé. **Clos**, ne
@@ -2178,17 +2317,39 @@ critères de recette formels).
 ### Candidats
 
 1. ~~**Vérification C10 depuis un vrai téléphone physique**~~ — **fait**
-   le 2026-09-13 (campagne UX ci-dessus, section B) : la connexion et le
-   rendu de base fonctionnent réellement sur un téléphone physique, avec
-   des défauts réels trouvés (constats UX-3 à UX-7).
-2. ~~**Mesures humaines de `UX_BASELINE.md`**~~ — **fait** le 2026-09-13
-   (campagne UX ci-dessus) : scores C9/C10 réévalués sur mesure réelle
-   (40 % / 42 %), 11 constats ouverts. **Reste à faire** : trancher la
-   convention de mesure (constat UX-0) et traiter les constats eux-mêmes,
-   chacun dans le cycle que choisira le propriétaire.
-3. **C5 (numéro facturier + vendeur, point c)**, **C6 (clôture de caisse,
-   point g)**, **C3 (rôle caissier, point h)**, **C12 (automatisation des
-   sauvegardes, point i)** : les quatre décisions structurantes viennent
-   d'être obtenues (ci-dessus) — chacun peut maintenant démarrer son
-   propre cycle (diagnostic, options, plan, validation du propriétaire
-   avant tout code, comme d'habitude).
+   le 2026-09-13 (campagne UX ci-dessus, section B).
+2. ~~**Mesures humaines de `UX_BASELINE.md`**~~ — **fait** le 2026-09-13.
+3. ~~**C6 (clôture de caisse, point g)**~~ et ~~**C12 (automatisation des
+   sauvegardes, point i)**~~ — **faits** aux cycles 25 et 26 (travail en
+   parallèle, ci-dessus).
+4. ~~**Corriger les constats UX les plus gênants (§4 bis)**~~ — **fait
+   partiellement** au cycle 24 : 7 des 11 constats corrigés ou confirmés
+   non défectueux (UX-1, UX-2, UX-3, UX-4, UX-6, UX-7, UX-9, UX-10).
+5. **Câblage visuel des deux voyants de tableau de bord**, maintenant
+   débloqués par la fusion de la piste UX : lien vers
+   `cloture-caisse.html` (C6) et voyant « date de la dernière sauvegarde
+   réussie » lisant `GET /exploitation/derniere-sauvegarde` (C12). Les
+   deux routes/écrans existent déjà, aucune donnée ni migration
+   supplémentaire nécessaire — un petit chantier d'intégration pure sur
+   `tableau-bord.html`, aujourd'hui libre de toute exclusivité de piste.
+6. **Deuxième campagne humaine réelle** (`UX_BASELINE.md`), pour confirmer
+   dans les conditions d'origine ce que le cycle 24 a corrigé par preuve
+   automatisée seule : l'objectif chronométré principal de C9 (vente
+   < 60 s, pire des 3 essais) et les constats mobiles UX-3/UX-4/UX-7 de
+   C10 sur le même téléphone que la première campagne. Nécessite aussi de
+   trancher UX-0 (la convention de mesure elle-même) avant de relancer.
+7. **Constats UX restants, non traités par le cycle 24** : UX-0
+   (méthodologie, décision du propriétaire, aucun code), UX-5 (saisie
+   d'une recette au téléphone toujours trop lente), UX-8 (annuler une
+   ligne du panier toujours introuvable seul par un utilisateur non
+   formé).
+8. **C5 (numéro facturier + vendeur, point c)** et **C3 (rôle caissier,
+   point h)** : les deux décisions structurantes ont été obtenues le
+   2026-09-13 (ci-dessus) mais aucun code n'y répond encore — chacun peut
+   démarrer son propre cycle (diagnostic, options, plan, validation du
+   propriétaire avant tout code, comme d'habitude).
+9. **Sous-questions non bloquantes du point g** (fond de caisse initial,
+   rattachement d'une vente saisie en retard, rapprochement Mobile Money
+   exact, seuil d'écart de caisse à fixer, blocage d'une saisie après
+   clôture) — chacune peut être tranchée indépendamment, sans bloquer le
+   reste.
