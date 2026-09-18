@@ -128,20 +128,28 @@ function Dechiffrer-Fichier([string]$CheminChiffre, [string]$Phrase) {
         $Aes.IV  = $Iv
 
         $FluxSortie = [System.IO.File]::Create($CheminClair)
+        $EchecDechiffrement = $false
         try {
             $Dechiffreur = $Aes.CreateDecryptor()
             $FluxCrypto = New-Object System.Security.Cryptography.CryptoStream(
                 $FluxSource, $Dechiffreur, [System.Security.Cryptography.CryptoStreamMode]::Read)
             try {
+                # La validation du remplissage (padding) AES a lieu au moment
+                # de FERMER le flux, pas seulement pendant la copie -- une
+                # phrase incorrecte NE LEVE PAS forcement d'erreur avant
+                # Close(). Les deux doivent donc etre dans CE meme bloc try.
                 $FluxCrypto.CopyTo($FluxSortie)
-            } catch [System.Security.Cryptography.CryptographicException] {
-                throw "Dechiffrement impossible -- phrase de chiffrement incorrecte, ou fichier corrompu."
-            } finally {
                 $FluxCrypto.Close()
+            } catch [System.Security.Cryptography.CryptographicException] {
+                $EchecDechiffrement = $true
             }
         } finally {
             $FluxSortie.Close()
             $Aes.Dispose()
+        }
+        if ($EchecDechiffrement) {
+            Remove-Item -Path $CheminClair -Force -ErrorAction SilentlyContinue
+            throw "Dechiffrement de '$CheminChiffre' impossible -- phrase de chiffrement incorrecte, ou fichier corrompu."
         }
     } finally {
         $FluxSource.Close()
