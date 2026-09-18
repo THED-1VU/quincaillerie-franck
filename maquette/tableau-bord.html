@@ -34,6 +34,7 @@
     <a class="btn btn--fantome" href="stock.html">Articles et stock</a>
     <a class="btn btn--fantome" href="rapports.html">Rapports</a>
     <a class="btn btn--fantome" href="rh.html">Ressources humaines</a>
+    <a class="btn btn--fantome" href="cloture-caisse.html">Clôture de caisse</a>
     <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
   </header>
 
@@ -112,6 +113,13 @@
         </div>
         <div id="zone-erreur-saisie" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
         <div id="zone-succes-saisie" class="erreur-champ" hidden style="margin-top:var(--e-3); background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+      </section>
+
+      <section class="carte">
+        <h2>Dernière sauvegarde</h2>
+        <div id="zone-erreur-sauvegarde" class="erreur-champ" hidden></div>
+        <div id="voyant-sauvegarde">Chargement…</div>
+        <p class="champ__aide">État écrit par <code>db/outils/sauvegarder.ps1</code> à chaque tentative (succès ou échec) — chantier C12.</p>
       </section>
 
     </div>
@@ -336,6 +344,47 @@
       afficherErreurServeur("zone-erreur-saisie", erreur);
     }
   });
+
+  // --- Dernière sauvegarde : RÉEL, via GET /exploitation/derniere-sauvegarde ---
+  // (chantier C12, cycle 26 ; expose le fichier d'état écrit par
+  // db/outils/sauvegarder.ps1 à CHAQUE tentative, succès ou échec — le
+  // point exigé explicitement : une sauvegarde qui échoue en silence est
+  // pire que pas de sauvegarde du tout.)
+  try {
+    const etat = await appelApi("/exploitation/derniere-sauvegarde");
+    const voyant = $("voyant-sauvegarde");
+    voyant.innerHTML = "";
+    const pastille = document.createElement("span");
+    if (!etat.configure) {
+      // Pas "pastille--neutre" : cette classe marque historiquement les
+      // cartes de DONNÉE SIMULÉE (avant le câblage réel du chantier C8) et
+      // reste surveillée comme telle par verifier-cablage.mjs — cet état-ci
+      // est réel (aucune sauvegarde n'a simplement encore eu lieu), pas une
+      // simulation.
+      pastille.className = "pastille pastille--info";
+      pastille.textContent = "Aucune sauvegarde n'a encore tourné sur ce poste.";
+    } else if (etat.resultat === "SUCCES") {
+      pastille.className = "pastille pastille--ok";
+      const date = new Date(etat.horodatage).toLocaleString("fr-FR", {
+        dateStyle: "long", timeStyle: "short",
+      });
+      pastille.textContent = "Réussie le " + date;
+    } else if (etat.resultat === "ECHEC") {
+      pastille.className = "pastille pastille--alerte";
+      const date = etat.horodatage
+        ? new Date(etat.horodatage).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+        : "date inconnue";
+      pastille.textContent = "ÉCHEC le " + date + " — voir le journal de sauvegarde sur le poste serveur.";
+    } else {
+      // Fichier d'état présent mais illisible : on ne peut pas confirmer
+      // que la protection existe, même prudence que pour un échec avéré.
+      pastille.className = "pastille pastille--alerte";
+      pastille.textContent = etat.detail || "État de sauvegarde illisible.";
+    }
+    voyant.appendChild(pastille);
+  } catch (erreur) {
+    afficherErreurServeur("zone-erreur-sauvegarde", erreur);
+  }
 })();
 </script>
 </body>

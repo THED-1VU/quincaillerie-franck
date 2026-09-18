@@ -106,6 +106,11 @@ async function seConnecter(page, identifiant, motDePasse) {
   const apercuTotalTtc = await page.textContent("#total-ttc");
   const apercuMontantTva = await page.textContent("#montant-tva");
 
+  // N° facturier + vendeur, réels et obligatoires (addendum point c, cycle
+  // 27) : le vendeur est déjà présélectionné (le comptable connecté figure
+  // dans sa propre liste).
+  await page.fill("#numero-facturier", "MAG-REEL01");
+
   await page.keyboard.press("F9");
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
   const [reponseVente] = await Promise.all([
@@ -154,6 +159,8 @@ async function seConnecter(page, identifiant, motDePasse) {
   // Porte la quantité à 3 dans le champ de la ligne.
   await page.fill(".panier__ligne input.panier__mini", "3");
   await page.locator(".panier__ligne input.panier__mini").first().dispatchEvent("input");
+
+  await page.fill("#numero-facturier", "MAG-REEL02");
 
   await page.keyboard.press("F9");
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });

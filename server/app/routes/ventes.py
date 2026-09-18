@@ -19,9 +19,14 @@ db/migrations/011_ventes_fiscalite_anti_survente.sql) :
     'credit_client'`` est explicitement refusé ici, avec un message clair :
     aucune table Client, aucune créance n'existe tant que le reste du
     point b n'est pas tranché.
-  * point c (numéro facturier + vendeur) — NON traité ce cycle. La vente est
-    enregistrée sans cette traçabilité anti-vol (priorité n°3 du
-    propriétaire, volontairement incomplète) — voir loop-state.md.
+  * point c (numéro facturier + vendeur) — traité au cycle 27, périmètre
+    réduit au socle décidé (voir db/migrations/020_facturier_vendeur.sql) :
+    ``numero_facturier`` (référence du carnet PAPIER, transcrite par le
+    comptable — jamais générée par ce logiciel) et ``vendeur_id`` (qui a
+    négocié le prix) sont obligatoires sur toute nouvelle vente, avec
+    préfixe vérifié par site (``MAG-``/``CPT-``). Le rapport « écarts de
+    prix par vendeur » et le seuil de validation d'un écart (questions 5)
+    ne sont PAS construits ce cycle — non tranchés.
 
 Une vente saisie ici est immédiatement ``payee`` : il n'existe pas d'étape
 ``en_attente`` pour ce que cette route couvre (saisie a posteriori d'un
@@ -81,6 +86,45 @@ def parametres_vente(
     return {"taux_tva": float(taux_tva)}
 
 
+@routeur.get("/vendeurs")
+def lister_vendeurs(
+    request: Request,
+    site_id: int | None = None,
+    session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
+):
+    """Comptes utilisables comme ``vendeur_id`` (addendum, point c) — pour
+    remplir le menu déroulant de l'écran de vente.
+
+    Aucune liste de vendeurs séparée n'est créée (question 3 de l'addendum
+    non tranchée) : uniquement des comptes existants et actifs, du site de
+    cette vente (un agent d'un site ne négocie pas de prix pour l'autre) ;
+    le responsable, qui couvre les deux sites, y figure toujours."""
+    if session.site_id is not None:
+        site_cible = session.site_id
+    elif site_id is not None:
+        site_cible = site_id
+    else:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Le site est obligatoire pour un compte responsable.",
+        )
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=site_cible, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, nom_complet FROM utilisateurs
+                 WHERE actif = TRUE AND (site_id = %s OR role = 'responsable')
+                 ORDER BY nom_complet
+                """,
+                (site_cible,),
+            )
+            lignes = cur.fetchall()
+    return {"vendeurs": lignes}
+
+
 @routeur.post("", response_model=ReponseVente, status_code=status.HTTP_201_CREATED)
 def enregistrer_vente(
     demande: DemandeVente,
@@ -118,9 +162,16 @@ def enregistrer_vente(
             cur.execute("SELECT parametre_numerique(%s) AS v", ("taux_tva",))
             taux_tva = cur.fetchone()["v"]
 
-            # Point h (rôle caissier) non tranché : il n'existe aujourd'hui
-            # qu'un responsable qui encaisse réellement. On le retrouve ici
-            # plutôt que d'inventer un choix de caissier côté écran.
+            # Point h (rôle caissier) : décidé le 2026-09-13 (fusionné avec
+            # agent_comptabilite, cycle 27 — voir ADDENDUM_CAHIER_DES_CHARGES.md).
+            # Cette ligne reste néanmoins inchangée ce cycle : elle attribue
+            # TOUJOURS l'encaissement au responsable, même quand c'est un
+            # agent_comptabilite qui saisit réellement la vente — un
+            # désaccord désormais visible avec la décision ci-dessus,
+            # signalé mais volontairement PAS corrigé ici (hors du
+            # périmètre validé pour le point c de ce cycle ; vendeur_id,
+            # ajouté plus bas, couvre déjà « qui a négocié le prix », ce qui
+            # motivait initialement ce chantier).
             cur.execute("SELECT id FROM utilisateurs WHERE role = 'responsable' LIMIT 1")
             ligne_resp = cur.fetchone()
             if ligne_resp is None:
@@ -145,20 +196,43 @@ def enregistrer_vente(
                 montant_tva = Decimal("0")
             sous_total_ht = total_ttc - montant_tva
 
-            cur.execute(
-                """
-                INSERT INTO ventes
-                    (site_id, utilisateur_id, statut, mode_paiement,
-                     utilisateur_caisse_id, sous_total_ht, taux_tva,
-                     montant_tva, total_ttc, date_encaissement)
-                VALUES (%s, %s, 'payee', %s, %s, %s, %s, %s, %s, NOW())
-                RETURNING id
-                """,
-                (
-                    site_cible, session.utilisateur_id, demande.mode_paiement,
-                    utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva, total_ttc,
-                ),
-            )
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO ventes
+                        (site_id, utilisateur_id, statut, mode_paiement,
+                         utilisateur_caisse_id, sous_total_ht, taux_tva,
+                         montant_tva, total_ttc, date_encaissement,
+                         numero_facturier, vendeur_id)
+                    VALUES (%s, %s, 'payee', %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        site_cible, session.utilisateur_id, demande.mode_paiement,
+                        utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva, total_ttc,
+                        demande.numero_facturier, demande.vendeur_id,
+                    ),
+                )
+            except psycopg.errors.UniqueViolation as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    f"Le numéro de facturier « {demande.numero_facturier} » est déjà utilisé "
+                    "par une autre vente.",
+                ) from exc
+            except psycopg.errors.CheckViolation as exc:
+                if "chk_ventes_numero_facturier_prefixe_site" in str(exc):
+                    prefixe_attendu = "MAG-" if site_cible == 1 else "CPT-"
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        f"Le numéro de facturier doit commencer par « {prefixe_attendu} » "
+                        "pour ce site.",
+                    ) from exc
+                raise erreur_metier(exc) from exc
+            except psycopg.errors.ForeignKeyViolation as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "Vendeur introuvable (compte utilisateur inexistant).",
+                ) from exc
             vente_id = cur.fetchone()["id"]
 
             ecarts: list[LigneEcartReponse] = []
@@ -212,6 +286,7 @@ def enregistrer_vente(
     return ReponseVente(
         vente_id=vente_id,
         site_id=site_cible,
+        numero_facturier=demande.numero_facturier,
         sous_total_ht=float(sous_total_ht),
         taux_tva=float(taux_tva),
         montant_tva=float(montant_tva),
@@ -263,15 +338,19 @@ def _fcfa(montant) -> str:
 
 
 def _construire_recu_pdf(boutique: dict, vente: dict, lignes: list[dict]) -> bytes:
-    """Reçu imprimable d'une vente (chantier C5, cycle 19 — CDC §3.3, §7.1
-    « imprimer / réimprimer le reçu »). N'affiche QUE ce qui a été
-    réellement décidé par le propriétaire :
+    """Reçu imprimable d'une vente (chantier C5, cycle 19, étendu au cycle
+    27 — CDC §3.3, §7.1 « imprimer / réimprimer le reçu »). N'affiche QUE
+    ce qui a été réellement décidé par le propriétaire :
       * ``boutique_telephone``/``boutique_numero_contribuable`` restent
         ``a_definir`` (addendum, point d) — omis plutôt qu'inventés ;
-      * ``numero_facture`` (point c, numérotation du facturier, non
-        tranché) est restitué tel quel — ``None`` ici, jamais fabriqué ;
-        le numéro de vente interne est utilisé pour identifier le
-        document, comme dans ``/rapports/ventes`` (cycle 10).
+      * ``numero_facture`` (facture fiscale détaillée, distincte du
+        facturier papier ci-dessous, toujours non tranchée) est restitué
+        tel quel — ``None`` ici, jamais fabriqué ; le numéro de vente
+        interne est utilisé pour identifier le document si absent, comme
+        dans ``/rapports/ventes`` (cycle 10) ;
+      * ``numero_facturier``/``vendeur_nom`` (addendum point c, décidé le
+        2026-09-13, cycle 27) : affichés quand présents ; ``None`` pour
+        toute vente antérieure à ce cycle, jamais rétro-inventés.
     Une vente annulée reste imprimable (aucune règle du CDC ne l'interdit)
     mais porte une mention explicite — jamais un reçu d'apparence valide
     pour une vente qui ne l'est plus.
@@ -312,6 +391,13 @@ def _construire_recu_pdf(boutique: dict, vente: dict, lignes: list[dict]) -> byt
     if vente["statut"] == "annulee":
         motif = vente.get("motif_annulation") or "non précisé"
         elements.append(Paragraph(_echapper_xml(f"VENTE ANNULÉE — motif : {motif}"), style_annule))
+    if vente.get("numero_facturier") or vente.get("vendeur_nom"):
+        details = []
+        if vente.get("numero_facturier"):
+            details.append(f"N° facturier : {vente['numero_facturier']}")
+        if vente.get("vendeur_nom"):
+            details.append(f"Vendeur : {vente['vendeur_nom']}")
+        elements.append(Paragraph(_echapper_xml(" — ".join(details)), style_normal))
     elements.append(Spacer(1, 4 * mm))
 
     donnees = [["Article", "Qté", "Prix unitaire", "Total"]]
@@ -369,9 +455,13 @@ def recu_vente(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, numero_facture, mode_paiement, statut, motif_annulation,
-                       sous_total_ht, taux_tva, montant_tva, total_ttc, date_encaissement
-                  FROM ventes WHERE id = %s
+                SELECT v.id, v.numero_facture, v.numero_facturier, v.mode_paiement,
+                       v.statut, v.motif_annulation, v.sous_total_ht, v.taux_tva,
+                       v.montant_tva, v.total_ttc, v.date_encaissement,
+                       u.nom_complet AS vendeur_nom
+                  FROM ventes v
+                  LEFT JOIN utilisateurs u ON u.id = v.vendeur_id
+                 WHERE v.id = %s
                 """,
                 (vente_id,),
             )

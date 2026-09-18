@@ -54,10 +54,17 @@ class LigneVenteDemande(BaseModel):
 class DemandeVente(BaseModel):
     """``site_id`` n'est utilisé QUE pour un compte responsable (deux
     sites) : pour un agent comptabilité, le site vient toujours de sa
-    session, jamais du corps de la requête."""
+    session, jamais du corps de la requête.
+
+    ``numero_facturier`` et ``vendeur_id`` sont obligatoires depuis le
+    cycle 27 (addendum, point c, décidé le 2026-09-13) : référence du
+    carnet papier tenu par le responsable, et personne ayant négocié le
+    prix — voir ``db/migrations/020_facturier_vendeur.sql``."""
 
     site_id: Optional[int] = None
     mode_paiement: str = Field(min_length=1, max_length=30)
+    numero_facturier: str = Field(min_length=1, max_length=30)
+    vendeur_id: int
     lignes: List[LigneVenteDemande] = Field(min_length=1)
 
 
@@ -73,6 +80,7 @@ class LigneEcartReponse(BaseModel):
 class ReponseVente(BaseModel):
     vente_id: int
     site_id: int
+    numero_facturier: str
     sous_total_ht: float
     taux_tva: float
     montant_tva: float
