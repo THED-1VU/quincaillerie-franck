@@ -20,21 +20,21 @@
     NE MODIFIE JAMAIS sauvegarder.ps1 ni restaurer.ps1 : ce script se
     contente d'enregistrer QUAND ils sont lances, jamais COMMENT.
 
-    LIMITE HONNETE (a documenter, pas a cacher) : ce script enregistre la
-    tache pour l'utilisateur Windows courant (-LogonType Interactive),
-    sans mot de passe -- c'est la seule maniere de creer une tache
-    planifiee sans droits administrateur ni compte de service dedie sur ce
-    poste de developpement. Une tache Interactive ne se declenche QUE si
-    cet utilisateur est ouvert sur une session Windows. Sur le poste
-    serveur reel de la boutique (allume en continu pendant les heures
-    d'ouverture, addendum point i), il faudrait soit :
-      - laisser une session ouverte en permanence sur ce poste (le plus
-        simple, si le poste sert uniquement de serveur) ; ou
-      - enregistrer la tache avec un compte de service dedie et
-        -LogonType Password ou ServiceAccount (necessite un mot de passe
-        reel saisi par l'exploitant a l'installation -- hors de portee de
-        ce script, qui ne doit jamais stocker un mot de passe en clair
-        dans le depot).
+    SESSION WINDOWS (decision du proprietaire, 2026-09-18) : par defaut, ce
+    script enregistre la tache pour l'utilisateur Windows courant
+    (-LogonType Interactive), sans mot de passe -- c'est la seule maniere
+    de creer une tache planifiee sans droits administrateur. Une tache
+    Interactive ne se declenche QUE si cet utilisateur est ouvert sur une
+    session Windows -- inacceptable sur le poste serveur reel de la
+    boutique (« sans cela, il n'y aura simplement pas de sauvegarde »).
+
+    -CompteSysteme resout cette limite : enregistre la tache sous
+    NT AUTHORITY\SYSTEM (compte integre Windows, AUCUN mot de passe requis,
+    s'execute SANS session utilisateur ouverte). Contrepartie : cette
+    COMMANDE D'ENREGISTREMENT (pas les executions ulterieures de la tache
+    elle-meme) doit etre lancee UNE FOIS par un administrateur du poste --
+    verifie explicitement, refuse proprement sinon plutot qu'un message
+    Windows cryptique.
     Ce choix revient a l'installateur du poste serveur reel ; voir
     db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md.
 
@@ -101,6 +101,19 @@
     LOCALES de sauvegarde -- jamais un mot de passe sur la ligne de
     commande d'une tache planifiee.
 
+.PARAMETER FichierPhrase
+    Transmis tel quel a sauvegarder.ps1 (-FichierPhrase) : chemin d'un
+    fichier local (jamais versionne, permissions NTFS restreintes) qui
+    contient la phrase de chiffrement des sauvegardes (cycle 28). Un
+    CHEMIN n'est pas un secret -- c'est la seule maniere sure de la
+    fournir a une tache planifiee, jamais la phrase elle-meme en ligne de
+    commande.
+
+.PARAMETER CompteSysteme
+    Enregistre la tache sous NT AUTHORITY\SYSTEM au lieu de l'utilisateur
+    courant -- voir la section SESSION WINDOWS ci-dessus. Exige d'executer
+    CETTE commande en tant qu'administrateur (verifie explicitement).
+
 .PARAMETER Supprimer
     Si present, supprime la tache planifiee -NomTache au lieu d'en creer
     une (nettoyage, ou avant de la recreer avec d'autres parametres).
@@ -126,6 +139,8 @@ param(
     [int]$PgPort = 5433,
     [string]$Utilisateur = 'postgres',
     [string]$PgPasswordDev = $null,
+    [string]$FichierPhrase = $null,
+    [switch]$CompteSysteme,
     [switch]$Supprimer
 )
 
@@ -228,6 +243,12 @@ if ($Dossier) {
 if ($DossierDistant) {
     $CommandeInterneListe += "-DossierDistant '$(Echapper-Simple $DossierDistant)'"
 }
+if ($FichierPhrase) {
+    # Un CHEMIN, jamais la phrase elle-meme : voir sauvegarder.ps1,
+    # .PARAMETER FichierPhrase -- seule valeur sans risque a poser ici,
+    # visible via Get-ScheduledTask comme le reste de cette commande.
+    $CommandeInterneListe += "-FichierPhrase '$(Echapper-Simple $FichierPhrase)'"
+}
 $CommandeInterne = $PrefixeChemin + ($CommandeInterneListe -join ' ')
 
 # Un seul niveau de guillemets doubles ici (autour de $CommandeInterne, qui
@@ -252,9 +273,29 @@ $TriggerHoraire.Repetition = $TriggerModele.Repetition
 # Declencheur 2 : un dump supplementaire de fin de journee (addendum point i).
 $TriggerFinJournee = New-ScheduledTaskTrigger -Daily -At $FinJournee
 
-# Compte courant, sans mot de passe : voir la limite documentee ci-dessus
-# (.DESCRIPTION) et dans GUIDE_SAUVEGARDE_RESTAURATION.md.
-$Principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+if ($CompteSysteme) {
+    # NT AUTHORITY\SYSTEM (cycle 28, decision du proprietaire 2026-09-18) :
+    # AUCUN mot de passe requis (compte integre Windows), s'execute SANS
+    # qu'une session utilisateur soit ouverte -- resout la limite documentee
+    # ci-dessus pour -LogonType Interactive. Contrepartie : l'ENREGISTREMENT
+    # de la tache (cette commande, pas les executions ulterieures) exige des
+    # droits administrateur -- verifie explicitement ci-dessous plutot que
+    # de laisser Register-ScheduledTask echouer avec un message cryptique.
+    $EstAdmin = ([Security.Principal.WindowsPrincipal] `
+        [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+            [Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $EstAdmin) {
+        Write-Host "ERREUR : -CompteSysteme exige d'executer CE script en tant qu'administrateur (une seule fois, a l'installation)." -ForegroundColor Red
+        Write-Host "Sans droits administrateur, utilisez le mode par defaut (session ouverte requise) ou faites executer cette commande par un administrateur du poste."
+        exit 1
+    }
+    $Principal = New-ScheduledTaskPrincipal -UserId 'NT AUTHORITY\SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+} else {
+    # Compte courant, sans mot de passe : voir la limite documentee ci-dessus
+    # (.DESCRIPTION) et dans GUIDE_SAUVEGARDE_RESTAURATION.md -- exige une
+    # session ouverte en permanence sur le poste serveur reel.
+    $Principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+}
 
 $Settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
