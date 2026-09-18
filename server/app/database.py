@@ -46,7 +46,20 @@ class BaseDeDonnees:
 
     def _parametres_connexion(self) -> dict:
         b = self._config.base
-        return dict(host=b.host, port=b.port, dbname=b.dbname, user=b.user, password=b.password)
+        return dict(
+            host=b.host, port=b.port, dbname=b.dbname, user=b.user, password=b.password,
+            # Cycle 28 : trouvé par exécution (PostgreSQL arrêté délibérément,
+            # avec autorisation) — SANS ceci, une tentative de connexion
+            # pouvait rester bloquée 2 min 10 s avant d'échouer (dépend du
+            # comportement TCP de l'OS, pas d'un réglage applicatif). Chaque
+            # tentative bloquée immobilisait aussi un thread du serveur —
+            # quelques clients qui réessaient pendant une panne suffiraient à
+            # épuiser les threads disponibles et à geler des requêtes SANS
+            # RAPPORT avec la base. 5 s : largement suffisant sur le réseau
+            # local de la boutique, assez court pour rester perçu comme "une
+            # vraie panne" par le vendeur (voir CONNEXION_ECHOUEE ci-dessous).
+            connect_timeout=5,
+        )
 
     @contextmanager
     def connexion_anonyme(self) -> Iterator[psycopg.Connection]:

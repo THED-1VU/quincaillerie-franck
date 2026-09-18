@@ -48,6 +48,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import Config, ErreurConfiguration, charger_config
 from .database import BaseDeDonnees
+from .roles import role_pg
 from .routes import (
     articles,
     auth,
@@ -97,6 +98,23 @@ def creer_application(config: Config | None = None) -> FastAPI:
         config.api.secret_key, config.api.duree_session_minutes
     )
     app.state.limiteur_connexion = LimiteurDebit(config.api.tentatives_max_par_minute)
+
+    # Cycle 28 : lu UNE FOIS au démarrage, jamais au moment de l'erreur —
+    # c'est justement quand la base est INJOIGNABLE que ce message doit
+    # s'afficher (voir le gestionnaire d'exception plus bas) ; la relire à
+    # cet instant précis échouerait ou attendrait elle-même. Redémarrer le
+    # serveur est nécessaire pour qu'un changement de ce paramètre soit pris
+    # en compte — acceptable pour une valeur qui ne change presque jamais.
+    app.state.contact_support = None
+    try:
+        with app.state.bd.connexion_pour(role_pg("responsable")) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT valeur FROM parametres WHERE cle = 'contact_support_technique'")
+                ligne = cur.fetchone()
+                if ligne and ligne["valeur"] and ligne["valeur"] != "a_definir":
+                    app.state.contact_support = ligne["valeur"]
+    except psycopg.Error:
+        logger.warning("Impossible de lire contact_support_technique au démarrage — omis du message d'indisponibilité.")
 
     # -----------------------------------------------------------------
     # En-têtes HTTP de sécurité (chantier C11, cycle 21) : posés sur TOUTE
@@ -172,6 +190,35 @@ def creer_application(config: Config | None = None) -> FastAPI:
         logger.warning("Accès refusé par PostgreSQL sur %s : %s", request.url.path, exc)
         return JSONResponse(
             {"detail": "Accès refusé."}, status_code=status.HTTP_403_FORBIDDEN
+        )
+
+    # -----------------------------------------------------------------
+    # Base de données injoignable (chantier C12, cycle 28) — DISTINCT du
+    # gestionnaire générique ci-dessous : « la base a refusé la requête »
+    # (bug applicatif, contrainte violée) n'est PAS la même situation que
+    # « la base ne répond pas du tout » (panne, redémarrage en cours).
+    # Exigé par le propriétaire (2026-09-18), en français simple, SANS
+    # jargon ni code d'erreur visible : que la base ne répond pas, que ce
+    # n'est pas la faute du vendeur, que ce qu'il a déjà saisi à l'écran
+    # n'est pas perdu, et qui prévenir. Le détail technique (exception,
+    # traceback) va SEULEMENT au journal serveur — jamais sur l'écran du
+    # comptoir. Trouvé par exécution (PostgreSQL arrêté délibérément) :
+    # sans OperationalError distinguée du reste, ce cas tombait dans le
+    # message générique "Erreur interne.", qui ne dit rien de tout cela.
+    # -----------------------------------------------------------------
+    @app.exception_handler(psycopg.OperationalError)
+    def _base_injoignable(request: Request, exc: psycopg.OperationalError):
+        logger.error("Base de données injoignable sur %s", request.url.path, exc_info=exc)
+        message = (
+            "La caisse n'arrive pas à joindre son système d'enregistrement en ce moment. "
+            "Ce n'est pas un problème de votre côté. Les articles déjà saisis restent "
+            "affichés à l'écran — ne rechargez pas la page : vous pourrez valider dès que "
+            "la connexion sera rétablie."
+        )
+        if request.app.state.contact_support:
+            message += f" En attendant, prévenez : {request.app.state.contact_support}."
+        return JSONResponse(
+            {"detail": message}, status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )
 
     @app.exception_handler(psycopg.Error)
