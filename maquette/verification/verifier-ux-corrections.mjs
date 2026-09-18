@@ -96,6 +96,10 @@ async function seConnecter(page, identifiant, motDePasse) {
   // pour la panne réseau AVANT même l'envoi).
   await page.route("**/ventes", (route) => { /* jamais route.fulfill() ni route.abort() */ });
 
+  // N° facturier obligatoire depuis le cycle 27 (addendum point c) — le
+  // vendeur est déjà présélectionné.
+  await page.fill("#numero-facturier", "MAG-UX07");
+
   await page.keyboard.press("F9"); // 1ère pression : confirmation
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
   const avant = Date.now();
@@ -177,6 +181,11 @@ async function seConnecter(page, identifiant, motDePasse) {
   await page.keyboard.press("Enter");
   const focusApresEntree = await page.evaluate(() => document.activeElement.id);
   verifier(focusApresEntree === "recherche", "UX-2 : Entrée dans le champ de prix ramène le focus à la recherche (clavier seul, sans souris)");
+
+  // N° facturier obligatoire (addendum point c, cycle 27) — page.fill() ne
+  // simule pas un clic de souris, cohérent avec le scénario « clavier seul »
+  // de ce contrôle (aucune assertion ci-dessous ne porte sur ce champ).
+  await page.fill("#numero-facturier", "MAG-UX02");
 
   // Mode de paiement (F4) puis validation (F9 x2), toujours au clavier.
   await page.keyboard.press("F4");

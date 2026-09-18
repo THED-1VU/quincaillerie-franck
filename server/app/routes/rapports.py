@@ -19,8 +19,10 @@ ailleurs dans l'application :
     agent comptabilité seulement (mêmes rôles que ``GET
     /ventes/synthese-jour`` — un agent stock n'a de toute façon aucun
     privilège sur la table ``ventes``, migration 008). ``numero_facture``
-    est restitué tel quel, y compris NULL : le point c (numérotation du
-    facturier) n'est pas tranché, ce module n'en invente pas.
+    (facture fiscale détaillée) reste restitué tel quel, y compris NULL :
+    non tranché. ``numero_facturier`` (référence du carnet papier, point c
+    de l'addendum, décidé le 2026-09-13, cycle 27) est obligatoire sur
+    toute vente depuis ce cycle, NULL pour les ventes antérieures.
 
 Hors périmètre, volontairement : clôture de caisse (point g, non tranché),
 export de l'historique de comptages (route JSON seule, pas de fichier ce
@@ -158,7 +160,7 @@ def exporter_ventes(
         )
 
     colonnes = [
-        "id", "site_id", "numero_facture", "mode_paiement",
+        "id", "site_id", "numero_facture", "numero_facturier", "mode_paiement",
         "sous_total_ht", "taux_tva", "montant_tva", "total_ttc", "date_encaissement",
     ]
     bd = obtenir_bd(request)

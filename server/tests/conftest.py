@@ -11,6 +11,7 @@ d'administration de test, jamais un chemin emprunté par l'application.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -30,7 +31,15 @@ RACINE_SERVEUR = RACINE_DEPOT / "server"
 PGDEV = RACINE_DEPOT / "_pgdev"
 if not PGDEV.exists():
     PGDEV = RACINE_DEPOT.parent.parent / "_pgdev"
-PSQL_EXE = PGDEV / "pgsql" / "bin" / "psql.exe"
+# Portabilité CI (chantier C13, cycle 27) : `_pgdev/pgsql/bin/psql.exe` est
+# une particularité du poste de développement Windows (distribution portable
+# de PostgreSQL, jamais installée sur un runner CI). Un runner Linux/Mac a
+# normalement `psql` directement sur le PATH (postgresql-client via apt/brew,
+# ou l'image de service Postgres du CI) — on le préfère quand il existe, et
+# on ne retombe sur le chemin Windows `_pgdev` que s'il est introuvable.
+# Comportement inchangé sur le poste de développement actuel (le repli
+# Windows reste identique quand `psql` n'est pas sur le PATH).
+PSQL_EXE = shutil.which("psql") or str(PGDEV / "pgsql" / "bin" / "psql.exe")
 
 # Au niveau du MODULE (pas d'une fixture) : certains tests importent `app.*`
 # directement sans dépendre de la fixture `app` (ex. tests de config.py qui

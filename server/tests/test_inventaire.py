@@ -208,6 +208,8 @@ def test_ecarts_ventes_du_jour_relie_c5_et_c7(client):
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0001",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 4, "quantite": 3, "prix_unitaire": 2000}],
         },
     )
@@ -244,6 +246,8 @@ def _creer_ecart_vente_a_decouvert(client) -> int:
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0002",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 4, "quantite": 3, "prix_unitaire": 2000}],
         },
     )
@@ -331,6 +335,8 @@ def test_annulation_vente_regularise_automatiquement_lecart(client):
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0003",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 4, "quantite": 3, "prix_unitaire": 2000}],
         },
     )

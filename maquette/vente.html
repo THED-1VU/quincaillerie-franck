@@ -21,13 +21,12 @@
 </style>
 </head>
 <body>
-<div class="simu">Écran câblé (cycle 6) : catalogue, prix, TVA <strong>et validation de la vente sont réels</strong> (<code>POST /ventes</code>). Le numéro de facturier reste une note locale, non transmise (numéro + vendeur obligatoires : addendum point c, non tranché).</div>
+<div class="simu">Écran câblé (cycles 6 et 27) : catalogue, prix, TVA, numéro de facturier et vendeur <strong>sont tous réels et obligatoires</strong> (<code>POST /ventes</code>, addendum point c, décidé le 2026-09-13).</div>
 <div class="page">
   <header class="bandeau bandeau--vente">
     <span class="bandeau__marque">Quincaillerie Franck</span>
     <h1 class="bandeau__titre" id="titre-ecran">Enregistrer une vente</h1>
-    <span class="bandeau__role" id="badge-utilisateur">…</span>
-    <span class="bandeau__role bandeau__pousse">Facturier papier n° <strong id="num-facturier">—</strong> <span class="champ__aide" style="display:inline;">(note locale, non transmise)</span></span>
+    <span class="bandeau__role bandeau__pousse" id="badge-utilisateur">…</span>
     <a class="btn btn--fantome" href="rapports.html">Rapports</a>
     <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
   </header>
@@ -87,6 +86,20 @@
           </div>
 
           <div class="champ" style="margin-top:var(--e-5);">
+            <label class="champ__label" for="numero-facturier">N° facturier (carnet papier)</label>
+            <input class="champ__saisie" id="numero-facturier" type="text" autocomplete="off"
+                   placeholder="ex. MAG-0842">
+            <p class="champ__aide">Tel qu'inscrit sur le carnet papier — préfixe attendu pour ce site : <strong id="prefixe-facturier">—</strong>.</p>
+          </div>
+
+          <div class="champ" style="margin-top:var(--e-4);">
+            <label class="champ__label" for="vendeur">Vendeur (a négocié le prix)</label>
+            <select class="champ__select" id="vendeur">
+              <option value="">— Choisir —</option>
+            </select>
+          </div>
+
+          <div class="champ" style="margin-top:var(--e-4);">
             <label class="champ__label" for="paiement">Mode de paiement</label>
             <select class="champ__select" id="paiement"></select>
             <p class="champ__aide"><kbd>F4</kbd> pour changer de mode sans la souris.</p>
@@ -148,6 +161,8 @@
   const panierEl    = $("panier");
   const paiementEl  = $("paiement");
   const siteVenteEl = $("site-vente");
+  const facturierEl = $("numero-facturier");
+  const vendeurEl   = $("vendeur");
 
   // Le responsable couvre les deux sites : il doit choisir celui de CETTE
   // vente. Un agent comptabilité a déjà un site en session, la question ne
@@ -156,6 +171,42 @@
   if (!session.site_id) {
     $("champ-site").hidden = false;
   }
+
+  // --- N° facturier (préfixe par site) et vendeurs, réels (addendum point
+  // c, décidé le 2026-09-13, cycle 27) : les DEUX dépendent du site de la
+  // vente, connu immédiatement pour un agent (sa session), choisi par le
+  // responsable via #site-vente — rechargés à chaque changement pour lui.
+  const PREFIXE_PAR_SITE = { 1: "MAG-", 2: "CPT-" };
+
+  function siteVenteActuel() {
+    return session.site_id || (siteVenteEl.value ? Number(siteVenteEl.value) : null);
+  }
+
+  async function rafraichirVendeursEtPrefixe() {
+    const site = siteVenteActuel();
+    $("prefixe-facturier").textContent = site ? PREFIXE_PAR_SITE[site] : "—";
+    vendeurEl.innerHTML = '<option value="">— Choisir —</option>';
+    if (!site) return;
+    try {
+      const donnees = await appelApi("/ventes/vendeurs?site_id=" + site);
+      donnees.vendeurs.forEach((v) => {
+        const opt = document.createElement("option");
+        opt.value = String(v.id);
+        opt.textContent = v.nom_complet;
+        vendeurEl.appendChild(opt);
+      });
+      // Présélection : le cas courant est que la personne connectée est
+      // elle-même la vendeuse/le vendeur (cas limite documenté de
+      // l'addendum, point c) — reste modifiable avant validation.
+      if (donnees.vendeurs.some((v) => v.id === session.utilisateur_id)) {
+        vendeurEl.value = String(session.utilisateur_id);
+      }
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-catalogue", erreur);
+    }
+  }
+  siteVenteEl.addEventListener("change", rafraichirVendeursEtPrefixe);
+  await rafraichirVendeursEtPrefixe();
 
   // Identité réelle dans le bandeau.
   document.getElementById("badge-utilisateur").textContent =
@@ -170,8 +221,6 @@
   let selIndex = -1;
   let resultats = [];
   let catalogue = [];
-
-  $("num-facturier").textContent = "CPT-" + (1040 + Math.floor(Math.random() * 20));
 
   // --- Modes de paiement (aucune route ne les expose : liste fixe du CDC) ---
   DONNEES.modesPaiement.forEach((m) => {
@@ -401,6 +450,17 @@
       zoneConfirmation.textContent = "Choisissez le site de cette vente avant de valider.";
       return;
     }
+    if (!facturierEl.value.trim()) {
+      zoneConfirmation.hidden = false;
+      zoneConfirmation.textContent = "Le numéro de facturier (carnet papier) est obligatoire avant de valider.";
+      facturierEl.focus();
+      return;
+    }
+    if (!vendeurEl.value) {
+      zoneConfirmation.hidden = false;
+      zoneConfirmation.textContent = "Le vendeur (qui a négocié le prix) est obligatoire avant de valider.";
+      return;
+    }
     if (!enAttenteConfirmation) {
       enAttenteConfirmation = true;
       zoneConfirmation.hidden = false;
@@ -419,6 +479,8 @@
         body: JSON.stringify({
           site_id: session.site_id || Number(siteVenteEl.value),
           mode_paiement: paiementEl.value,
+          numero_facturier: facturierEl.value.trim(),
+          vendeur_id: Number(vendeurEl.value),
           lignes: panier.map((l) => ({
             article_id: l.id, quantite: l.quantite, prix_unitaire: l.prixUnitaire,
           })),
@@ -446,6 +508,11 @@
       panier = [];
       rendrePanier();
       $("dernier-ajout").textContent = "Aucun article ajouté pour le moment.";
+      // Le numéro de facturier identifie UNE ligne du carnet papier — jamais
+      // réutilisable d'une vente à l'autre (contrainte d'unicité, migration
+      // 020). Le vendeur, lui, reste souvent la même personne pour la vente
+      // suivante : conservé tel quel plutôt que redemandé à chaque fois.
+      facturierEl.value = "";
       recherche.focus();
     } catch (erreur) {
       afficherErreurServeur("zone-confirmation", erreur);

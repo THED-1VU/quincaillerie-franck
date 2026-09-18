@@ -60,6 +60,8 @@ def test_vente_normale_decremente_le_stock_et_calcule_la_tva(client):
         headers=entetes,
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0001",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6000}],
         },
     )
@@ -111,6 +113,8 @@ def test_vente_a_decouvert_nest_jamais_refusee_et_consigne_lecart(client):
         headers=entetes,
         json={
             "mode_paiement": "orange_money",
+            "numero_facturier": "MAG-TEST0002",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 4, "quantite": 5, "prix_unitaire": 2000}],
         },
     )
@@ -141,6 +145,8 @@ def test_credit_client_reste_desactive(client):
         headers=entetes,
         json={
             "mode_paiement": "credit_client",
+            "numero_facturier": "MAG-TEST0003",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
         },
     )
@@ -160,6 +166,8 @@ def test_agent_stock_ne_peut_pas_enregistrer_de_vente(client):
         headers=entetes,
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0004",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
         },
     )
@@ -180,6 +188,11 @@ def test_agent_comptabilite_ne_peut_pas_vendre_pour_lautre_site(client):
         json={
             "site_id": 2,  # ignoré : le comptable a déjà un site en session
             "mode_paiement": "especes",
+            # MAG- (pas CPT-) : le site EFFECTIF de cette vente reste 1 (la
+            # session du comptable, pas le site_id ci-dessus, ignoré) — voir
+            # server/app/routes/ventes.py.
+            "numero_facturier": "MAG-TEST0005",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 3, "quantite": 1, "prix_unitaire": 800}],
         },
     )
@@ -204,6 +217,8 @@ def test_responsable_doit_preciser_le_site(client):
         headers=entetes,
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0006",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
         },
     )
@@ -224,6 +239,8 @@ def test_responsable_peut_vendre_pour_un_site_precise(client):
         json={
             "site_id": 2,
             "mode_paiement": "mtn_momo",
+            "numero_facturier": "CPT-TEST0007",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 3, "quantite": 1, "prix_unitaire": 800}],
         },
     )
@@ -246,6 +263,8 @@ def test_annuler_vente_restitue_le_stock_et_contre_passe_la_recette(client):
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0008",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6000}],
         },
     )
@@ -305,6 +324,8 @@ def test_annuler_vente_a_decouvert_ne_restitue_que_le_stock_reellement_decrement
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0009",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 4, "quantite": 3, "prix_unitaire": 2000}],
         },
     )
@@ -351,6 +372,8 @@ def test_annuler_vente_deja_annulee_refusee(client):
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0010",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
         },
     )
@@ -390,6 +413,8 @@ def test_annuler_vente_motif_blanc_refuse(client):
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0011",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
         },
     )
@@ -418,6 +443,8 @@ def test_agent_stock_et_agent_comptabilite_ne_peuvent_pas_annuler_une_vente(clie
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0012",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
         },
     )
@@ -448,6 +475,8 @@ def test_recu_vente_pdf_contient_les_lignes_et_totaux(client):
         headers=entetes,
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0013",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6000}],
         },
     )
@@ -473,6 +502,8 @@ def test_recu_vente_annulee_porte_la_mention(client):
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0014",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
         },
     )
@@ -508,6 +539,8 @@ def test_agent_stock_ne_peut_pas_obtenir_de_recu(client):
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0015",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
         },
     )
@@ -530,6 +563,8 @@ def test_recu_vente_agent_comptabilite_limite_a_son_site(client):
         headers=entete_autorisation(session_compta["jeton"]),
         json={
             "mode_paiement": "especes",
+            "numero_facturier": "MAG-TEST0016",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 2, "quantite": 1, "prix_unitaire": 3500}],
         },
     )
@@ -540,3 +575,144 @@ def test_recu_vente_agent_comptabilite_limite_a_son_site(client):
         f"/ventes/{vente_id}/recu", headers=entete_autorisation(session_comptoir["jeton"])
     )
     assert reponse.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Numéro de facturier + vendeur (addendum, point c, décidé le 2026-09-13,
+# cycle 27) — périmètre réduit au socle décidé, voir
+# db/migrations/020_facturier_vendeur.sql : PAS de rapport d'écarts de prix
+# par vendeur, PAS de liste de vendeurs sans compte (questions 3 et 5 non
+# tranchées).
+# ---------------------------------------------------------------------------
+
+def test_numero_facturier_obligatoire(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "vendeur_id": 1,
+            "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+        },
+    )
+    assert reponse.status_code == 422, reponse.text
+
+
+def test_vendeur_id_obligatoire(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "numero_facturier": "MAG-SANSVENDEUR",
+            "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+        },
+    )
+    assert reponse.status_code == 422, reponse.text
+
+
+def test_numero_facturier_prefixe_incorrect_refuse(client):
+    """Site effectif = 1 (Magasin, session du comptable) : un numéro
+    « CPT- » est refusé, pas parce que le format est mauvais dans l'absolu,
+    mais parce qu'il ne correspond pas au site réel de la vente."""
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "numero_facturier": "CPT-0001",
+            "vendeur_id": 1,
+            "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+        },
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "MAG-" in reponse.json()["detail"]
+
+
+def test_numero_facturier_duplique_refuse(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    corps = {
+        "mode_paiement": "especes",
+        "numero_facturier": "MAG-DUPLIQUE",
+        "vendeur_id": 1,
+        "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+    }
+    premiere = client.post("/ventes", headers=entete_autorisation(session["jeton"]), json=corps)
+    assert premiere.status_code == 201, premiere.text
+
+    deuxieme = client.post("/ventes", headers=entete_autorisation(session["jeton"]), json=corps)
+    assert deuxieme.status_code == 409, deuxieme.text
+    assert "MAG-DUPLIQUE" in deuxieme.json()["detail"]
+
+
+def test_vendeur_id_inexistant_refuse(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "numero_facturier": "MAG-VENDEURINEXISTANT",
+            "vendeur_id": 999999,
+            "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+        },
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "vendeur" in reponse.json()["detail"].lower()
+
+
+def test_numero_facturier_reellement_enregistre_et_restitue(client):
+    """Pas seulement accepté : réellement écrit en base ET renvoyé dans la
+    réponse, exactement tel que saisi — jamais reformaté ni tronqué."""
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "numero_facturier": "MAG-0842",
+            "vendeur_id": 1,
+            "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+        },
+    )
+    assert reponse.status_code == 201, reponse.text
+    assert reponse.json()["numero_facturier"] == "MAG-0842"
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute(
+                "SELECT numero_facturier, vendeur_id FROM ventes WHERE id = %s",
+                (reponse.json()["vente_id"],),
+            )
+            ligne = cur.fetchone()
+    assert ligne["numero_facturier"] == "MAG-0842"
+    assert ligne["vendeur_id"] == 1
+
+
+def test_lister_vendeurs_du_site_inclut_le_responsable(client):
+    """Le comptable du Magasin (site 1) doit pouvoir choisir un vendeur de
+    SON site — et toujours le responsable, qui couvre les deux sites."""
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.get("/ventes/vendeurs", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    noms = [v["nom_complet"] for v in reponse.json()["vendeurs"]]
+    assert "Awa Franck" in noms  # le responsable (id=1, jeu d'essai)
+    assert "Cyr Magasin" in noms  # le comptable connecté lui-même (id=4)
+    assert "Dina Comptoir" not in noms  # comptable de l'AUTRE site (id=5)
+
+
+def test_lister_vendeurs_responsable_doit_preciser_le_site(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get("/ventes/vendeurs", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 422, reponse.text
+
+
+def test_lister_vendeurs_agent_stock_refuse(client):
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.get(
+        "/ventes/vendeurs", headers=entete_autorisation(session["jeton"]), params={"site_id": 1}
+    )
+    assert reponse.status_code == 403, reponse.text

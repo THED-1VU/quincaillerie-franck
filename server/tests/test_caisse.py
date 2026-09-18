@@ -47,6 +47,8 @@ def _creer_vente_payee(client, prix_unitaire=6500, quantite=1, mode_paiement="es
         headers=entete_autorisation(session["jeton"]),
         json={
             "mode_paiement": mode_paiement,
+            "numero_facturier": "MAG-TESTCAISSE",
+            "vendeur_id": 1,
             "lignes": [{"article_id": 1, "quantite": quantite, "prix_unitaire": prix_unitaire}],
         },
     )

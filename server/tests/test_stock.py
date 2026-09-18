@@ -163,7 +163,7 @@ def test_retour_client_rattache_a_la_vente(client):
     reponse_vente = client.post(
         "/ventes",
         headers=entete_autorisation(session["jeton"]),
-        json={"mode_paiement": "especes", "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6500}]},
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK01", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6500}]},
     )
     assert reponse_vente.status_code == 201, reponse_vente.text
     vente_id = reponse_vente.json()["vente_id"]
@@ -197,7 +197,7 @@ def test_agent_stock_ne_traite_un_retour_client_que_pour_son_site(client):
     reponse_vente = client.post(
         "/ventes",
         headers=entete_autorisation(session_compta["jeton"]),
-        json={"mode_paiement": "especes", "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK02", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
     )
     vente_id = reponse_vente.json()["vente_id"]
 
@@ -218,7 +218,7 @@ def test_retour_client_article_non_vendu_dans_la_vente_refuse(client):
     reponse_vente = client.post(
         "/ventes",
         headers=entete_autorisation(session_compta["jeton"]),
-        json={"mode_paiement": "especes", "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK03", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
     )
     vente_id = reponse_vente.json()["vente_id"]
 
@@ -239,7 +239,7 @@ def test_retour_client_quantite_cumulee_depassee_refuse(client):
     reponse_vente = client.post(
         "/ventes",
         headers=entete_autorisation(session_compta["jeton"]),
-        json={"mode_paiement": "especes", "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6500}]},
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK04", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6500}]},
     )
     vente_id = reponse_vente.json()["vente_id"]
 
@@ -296,7 +296,7 @@ def test_retour_fournisseur_sur_un_mouvement_qui_nest_pas_une_reception(client):
     reponse_vente = client.post(
         "/ventes",
         headers=entete_autorisation(session_compta["jeton"]),
-        json={"mode_paiement": "especes", "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK05", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
     )
     assert reponse_vente.status_code == 201, reponse_vente.text
 

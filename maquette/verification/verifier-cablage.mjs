@@ -25,7 +25,7 @@ import { chromium } from "playwright";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 const RACINE_DEPOT = resolve(ICI, "..", "..");
@@ -290,6 +290,13 @@ for (const largeur of LARGEURS) {
     "agent comptabilité : article réel ajouté au panier avec son vrai prix"
   );
 
+  // Numéro de facturier + vendeur, réels et obligatoires depuis le cycle 27
+  // (addendum point c) : le vendeur est déjà présélectionné (l'agent
+  // comptabilité connecté figure dans sa propre liste), seul le numéro
+  // reste à saisir, comme un vrai comptable le ferait depuis le carnet
+  // papier.
+  await page.fill("#numero-facturier", "MAG-CABLAGE01");
+
   // Validation RÉELLE depuis le cycle 6 (chantier C5, POST /ventes) : plus de
   // mention SIMULATION, un vrai numéro de vente apparaît. Le contrôle détaillé
   // de cette route (TVA, écarts, crédit désactivé...) est dans
@@ -446,6 +453,88 @@ for (const largeur of LARGEURS) {
   verifier(statutApresRevocation === 401, `déconnexion réelle : le jeton révoqué est refusé même en le rejouant (statut ${statutApresRevocation})`);
 
   await contexte.close();
+}
+
+// ============================================================================
+// 8. Voyant « Dernière sauvegarde » et lien clôture de caisse (chantiers
+//    C6/C12, cycle 27 : câblage du tableau de bord débloqué par la fusion
+//    de la piste UX)
+// ============================================================================
+{
+  const cheminParDefaut = resolve(RACINE_DEPOT, "_pgdev", "sauvegardes", "dernier_etat_sauvegarde.json");
+  rmSync(cheminParDefaut, { force: true });
+
+  // Cas 1 : aucune sauvegarde n'a jamais tourné (fichier absent — le chemin
+  // par défaut lu par le serveur, voir server/app/routes/exploitation.py).
+  {
+    const { contexte, page } = await nouvellePage();
+    await seConnecter(page, "resp", MDP_RESPONSABLE);
+    const pastille = await page.locator("#voyant-sauvegarde .pastille");
+    await pastille.waitFor({ timeout: 10000 });
+    verifier(
+      (await pastille.getAttribute("class")).includes("pastille--info"),
+      "voyant sauvegarde : aucune sauvegarde -> pastille info (pas « neutre », réservée aux données simulées)"
+    );
+    verifier(
+      /jamais tourné|n'a encore tourné/i.test(await pastille.textContent()),
+      "voyant sauvegarde : message explicite quand aucune sauvegarde n'a tourné"
+    );
+
+    verifier(
+      await page.locator('a[href="cloture-caisse.html"]').isVisible(),
+      "tableau de bord : lien « Clôture de caisse » visible dans le bandeau"
+    );
+    await contexte.close();
+  }
+
+  // Cas 2/3 : succès puis échec — écrit directement dans le chemin par
+  // défaut lu par le serveur (server/app/routes/exploitation.py), sans
+  // dépendre d'une vraie sauvegarde PostgreSQL ici : ce script vérifie
+  // l'AFFICHAGE, pas sauvegarder.ps1 lui-même (couvert par ailleurs,
+  // RAPPORT AVANCEMENT/cycles/piste-c12.md). Valable seulement quand ce
+  // script tourne contre le dépôt principal (serveur démarré sans
+  // QF_FICHIER_ETAT_SAUVEGARDE, cas normal), pas depuis un worktree isolé.
+  mkdirSync(dirname(cheminParDefaut), { recursive: true });
+
+  writeFileSync(cheminParDefaut, JSON.stringify({
+    horodatage: new Date().toISOString(),
+    resultat: "SUCCES",
+    base: DB_PISTE,
+  }), "utf-8");
+  {
+    const { contexte, page } = await nouvellePage();
+    await seConnecter(page, "resp", MDP_RESPONSABLE);
+    const pastille = page.locator("#voyant-sauvegarde .pastille");
+    await pastille.waitFor({ timeout: 10000 });
+    verifier(
+      (await pastille.getAttribute("class")).includes("pastille--ok"),
+      "voyant sauvegarde : SUCCES -> pastille ok"
+    );
+    verifier(/Réussie le/.test(await pastille.textContent()), "voyant sauvegarde : date de réussite affichée");
+    await contexte.close();
+  }
+
+  writeFileSync(cheminParDefaut, JSON.stringify({
+    horodatage: new Date().toISOString(),
+    resultat: "ECHEC",
+    base: DB_PISTE,
+  }), "utf-8");
+  {
+    const { contexte, page } = await nouvellePage();
+    await seConnecter(page, "resp", MDP_RESPONSABLE);
+    const pastille = page.locator("#voyant-sauvegarde .pastille");
+    await pastille.waitFor({ timeout: 10000 });
+    verifier(
+      (await pastille.getAttribute("class")).includes("pastille--alerte"),
+      "voyant sauvegarde : ECHEC -> pastille alerte (jamais silencieux)"
+    );
+    verifier(/ÉCHEC le/.test(await pastille.textContent()), "voyant sauvegarde : ÉCHEC visible avec sa date");
+    await contexte.close();
+  }
+
+  // Nettoyage : ne pas laisser un faux état de sauvegarde en place après ce
+  // script (le fichier n'a jamais existé avant ce test).
+  rmSync(cheminParDefaut, { force: true });
 }
 
 await navigateur.close();

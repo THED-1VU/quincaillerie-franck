@@ -152,6 +152,9 @@ async function xssDeclenche(page) {
   await pageCompta.waitForFunction(() => document.getElementById("panier").children.length > 0, { timeout: 5000 });
   await pageCompta.fill(".panier__ligne input.panier__mini", "3");
   await pageCompta.locator(".panier__ligne input.panier__mini").first().dispatchEvent("input");
+  // N° facturier obligatoire (addendum point c, cycle 27) — le vendeur est
+  // déjà présélectionné.
+  await pageCompta.fill("#numero-facturier", "MAG-ECHAP01");
   await pageCompta.keyboard.press("F9");
   await pageCompta.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
   await Promise.all([

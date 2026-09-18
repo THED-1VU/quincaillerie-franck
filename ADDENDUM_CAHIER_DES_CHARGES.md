@@ -440,6 +440,27 @@ caisse** des **recettes enregistrées**.
 > rôles `agent_comptabilite` déjà existants (fusion des deux rôles, ou
 > `caissier` comme rôle distinct avec les mêmes droits — diagnostic puis
 > plan avant tout code).
+>
+> **Diagnostic du chantier C3 (2026-09-18) : architecture déjà conforme,
+> aucun nouveau rôle nécessaire.** `qf_agent_comptabilite` **fait déjà les
+> deux** aujourd'hui — vérifié par exécution réelle, pas supposé :
+> `POST /ventes` l'autorise déjà (`exiger_role("responsable",
+> "agent_comptabilite")`), et `vente.html` est même son écran d'accueil
+> par défaut après connexion. La fusion décidée ci-dessus correspond donc
+> exactement au rôle existant, sans changement de code. Cloisonnement
+> confirmé par de vraies requêtes HTTP (pas seulement en SQL direct) :
+> `GET /rh/employes` avec un jeton `agent_comptabilite` → `403` (déjà
+> couvert par `server/tests/test_rh.py::test_agent_comptabilite_ne_peut_pas_creer_employe`
+> et `test_lister_employes_reserve_au_responsable` — la mention « non
+> testé par une route » de `loop-state.md` était devenue inexacte depuis
+> l'ajout de ces tests) ; `qf_agent_comptabilite` est également exclu de
+> `clotures_caisse` (chantier C6, cycle 25 — seul le responsable clôture).
+> **Fournisseurs : pas un vrai manque.** La table `fournisseurs` n'a pas
+> de colonne `site_id` (partagée entre les deux boutiques par construction)
+> et aucune route `/fournisseurs` n'existe dans le dépôt (`GET
+> /fournisseurs` → `404`) — rien à cloisonner par site sur une donnée qui
+> n'a jamais été exposée. Le seul point réellement ouvert reste la
+> question 3 ci-dessous (périmètre exact de lecture des prix).
 
 **Contexte.** Le cahier des charges ne prévoit **pas** de rôle caissier : c'est le
 **responsable en personne** qui encaisse au comptoir. Le dossier de recette et la checklist

@@ -77,11 +77,14 @@ async function connexionApi(identifiant, motDePasse) {
   return corps.jeton;
 }
 
-async function creerVente(jeton, articleId, prixUnitaire) {
+async function creerVente(jeton, articleId, prixUnitaire, numeroFacturier) {
   const r = await fetch(`${SERVEUR_URL}/ventes`, {
     method: "POST",
     headers: { Authorization: `Bearer ${jeton}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ mode_paiement: "especes", lignes: [{ article_id: articleId, quantite: 1, prix_unitaire: prixUnitaire }] }),
+    body: JSON.stringify({
+      mode_paiement: "especes", numero_facturier: numeroFacturier, vendeur_id: 1,
+      lignes: [{ article_id: articleId, quantite: 1, prix_unitaire: prixUnitaire }],
+    }),
   });
   const corps = await r.json();
   if (!r.ok) throw new Error("Création de vente échouée : " + JSON.stringify(corps));
@@ -89,13 +92,14 @@ async function creerVente(jeton, articleId, prixUnitaire) {
 }
 
 // Article 1 (Ciment) appartient au Magasin (site 1), article 3 (Clou) au
-// Comptoir (site 2) — voir db/tests/00_jeu_essai.sql.
+// Comptoir (site 2) — voir db/tests/00_jeu_essai.sql. Numéro de facturier
+// et vendeur réels et obligatoires depuis le cycle 27 (addendum point c).
 const jetonComptaMagasin = await connexionApi("magasin.compta", MDP_AGENT_COMPTA);
-const venteMagasin = await creerVente(jetonComptaMagasin, 1, 6500);
+const venteMagasin = await creerVente(jetonComptaMagasin, 1, 6500, "MAG-CAISSE01");
 const jourMagasin = psqlValeur(`SELECT date_encaissement::date FROM ventes WHERE id = ${venteMagasin.vente_id};`);
 
 const jetonComptaComptoir = await connexionApi("comptoir.compta", MDP_AGENT_COMPTA_COMPTOIR);
-const venteComptoir = await creerVente(jetonComptaComptoir, 3, 3200);
+const venteComptoir = await creerVente(jetonComptaComptoir, 3, 3200, "CPT-CAISSE01");
 const jourComptoir = psqlValeur(`SELECT date_encaissement::date FROM ventes WHERE id = ${venteComptoir.vente_id};`);
 
 console.log(`Vente Magasin (site 1) : ${venteMagasin.total_ttc} FCFA le ${jourMagasin}`);
