@@ -141,13 +141,30 @@ param(
     [int]$PgPort = 5433,
     [string]$Utilisateur = 'postgres',
     [string]$DossierLogo = $null,
-    [string]$PhraseChiffrement = $null
+    [string]$PhraseChiffrement = $null,
+    [string]$FichierPhrase = $null
 )
 
 $ErrorActionPreference = 'Stop'
 
+# -FichierPhrase : un CHEMIN n'est pas un secret, contrairement a la phrase
+# elle-meme -- c'est la SEULE valeur qui peut apparaitre sans risque dans la
+# definition d'une tache planifiee (visible via Get-ScheduledTask). Meme
+# esprit que .PARAMETER PgPasswordDev de planifier_sauvegarde.ps1 : jamais
+# la phrase EN CLAIR sur une ligne de commande executee sans surveillance.
+# Le fichier lui-meme doit etre local, jamais versionne (voir .gitignore),
+# avec des permissions NTFS restreintes au compte qui execute la tache --
+# voir GUIDE_SAUVEGARDE_RESTAURATION.md, section 6.
+if (-not $PhraseChiffrement -and $FichierPhrase) {
+    if (-not (Test-Path $FichierPhrase)) {
+        Write-Host "ERREUR : -FichierPhrase '$FichierPhrase' introuvable." -ForegroundColor Red
+        exit 1
+    }
+    $PhraseChiffrement = (Get-Content -Path $FichierPhrase -Raw).Trim()
+}
+
 if (-not $PhraseChiffrement) {
-    Write-Host "ERREUR : -PhraseChiffrement est obligatoire (decision du proprietaire, 2026-09-18)." -ForegroundColor Red
+    Write-Host "ERREUR : -PhraseChiffrement (ou -FichierPhrase) est obligatoire (decision du proprietaire, 2026-09-18)." -ForegroundColor Red
     Write-Host "Aucune sauvegarde n'est produite en clair par defaut. Voir GUIDE_SAUVEGARDE_RESTAURATION.md, section 6."
     exit 1
 }
