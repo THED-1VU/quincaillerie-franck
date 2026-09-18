@@ -112,44 +112,100 @@ function Dechiffrer-Fichier([string]$CheminChiffre, [string]$Phrase) {
     }
     $CheminClair = $CheminChiffre.Substring(0, $CheminChiffre.Length - 4)
 
+    # Format (voir Chiffrer-Fichier, sauvegarder.ps1) :
+    #   [16 sel][16 IV][... AES-256-CBC ...][32 HMAC-SHA256]
+    # Meme derivation (64 octets PBKDF2 : 32 AES, 32 HMAC) que la production.
+    $Sel = New-Object byte[] 16
+    $Iv  = New-Object byte[] 16
+    $FluxLu = [System.IO.File]::OpenRead($CheminChiffre)
+    try {
+        [void]$FluxLu.Read($Sel, 0, 16)
+        [void]$FluxLu.Read($Iv, 0, 16)
+    } finally {
+        $FluxLu.Close()
+    }
+
+    $Derivation = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+        $Phrase, $Sel, 100000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+    $Materiel = $Derivation.GetBytes(64)
+    $CleAes  = $Materiel[0..31]
+    $CleHmac = $Materiel[32..63]
+
+    # Verification de l'authenticite AVANT tout dechiffrement -- une phrase
+    # incorrecte est ainsi TOUJOURS rejetee ici, jamais seulement "en
+    # general" (le padding AES-CBC seul ne le garantissait pas -- voir
+    # sauvegarder.ps1, Chiffrer-Fichier). Calcul sur le fichier ENTIER moins
+    # les 32 derniers octets (l'empreinte elle-meme).
+    $TailleFichier = (Get-Item $CheminChiffre).Length
+    $TailleUtile = $TailleFichier - 32
+    if ($TailleUtile -lt 32) {
+        throw "'$CheminChiffre' est trop court pour etre un fichier chiffre valide (corrompu ou tronque)."
+    }
+    $HmacStocke = New-Object byte[] 32
+    $FluxLu = [System.IO.File]::OpenRead($CheminChiffre)
+    try {
+        [void]$FluxLu.Seek($TailleUtile, [System.IO.SeekOrigin]::Begin)
+        [void]$FluxLu.Read($HmacStocke, 0, 32)
+    } finally {
+        $FluxLu.Close()
+    }
+    $Hmac = New-Object System.Security.Cryptography.HMACSHA256(, $CleHmac)
+    $HmacCalcule = $null
+    try {
+        $FluxUtile = [System.IO.File]::OpenRead($CheminChiffre)
+        try {
+            $FluxLimite = New-Object System.IO.MemoryStream
+            $Tampon = New-Object byte[] 65536
+            $Restant = $TailleUtile
+            while ($Restant -gt 0) {
+                $ALire = [Math]::Min($Tampon.Length, $Restant)
+                $Lu = $FluxUtile.Read($Tampon, 0, $ALire)
+                if ($Lu -le 0) { break }
+                $FluxLimite.Write($Tampon, 0, $Lu)
+                $Restant -= $Lu
+            }
+            $FluxLimite.Position = 0
+            $HmacCalcule = $Hmac.ComputeHash($FluxLimite)
+        } finally {
+            $FluxUtile.Close()
+        }
+    } finally {
+        $Hmac.Dispose()
+    }
+    if (-not [System.Security.Cryptography.CryptographicOperations]::FixedTimeEquals($HmacStocke, $HmacCalcule)) {
+        throw "Dechiffrement de '$CheminChiffre' impossible -- phrase de chiffrement incorrecte, ou fichier corrompu."
+    }
+
+    # Authenticite confirmee : dechiffrement reel, en lisant uniquement la
+    # portion utile (sans les 32 octets d'empreinte finaux).
     $FluxSource = [System.IO.File]::OpenRead($CheminChiffre)
     try {
-        $Sel = New-Object byte[] 16
-        $Iv  = New-Object byte[] 16
-        [void]$FluxSource.Read($Sel, 0, 16)
-        [void]$FluxSource.Read($Iv, 0, 16)
-
-        $Derivation = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
-            $Phrase, $Sel, 100000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
-        $Cle = $Derivation.GetBytes(32)
+        [void]$FluxSource.Seek(32, [System.IO.SeekOrigin]::Begin)  # apres sel+IV
+        $FluxLimiteSource = New-Object System.IO.MemoryStream
+        $Tampon = New-Object byte[] 65536
+        $Restant = $TailleUtile - 32
+        while ($Restant -gt 0) {
+            $ALire = [Math]::Min($Tampon.Length, $Restant)
+            $Lu = $FluxSource.Read($Tampon, 0, $ALire)
+            if ($Lu -le 0) { break }
+            $FluxLimiteSource.Write($Tampon, 0, $Lu)
+            $Restant -= $Lu
+        }
+        $FluxLimiteSource.Position = 0
 
         $Aes = [System.Security.Cryptography.Aes]::Create()
-        $Aes.Key = $Cle
+        $Aes.Key = $CleAes
         $Aes.IV  = $Iv
-
         $FluxSortie = [System.IO.File]::Create($CheminClair)
-        $EchecDechiffrement = $false
         try {
             $Dechiffreur = $Aes.CreateDecryptor()
             $FluxCrypto = New-Object System.Security.Cryptography.CryptoStream(
-                $FluxSource, $Dechiffreur, [System.Security.Cryptography.CryptoStreamMode]::Read)
-            try {
-                # La validation du remplissage (padding) AES a lieu au moment
-                # de FERMER le flux, pas seulement pendant la copie -- une
-                # phrase incorrecte NE LEVE PAS forcement d'erreur avant
-                # Close(). Les deux doivent donc etre dans CE meme bloc try.
-                $FluxCrypto.CopyTo($FluxSortie)
-                $FluxCrypto.Close()
-            } catch [System.Security.Cryptography.CryptographicException] {
-                $EchecDechiffrement = $true
-            }
+                $FluxLimiteSource, $Dechiffreur, [System.Security.Cryptography.CryptoStreamMode]::Read)
+            $FluxCrypto.CopyTo($FluxSortie)
+            $FluxCrypto.Close()
         } finally {
             $FluxSortie.Close()
             $Aes.Dispose()
-        }
-        if ($EchecDechiffrement) {
-            Remove-Item -Path $CheminClair -Force -ErrorAction SilentlyContinue
-            throw "Dechiffrement de '$CheminChiffre' impossible -- phrase de chiffrement incorrecte, ou fichier corrompu."
         }
     } finally {
         $FluxSource.Close()

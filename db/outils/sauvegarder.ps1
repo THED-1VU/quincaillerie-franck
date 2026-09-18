@@ -183,16 +183,26 @@ if (-not $DossierLogo) {
 # utilisee directement comme cle.
 # ----------------------------------------------------------------------------
 function Chiffrer-Fichier([string]$CheminSource, [string]$Phrase) {
+    # Format du fichier produit : [16 sel][16 IV][... AES-256-CBC ...][32 HMAC-SHA256].
+    # HMAC (chiffrer-puis-authentifier) AJOUTE apres un premier essai sans
+    # lui (trouve par execution : une phrase FAUSSE ne fait pas
+    # systematiquement echouer le seul padding AES-CBC -- il peut, par
+    # hasard, rester valide. Sans HMAC, un rejet de phrase incorrecte
+    # n'etait donc que PROBABLE, jamais garanti). Cle de chiffrement et cle
+    # d'authentification DISTINCTES, derivees ensemble (64 octets PBKDF2 :
+    # 32 pour AES, 32 pour HMAC) -- jamais la meme cle pour les deux usages.
     $CheminCible = "$CheminSource.enc"
     $Sel = New-Object byte[] 16
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($Sel)
 
     $Derivation = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
         $Phrase, $Sel, 100000, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
-    $Cle = $Derivation.GetBytes(32)
+    $Materiel = $Derivation.GetBytes(64)
+    $CleAes  = $Materiel[0..31]
+    $CleHmac = $Materiel[32..63]
 
     $Aes = [System.Security.Cryptography.Aes]::Create()
-    $Aes.Key = $Cle
+    $Aes.Key = $CleAes
     $Aes.GenerateIV()
 
     $FluxSortie = [System.IO.File]::Create($CheminCible)
@@ -213,6 +223,28 @@ function Chiffrer-Fichier([string]$CheminSource, [string]$Phrase) {
     } finally {
         $FluxSortie.Close()
         $Aes.Dispose()
+    }
+
+    # HMAC calcule sur le fichier ENTIER deja ecrit (sel+IV+texte chiffre),
+    # puis ajoute a sa suite -- deuxieme passe simple, jamais un probleme
+    # de volumetrie pour une base de boutique.
+    $Hmac = New-Object System.Security.Cryptography.HMACSHA256(, $CleHmac)
+    try {
+        $FluxLecture = [System.IO.File]::OpenRead($CheminCible)
+        $Empreinte = $null
+        try {
+            $Empreinte = $Hmac.ComputeHash($FluxLecture)
+        } finally {
+            $FluxLecture.Close()
+        }
+    } finally {
+        $Hmac.Dispose()
+    }
+    $FluxAjout = [System.IO.File]::Open($CheminCible, [System.IO.FileMode]::Append)
+    try {
+        $FluxAjout.Write($Empreinte, 0, $Empreinte.Length)
+    } finally {
+        $FluxAjout.Close()
     }
 
     # Le fichier LOCAL reste protege lui aussi (decision explicite du
