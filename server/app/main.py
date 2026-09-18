@@ -209,10 +209,14 @@ def creer_application(config: Config | None = None) -> FastAPI:
     @app.exception_handler(psycopg.OperationalError)
     def _base_injoignable(request: Request, exc: psycopg.OperationalError):
         logger.error("Base de données injoignable sur %s", request.url.path, exc_info=exc)
+        # Message VOLONTAIREMENT generique : ce gestionnaire s'applique a
+        # TOUTE route (vente, connexion, RH, rapports...), pas seulement
+        # l'ecran de caisse — "les articles saisis" n'aurait pas de sens
+        # pour un echec de connexion, par exemple.
         message = (
-            "La caisse n'arrive pas à joindre son système d'enregistrement en ce moment. "
-            "Ce n'est pas un problème de votre côté. Les articles déjà saisis restent "
-            "affichés à l'écran — ne rechargez pas la page : vous pourrez valider dès que "
+            "L'application n'arrive pas à joindre son système d'enregistrement en ce moment. "
+            "Ce n'est pas un problème de votre côté. Ce que vous avez déjà saisi à l'écran "
+            "n'est pas perdu — ne rechargez pas la page : vous pourrez continuer dès que "
             "la connexion sera rétablie."
         )
         if request.app.state.contact_support:
