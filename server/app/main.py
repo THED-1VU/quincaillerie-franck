@@ -48,7 +48,20 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import Config, ErreurConfiguration, charger_config
 from .database import BaseDeDonnees
-from .routes import articles, auth, caisse, demonstration, inventaire, rapports, rh, stock, tableau_bord, transactions, ventes
+from .routes import (
+    articles,
+    auth,
+    caisse,
+    demonstration,
+    exploitation,
+    inventaire,
+    rapports,
+    rh,
+    stock,
+    tableau_bord,
+    transactions,
+    ventes,
+)
 from .securite import GestionnaireSessions, LimiteurDebit
 
 logger = logging.getLogger("quincaillerie")
@@ -120,6 +133,7 @@ def creer_application(config: Config | None = None) -> FastAPI:
     app.include_router(transactions.routeur)
     app.include_router(rh.routeur)
     app.include_router(caisse.routeur)
+    app.include_router(exploitation.routeur)
 
     if MAQUETTE_DIR.is_dir():
         app.mount("/app", StaticFiles(directory=str(MAQUETTE_DIR), html=True), name="maquette")

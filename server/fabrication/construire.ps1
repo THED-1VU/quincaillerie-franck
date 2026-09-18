@@ -42,6 +42,32 @@ $WorkPath      = Join-Path $PSScriptRoot 'build'
 
 function EcrireEtape($msg) { Write-Host ''; Write-Host "== $msg ==" -ForegroundColor Cyan }
 
+# Repli WORKTREE (travail en parallele, voir db/README.md "Bases dediees au
+# travail en parallele") : les trois pistes partagent le MEME venv Python
+# (celui du depot principal) pour ne pas reinstaller les dependances trois
+# fois. Si ce worktree n'a pas son propre server\.venv, on cherche en
+# remontant l'arborescence (jusqu'a 6 niveaux -- un worktree Git vit sous
+# _worktrees\<piste>\, deux niveaux sous le depot principal) un
+# server\.venv\Scripts\python.exe qui, lui, existe. Sur un poste de
+# production ou un checkout unique (pas de worktree), $PythonExe est deja
+# trouve localement et cette recherche ne change rien.
+if (-not (Test-Path $PythonExe)) {
+    $Courant = $RacineServeur
+    for ($i = 0; $i -lt 6; $i++) {
+        $Parent = Split-Path $Courant -Parent
+        if (-not $Parent -or $Parent -eq $Courant) { break }
+        $Courant = $Parent
+        $CandidatPython = Join-Path $Courant 'server\.venv\Scripts\python.exe'
+        if (Test-Path $CandidatPython) {
+            $Venv        = Join-Path $Courant 'server\.venv'
+            $PythonExe   = $CandidatPython
+            $PyInstaller = Join-Path $Venv 'Scripts\pyinstaller.exe'
+            Write-Host "Environnement Python partage trouve : $Venv" -ForegroundColor Yellow
+            break
+        }
+    }
+}
+
 if (-not (Test-Path $PythonExe)) {
     Write-Host "ERREUR : environnement Python introuvable dans $Venv" -ForegroundColor Red
     Write-Host "Creez-le d'abord :"
