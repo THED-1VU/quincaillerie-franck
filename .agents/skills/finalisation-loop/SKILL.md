@@ -1,8 +1,9 @@
 ---
 name: finalisation-loop
 description: >-
-  Cycle de finalisation en 4 étapes pour la reconstruction de l'application
-  Quincaillerie Franck. À invoquer à chaque itération : on diagnostique par
+  Cycle de finalisation en 4 étapes pour la reconstruction d'Akuma, l'application
+  de gestion de quincaillerie déployée aux Ets Quincaillerie Franck. À invoquer à
+  chaque itération : on diagnostique par
   exécution réelle le cycle précédent, on propose des chantiers candidats du
   référentiel fixe C0–C14 sans en choisir aucun soi-même, on écrit l'objectif
   et le plan du chantier retenu puis on S'ARRÊTE pour attendre la validation
@@ -11,7 +12,7 @@ description: >-
   réelle, puis qu'on met à jour l'état et qu'on committe.
 ---
 
-# Cycle de finalisation — Quincaillerie Franck
+# Cycle de finalisation — Akuma (Ets Quincaillerie Franck)
 
 ## But
 

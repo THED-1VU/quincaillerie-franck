@@ -853,7 +853,7 @@ server/fabrication/
 ├── quincaillerie_franck.spec      configuration PyInstaller
 ├── construire.ps1                 script humain : "lance juste ça"
 ├── DERNIER_RESULTAT.md            trace de la dernière construction + vérifications
-├── dist/    (ignoré par Git)      QuincaillerieFranck.exe produit
+├── dist/    (ignoré par Git)      Akuma.exe produit (renommé au cycle 28)
 └── build/   (ignoré par Git)      fichiers intermédiaires de PyInstaller
 ```
 
@@ -865,14 +865,14 @@ server/fabrication/
 
 Installe PyInstaller dans `server\.venv` si besoin, construit l'exécutable,
 copie `config.example.ini` à côté. Résultat :
-`server\fabrication\dist\QuincaillerieFranck.exe`.
+`server\fabrication\dist\Akuma.exe`.
 
 ### Distribuer sur un poste
 
 1. Copier tout le contenu de `server\fabrication\dist\` sur le poste cible.
 2. Renommer `config.example.ini` en `config.ini`, le remplir (voir
    « Configurer » plus haut) — **jamais** committer ce fichier rempli.
-3. Double-cliquer `QuincaillerieFranck.exe`. Une fenêtre console s'ouvre
+3. Double-cliquer `Akuma.exe`. Une fenêtre console s'ouvre
    (messages de démarrage, erreurs de configuration lisibles), le serveur
    démarre, un navigateur s'ouvre automatiquement.
 

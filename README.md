@@ -1,7 +1,9 @@
-# Quincaillerie Franck — reconstruction
+# Akuma — reconstruction (Ets Quincaillerie Franck)
 
-Dépôt de la reconstruction de l'application de gestion des **Ets Quincaillerie Franck**
-(Batouri, région de l'Est, Cameroun).
+Dépôt de la reconstruction d'**Akuma**, l'application de gestion de quincaillerie
+déployée aux **Ets Quincaillerie Franck** (Batouri, région de l'Est, Cameroun).
+Akuma est le nom de la gamme logicielle (éditeur) ; « Ets Quincaillerie Franck »
+reste le nom du client — voir `ADDENDUM_CAHIER_DES_CHARGES.md`.
 
 > **État : reconstruction, cycle 4 fusionné.** L'application d'origine a été livrée
 > uniquement en exécutables Windows ; le code source est introuvable. Le dépôt a
@@ -34,7 +36,8 @@ Dépôt de la reconstruction de l'application de gestion des **Ets Quincaillerie
 | [`server/fabrication/DERNIER_RESULTAT.md`](server/fabrication/DERNIER_RESULTAT.md) | Trace de la dernière construction : exécutable testé depuis un dossier **totalement isolé** du dépôt — démarrage, base de données, bcrypt, tout fonctionne sans Python installé. |
 
 `.\server\fabrication\construire.ps1` produit
-`server\fabrication\dist\QuincaillerieFranck.exe` (17,9 Mo, autonome). Le
+`server\fabrication\dist\Akuma.exe` (17,9 Mo, autonome — renommé au cycle 28,
+voir `server/fabrication/quincaillerie_franck.spec`). Le
 navigateur ouvert par le lanceur pointe pour l'instant sur `/docs`
 (placeholder documenté) : le câblage de l'interface réelle est le travail
 des chantiers C9/C10, à venir.

@@ -530,6 +530,34 @@ UI parlent pourtant d'un **« caissier »** sur PC (« utilisation clavier par l
 > chantier dédié). Questions 2 à 6 (RTO cible, budget onduleur/poste de
 > secours, connexion Internet pour une copie distante, qui sait restaurer
 > sur place, fréquence acceptable des mises à jour) restent ouvertes.
+>
+> **Décidé (2026-09-18), chantier C12.** Trois manques bloquant une mise en
+> service réelle, réglés :
+> - **Chiffrement des sauvegardes** (déjà proposé ci-dessus) : porte sur le
+>   fichier produit par `sauvegarder.ps1` lui-même (AES-256 + HMAC-SHA256,
+>   PowerShell/.NET natif — aucune dépendance externe, aucune installation
+>   sur le poste boutique ; BitLocker To Go écarté, il exige Windows Pro/
+>   Enterprise). La **phrase de passe** est saisie par le responsable à la
+>   configuration, jamais écrite dans un fichier du dépôt, stockée comme les
+>   autres secrets de l'application — voir `db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`
+>   §6, à lire avant toute installation.
+> - **Sauvegarde sans session Windows ouverte** : `planifier_sauvegarde.ps1
+>   -CompteSysteme` enregistre la tâche planifiée sous `NT AUTHORITY\SYSTEM`
+>   au lieu d'un compte interactif — s'exécute même si personne n'est
+>   connecté au poste.
+> - **PostgreSQL non enregistré comme service Windows** — trouvé plus grave
+>   que les plantages eux-mêmes : rien ne le relançait après un arrêt brutal,
+>   la boutique restait bloquée jusqu'à une intervention technique.
+>   `enregistrer_service_pg.ps1` l'enregistre comme service (démarrage
+>   automatique + redémarrage automatique après échec).
+> - **Écran figé quand la base devient injoignable** — le pire scénario
+>   identifié pour ce chantier : un vendeur devant un écran mort, un client
+>   qui attend. L'application affiche désormais, dans ce cas précis, un
+>   message clair en français (base injoignable, ce n'est pas la faute du
+>   vendeur, la saisie en cours n'est pas perdue, qui prévenir) au lieu de
+>   se figer ou d'afficher une erreur technique — voir
+>   `server/app/main.py` (gestionnaire `psycopg.OperationalError`) ; le
+>   détail technique va au journal serveur, jamais à l'écran du comptoir.
 
 **Contexte.** Coupures de courant fréquentes à Batouri, PostgreSQL sur un poste serveur non
 protégé = risque de corruption. Le CDC exige une sauvegarde quotidienne (rétention 30 jours,

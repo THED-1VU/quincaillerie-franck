@@ -1,4 +1,4 @@
-# Maquette d'ergonomie — Quincaillerie Franck (cycle 1, chantier C9)
+# Maquette d'ergonomie — Akuma (cycle 1, chantier C9)
 
 Maquette **fonctionnelle mais non câblée** des quatre écrans clés. Sert à mesurer
 l'ergonomie **avant** tout développement métier.

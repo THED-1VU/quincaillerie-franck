@@ -1,4 +1,4 @@
-# État du cycle de finalisation — Quincaillerie Franck
+# État du cycle de finalisation — Akuma (Ets Quincaillerie Franck)
 
 Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
@@ -93,7 +93,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C9 | Ergonomie et UI *(priorité 1)* | **58 %** | Cycle 5, réévalué à la baisse le 2026-09-13 par la première campagne humaine réelle, puis **à la hausse au cycle 24** (piste UX, travail en parallèle) : 4 des 6 constats de cette catégorie corrigés et **vérifiés par exécution réelle** — UX-1 (ajouter un article en ≤ 2 actions **quelle que soit la quantité**, un nombre en tête de la recherche fixe la quantité dès l'ajout), UX-2 (vente entière au clavier seul **avec un prix négocié**, nouveau raccourci `F3`), UX-9 (le prix affiché en gris précise désormais explicitement « indicatif », « PAS le prix qui sera facturé »), UX-10 (avertissement toujours visible : un comptage validé est définitif, sans dialogue bloquant supplémentaire). Rejoué par la session qui fusionne : `verifier-ux-corrections.mjs` 27/27, aucune régression sur les 8 suites existantes. **Reste ouvert** : UX-0 (le désaccord de méthode lui-même — pire des 3 essais vs 3ᵉ essai — reste à trancher par le propriétaire, aucun code n'y répond), UX-8 (annuler une ligne du panier toujours introuvable seul, hors du plan de cette piste). **Important : l'objectif chronométré principal (vente de 3 articles < 60 s, pire des 3 essais) n'a PAS été re-mesuré avec un vrai testeur humain** — seules les frictions structurelles identifiées ont été supprimées et prouvées par exécution automatisée réelle (Playwright + backend réel), pas par une seconde campagne humaine. Une deuxième campagne réelle reste nécessaire avant de considérer C9 proche de 100 %. |
 | C10 | Mobile et API web *(priorité 1)* | **55 %** | Cycle 5, complété au cycle 15, réévalué à la hausse le 2026-09-13 par la première campagne sur un vrai téléphone physique, puis **de nouveau à la hausse au cycle 24** (piste UX, travail en parallèle) : 3 des 5 constats mobiles corrigés et vérifiés par exécution réelle — UX-3 (débordement du tableau de bord : cause CSS identifiée et corrigée — `grid-template-columns` sans `minmax(0, ...)` laissait un contenu long, non couvert par le jeu d'essai de test, pousser la grille hors écran ; 0 px de débordement mesuré aux 5 largeurs avec un nom d'article réellement long et non sécable), UX-4 (taille de police minimale garantie sur les chiffres des cartes, mesurée ≥ 16px à 360/390px), UX-7 — **le plus sérieux constat de la campagne** — (coupure réseau en cours de requête : `AbortController` à 20 s autour de `fetch()`, message français affiché, formulaire réutilisable sans recharger la page). UX-6 (clavier numérique) était en réalité **déjà correct** à l'inspection (`type="number"` + `inputmode="numeric"` déjà posés) — pas un vrai défaut, confirmé par lecture directe du DOM rendu. **Honnêteté conservée sur UX-3/4** : l'identité exacte du téléphone/navigateur du testeur original n'a jamais été renseignée ; un facteur non reproductible propre à cet appareil n'est pas formellement exclu comme cause additionnelle — seule la cause CSS a pu être diagnostiquée et corrigée par exécution. **Reste ouvert** : UX-5 (saisie d'une recette toujours trop lente au téléphone, 1 min 02 mesuré contre un objectif de 45 s — hors du plan de cette piste, non traité). Une deuxième campagne sur un vrai téléphone physique reste nécessaire pour confirmer ces corrections dans les conditions réelles d'origine. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **68 %** | Cycle 3, complété au cycle 22. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse, erreurs SQL jamais renvoyées telles quelles au client. **Cycle 22** : révocation de session (migration 018, `POST /auth/deconnexion`, `deps.obtenir_session()` vérifie la révocation à chaque requête — un jeton révoqué signature-valide et non expiré est quand même refusé, prouvé en le rejouant après déconnexion) ; en-têtes HTTP de sécurité (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) sur toute réponse. Vérifié par exécution : 4/4 tests pytest dédiés (144/144 au total, 0 régression, coût mesuré ~13 % de temps d'exécution en plus), `verifier-cablage.mjs` +3 (80/80, jeton intercepté avant déconnexion puis rejoué → refusé). Reste : limiteur de débit partagé entre processus (délibérément pas fait ce cycle — mérite sa propre vérification, pas glissé à la suite de deux autres changements de sécurité), audit plus large (dépendances, TLS — hors périmètre local de dev). |
-| C12 | Sauvegarde et exploitation | **80 %** | Cycle 21, complété au **cycle 26** (piste C12, travail en parallèle, addendum point i — RPO cible 1 heure décidé le 2026-09-13). `sauvegarder.ps1` étendu : `-DossierDistant` (copie hors-site vérifiée par `Test-Path` après copie), `-RetentionJours` (purge glissante, testée avec des fichiers réellement vieillis), **fichier d'état daté** (`dernier_etat_sauvegarde.json`, écrasé à chaque tentative succès/échec — durcissement explicitement exigé : « une sauvegarde qui échoue en silence est pire que pas de sauvegarde »), **trace dans le journal d'événements Windows** (source dédiée si enregistrée par un administrateur, repli sur la source générique sinon — vérifié dans le XML brut de l'événement). `planifier_sauvegarde.ps1` (nouveau) : tâche planifiée Windows, deux déclencheurs (horaire pendant les heures d'ouverture + un déclenchement de fin de journée), **déclenchement réel prouvé** (pas seulement l'enregistrement de la tâche — fichiers produits par CE déclenchement, tâche de test supprimée après preuve). Nouvelle route `GET /exploitation/derniere-sauvegarde` (réservée au responsable) : **donnée prête pour le voyant du tableau de bord**, revérifiée par la session qui fusionne avec de vraies requêtes HTTP (fichier absent → `configure:false` ; sauvegarde réelle relancée → `configure:true, resultat:SUCCES` ; jeton agent stock → 403). Exécutable reconstruit (26 Mo, `openpyxl`/`reportlab`/`pypdf`), testé **isolé** (dossier hors dépôt) : export Excel et PDF réels, reçu de vente PDF relu avec son contenu vérifié. **Preuve de restauration non négociable** : sauvegarde avec copie hors-site puis restauration **depuis la copie hors-site elle-même** (pas le fichier local) — comptes de lignes et droits par colonne identiques, contenu réel vérifié ligne à ligne, base de preuve supprimée après coup. Manquent : câblage visuel du voyant sur `tableau-bord.html` (la donnée existe déjà côté serveur — bloqué jusqu'à la fusion de la piste UX, **maintenant fusionnée**, reste à câbler) ; alerte WhatsApp/e-mail réelle (hors de portée sans compte réel à notifier) ; chiffrement de la copie hors-site ; test de restauration sur un second poste physique ; tâche planifiée en mode utilisateur connecté seulement (pas de compte de service) ; onduleur, mise à jour des postes (addendum i). |
+| C12 | Sauvegarde et exploitation | **92 %** | Cycle 21, complété au cycle 26 (piste C12, travail en parallèle, addendum point i — RPO cible 1 heure décidé le 2026-09-13). `sauvegarder.ps1` étendu : `-DossierDistant` (copie hors-site vérifiée par `Test-Path` après copie), `-RetentionJours` (purge glissante, testée avec des fichiers réellement vieillis), **fichier d'état daté** (`dernier_etat_sauvegarde.json`, écrasé à chaque tentative succès/échec — durcissement explicitement exigé : « une sauvegarde qui échoue en silence est pire que pas de sauvegarde »), **trace dans le journal d'événements Windows** (source dédiée si enregistrée par un administrateur, repli sur la source générique sinon — vérifié dans le XML brut de l'événement). `planifier_sauvegarde.ps1` : tâche planifiée Windows, deux déclencheurs (horaire pendant les heures d'ouverture + un déclenchement de fin de journée), **déclenchement réel prouvé** (pas seulement l'enregistrement de la tâche — fichiers produits par CE déclenchement, tâche de test supprimée après preuve). Route `GET /exploitation/derniere-sauvegarde` (réservée au responsable) : **donnée prête pour le voyant du tableau de bord**, câblée visuellement au cycle 27. Exécutable reconstruit (26 Mo, `openpyxl`/`reportlab`/`pypdf`), testé **isolé** (dossier hors dépôt) : export Excel et PDF réels, reçu de vente PDF relu avec son contenu vérifié. **Preuve de restauration non négociable** : sauvegarde avec copie hors-site puis restauration **depuis la copie hors-site elle-même** (pas le fichier local) — comptes de lignes et droits par colonne identiques, contenu réel vérifié ligne à ligne, base de preuve supprimée après coup. **Cycle 28** — trois manques identifiés comme bloquant une mise en service réelle, réglés : **chiffrement du fichier de sauvegarde** (AES-256-CBC + HMAC-SHA256, PowerShell/.NET natif, phrase de passe saisie par le responsable et jamais versionnée — inclut désormais le logo de la boutique, cf. ci-dessous) ; **sauvegarde sans session Windows ouverte** (`planifier_sauvegarde.ps1 -CompteSysteme`, tâche sous `NT AUTHORITY\SYSTEM`) ; **PostgreSQL enregistré comme service Windows** avec redémarrage automatique après un arrêt brutal (`enregistrer_service_pg.ps1`, mécanisme écrit et vérifié syntaxiquement, **enregistrement réel non exécuté faute de droits administrateur dans cette session** — reste à faire exécuter par le propriétaire). Diagnostic par exécution réelle (PostgreSQL arrêté/relancé avec autorisation explicite) : une requête vers une base injoignable restait bloquée **2 min 10 s** avant d'échouer, faute de `connect_timeout` — corrigé (`connect_timeout=5`) — et affichait une erreur technique brute ; remplacé par un message français clair, sans jargon ni code visible, satisfaisant les quatre exigences posées (base non jointe, pas la faute du vendeur, saisie non perdue, qui prévenir). Manquent : **enregistrement réel du service PostgreSQL et de la tâche planifiée sous compte SYSTEM** (scripts prêts, admin requis) ; cause racine des plantages PostgreSQL non éliminée (seul le redémarrage automatique l'est) ; alerte WhatsApp/e-mail réelle (hors de portée sans compte réel à notifier) ; test de restauration sur un second poste physique ; onduleur, mise à jour des postes (addendum i) ; un risque opérationnel découvert par exécution (disparition répétée du script de sauvegarde sur ce poste de dev, très probablement la protection anti-rançongiciel de Windows — voir `db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`) reste à surveiller sur le poste réel de la boutique. |
 | C13 | Tests automatisés et qualité | **60 %** | Cycle 20, complété au **cycle 27** : **172 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **9 suites Playwright** (261 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant. `db/outils/verifier_tout.sh` enchaîne les trois couches en une seule commande. **Cycle 27** : un des deux points bloquant une CI Linux, cité depuis le cycle 20, est corrigé — `server/tests/conftest.py` cherchait `psql.exe` en dur dans `_pgdev/pgsql/bin/` (distribution portable Windows, absente de tout runner CI) ; cherche désormais `psql` sur le `PATH` en premier (`shutil.which`), ne retombant sur le chemin Windows que s'il est introuvable — comportement du poste de développement inchangé (vérifié : aucun `psql` sur son `PATH`, le repli s'active toujours), 172/172 tests toujours au vert. Reste, non traité ce cycle : `PGHOST`/`PGPORT` (5433, instance portable) et le mot de passe de test en dur restent, eux aussi, propres à ce poste — un runner CI aurait besoin de ses propres variables d'environnement ; aucun pipeline CI (fichier de workflow) n'existe encore. Couverture des parcours nécessitant une imprimante ou un téléphone réels toujours hors de portée d'une suite automatisée. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
@@ -2336,6 +2336,104 @@ dépend d'une décision non encore obtenue du propriétaire.
 
 ---
 
+### Cycle 28 — Exploitation C12 (trois manques bloquants), identité visuelle Akuma, logo du client — 2026-09-19
+
+Chantier choisi par le propriétaire lui-même (C12, « le seul lot qui
+bloque une mise en service réelle »), avec deux tâches transverses
+greffées dans le même cycle : le nommage de l'application (Akuma, marque
+de la gamme logicielle — « Ets Quincaillerie Franck » reste le nom du
+client) et une nouvelle fonction (logo de la boutique téléversable par le
+responsable).
+
+- **Diagnostic par exécution réelle, autorisé explicitement par le
+  propriétaire** (arrêt/relance de PostgreSQL, poste de développement,
+  aucune donnée de production) : une requête vers une base injoignable
+  restait bloquée **2 min 10,1 s** avant d'échouer — aucun `connect_timeout`
+  n'était posé sur les connexions psycopg — et l'écran affichait une erreur
+  technique brute au lieu de se figer proprement. Découverte plus grave que
+  les plantages eux-mêmes, élevée par le propriétaire au même rang que la
+  sauvegarde sans session : **PostgreSQL n'était pas enregistré comme
+  service Windows**, donc rien ne le relançait après un arrêt brutal.
+- **C12 — trois manques réglés** : (1) chiffrement du fichier de sauvegarde
+  lui-même (AES-256-CBC + HMAC-SHA256, PowerShell/.NET natif, sans
+  dépendance externe ni installation sur le poste boutique — BitLocker To
+  Go écarté, il exige Windows Pro/Enterprise ; phrase de passe saisie par
+  le responsable, jamais versionnée, stockée comme les autres secrets ;
+  HMAC vérifié en temps constant **avant** toute tentative de déchiffrement,
+  après avoir constaté par un essai réel qu'une mauvaise phrase pouvait
+  parfois passer la validation du remplissage AES seule) ; (2) sauvegarde
+  sans session Windows ouverte (`planifier_sauvegarde.ps1 -CompteSysteme`,
+  tâche sous `NT AUTHORITY\SYSTEM`) ; (3) PostgreSQL enregistré comme
+  service Windows avec redémarrage automatique après échec
+  (`enregistrer_service_pg.ps1` — **écrit et vérifié syntaxiquement,
+  enregistrement réel non exécuté faute de droits administrateur dans
+  cette session**, reste à faire confirmer par le propriétaire).
+  `connect_timeout=5` posé, et le message affiché au vendeur quand la base
+  devient injoignable refait en français simple, sans jargon ni code
+  visible, revu une fois après un premier essai trop spécifique à l'écran
+  de caisse (le gestionnaire s'applique à toute route) : la base ne
+  répond pas, ce n'est pas la faute du vendeur, la saisie en cours n'est
+  pas perdue, qui prévenir (`contact_support_technique`, nouveau paramètre,
+  `a_definir` — décision du propriétaire encore attendue).
+- **Logo du client (nouvelle fonction)** : `POST/DELETE/GET
+  /configuration/logo`, réservé au rôle responsable **prouvé au niveau de
+  la requête** (403 testé pour les deux rôles agents), PNG/JPEG uniquement
+  vérifiés par **signature réelle du fichier** (pas l'extension), décodage
+  + réencodage serveur avant écriture sur disque (élimine les fichiers
+  polyglottes), taille maximale 2 Mo documentée, stocké hors base
+  (`server/donnees/logo_boutique/`, jamais versionné) — la base ne garde
+  que l'extension présente. Sans logo téléversé, l'application fonctionne
+  normalement avec le seul nom de la boutique : jamais d'image cassée,
+  jamais d'espace vide (vérifié). Inclus dans la sauvegarde/restauration
+  (chiffré comme le reste). Le logo Akuma (éditeur) reste, lui, non
+  remplaçable par l'utilisateur.
+- **Identité visuelle Akuma** : logo officiel (fourni par le propriétaire)
+  décliné en trois formats (complet, compact sans baseline/cachet, icône
+  carrée) par analyse réelle du fichier source (canal alpha pour détecter
+  les zones à recadrer, échantillonnage des couleurs dominantes plutôt que
+  choisies à l'œil) ; le logo complet ne descend jamais sous 120 px de
+  large (`connexion.html`), vérifié par capture aux 5 largeurs habituelles
+  (360/390/768/1366/1920 px). Thème central aligné sur les deux couleurs du
+  logo (`--c-primaire` remplacé par le bleu échantillonné, nouvel accent or
+  `--c-accent-or` — **seul** le montant total à payer de `vente.html`
+  l'utilise, usage volontairement restreint, aucune refonte d'écran).
+  `boutique_nom` inchangé sur les reçus ; aucun renommage du dépôt Git, des
+  bases de données ni des dossiers (validé explicitement par le
+  propriétaire). Renommage de surface : titres de fenêtres/onglets,
+  bandeau de chaque écran, exécutable (`Akuma.exe`, icône propre),
+  documentation listée par le propriétaire (`README.md`, `server/README.md`,
+  `maquette/README.md`, `SKILL.md`, `loop-state.md` — jamais le récit
+  historique des cycles passés).
+- **Incident d'infrastructure signalé pour mémoire** (aucun n'est un bug de
+  ce cycle) : `sauvegarder.ps1` a disparu du disque à trois reprises durant
+  les essais, chaque fois ~10-15 s après une exécution **réussie** —
+  cohérent avec la protection anti-rançongiciel de Windows (Contrôle
+  d'accès aux dossiers) réagissant au motif lire-chiffrer-supprimer
+  l'original, plutôt qu'avec Defender lui-même (protection en temps réel
+  confirmée désactivée). Contourné en committant après chaque petit
+  changement vérifié ; non éliminable depuis l'intérieur du script —
+  documenté comme risque opérationnel réel dans
+  `db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`, avec la remédiation
+  standard (autoriser `powershell.exe`/`Akuma.exe` dans les paramètres
+  Windows). Deuxième incident, sans rapport avec ce cycle : une reprise
+  unique de `verifier-inventaire-reel.mjs` (déjà signalée fragile aux
+  cycles précédents) — reproduite puis expliquée par un enchaînement de
+  suites tombant par malchance à cheval sur le changement de jour à
+  Batouri (`Africa/Douala`, UTC+1) pendant les essais ; rejouée à distance
+  de toute frontière de jour, 17/17 à chaque fois.
+- **Vérifié par exécution, intégralement rejoué après tous les
+  changements** (`db/outils/verifier_tout.sh`, base reconstruite depuis
+  zéro) : suite SQL complète (0 échec), **183/183 tests pytest** (172 +
+  11 nouveaux pour le logo), **9 suites Playwright, 210 contrôles, 0
+  échec** (`cablage` 94/94, `vente` 12/12, `inventaire` 17/17, `stock`
+  26/26, `rapports` 29/29, `echappement` 11/11, `rh` 21/21), base laissée
+  dans un jeu d'essai propre.
+- **Score** : C12 **80 % → 92 %**. Aucun autre chantier du référentiel
+  touché — l'identité visuelle et le logo du client sont des tâches
+  transverses, hors `C0`–`C14`.
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
@@ -2378,11 +2476,13 @@ avant tout code (voir `ADDENDUM_CAHIER_DES_CHARGES.md`, callouts
   rôle `agent_comptabilite` existant (fusion des deux, ou rôle distinct à
   droits identiques) reste à trancher au diagnostic du chantier. Débloque
   un chantier C3.
-- **Point i** (RPO/RTO) : RPO cible **1 heure**. **Livré au cycle 26**
-  (C12 80 %) — planification automatique réelle, fichier d'état daté,
-  journal d'événements Windows, route serveur prête pour un voyant ;
-  reste le câblage visuel du voyant et un test sur un second poste
-  physique.
+- **Point i** (RPO/RTO) : RPO cible **1 heure**. Livré au cycle 26
+  (planification automatique réelle, fichier d'état daté, journal
+  d'événements Windows), voyant câblé au cycle 27, chiffrement des
+  sauvegardes + sauvegarde sans session Windows + PostgreSQL comme service
+  livrés au **cycle 28** (C12 92 %) ; reste l'enregistrement réel du
+  service PostgreSQL et de la tâche planifiée (admin requis, scripts
+  prêts) et un test de restauration sur un second poste physique.
 - **Point l** (propriété du code) : déjà résolu en pratique, formalisé
   dans `OWNERSHIP.md` (nouveau) — audit de l'historique Git complet
   confirmant qu'aucun secret réel n'y a jamais été committé. **Clos**, ne
