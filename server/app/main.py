@@ -84,7 +84,7 @@ def creer_application(config: Config | None = None) -> FastAPI:
         config = charger_config()
 
     app = FastAPI(
-        title="Quincaillerie Franck — noyau serveur",
+        title="Akuma — noyau serveur",
         description=(
             "Authentification et habilitations. Aucun écran, aucune règle "
             "métier de vente/stock : voir README.md."

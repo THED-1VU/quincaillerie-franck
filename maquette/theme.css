@@ -19,9 +19,19 @@
   --c-texte-inverse   : #ffffff;
 
   /* ---- Couleur d'action principale ---- */
-  --c-primaire        : #1a5fb4;
-  --c-primaire-fonce  : #154c92;
-  --c-primaire-clair  : #e5eefb;
+  /* Cycle 28 : alignée sur le bleu du logo Akuma (échantillonné sur le
+     fichier officiel, maquette/assets/akuma-logo.png) — seules ces
+     variables changent, aucun écran n'est refondu. */
+  --c-primaire        : #00408f;
+  --c-primaire-fonce  : #003270;
+  --c-primaire-clair  : #e6ecf4;
+
+  /* ---- Couleur d'accent (identité Akuma) ---- */
+  /* Or du logo, échantillonné de la même façon. Usage volontairement
+     restreint (cf. ADDENDUM_CAHIER_DES_CHARGES.md, cycle 28) : ne
+     remplace pas --c-primaire, ne redessine aucun écran. */
+  --c-accent-or       : #d4930d;
+  --c-accent-or-clair : #faf2e2;
 
   /* ---- États sémantiques ---- */
   --c-succes          : #1c7c3c;

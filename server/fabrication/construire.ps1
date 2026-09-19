@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Fabrique QuincaillerieFranck.exe (chantier C0).
+    Fabrique Akuma.exe (chantier C0).
 
 .DESCRIPTION
     Ce script ne suppose AUCUNE connaissance de PyInstaller. Il :
@@ -10,7 +10,7 @@
       3. copie config.example.ini a cote de l'executable produit, pour
          qu'un installateur puisse le renommer en config.ini et le remplir.
 
-    Le resultat se trouve dans server\fabrication\dist\QuincaillerieFranck.exe.
+    Le resultat se trouve dans server\fabrication\dist\Akuma.exe.
 
     NOTE DE NOMMAGE : ce dossier s'appelle "fabrication", pas "build" : le
     .gitignore exclut tout dossier nomme "build/" (artefacts de compilation
@@ -85,14 +85,14 @@ if (-not (Test-Path $PyInstaller)) {
     }
 }
 
-EcrireEtape "Construction de QuincaillerieFranck.exe"
+EcrireEtape "Construction de Akuma.exe"
 & $PyInstaller $SpecFile --distpath $DistPath --workpath $WorkPath --noconfirm
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ECHEC de la construction. Voir le journal ci-dessus." -ForegroundColor Red
     exit 1
 }
 
-$ExeCree = Join-Path $DistPath 'QuincaillerieFranck.exe'
+$ExeCree = Join-Path $DistPath 'Akuma.exe'
 if (-not (Test-Path $ExeCree)) {
     Write-Host "ECHEC : $ExeCree n'a pas ete produit." -ForegroundColor Red
     exit 1

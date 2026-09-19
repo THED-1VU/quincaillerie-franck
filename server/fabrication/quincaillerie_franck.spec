@@ -1,6 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Fabrication de QuincaillerieFranck.exe (chantier C0, cycle 4).
+Fabrication de Akuma.exe (chantier C0, cycle 4, renommé cycle 28 : Akuma
+est la marque de l'éditeur, "Ets Quincaillerie Franck" reste le nom du
+client — voir ADDENDUM_CAHIER_DES_CHARGES.md).
 
 Empaquette le lanceur (fabrication/lanceur.py) et le serveur (app/) en un seul
 exécutable Windows autonome, sans installation de Python requise sur le
@@ -75,7 +77,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="QuincaillerieFranck",
+    name="Akuma",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -88,4 +90,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon="akuma.ico",  # cycle 28 -- voir maquette/assets/akuma-monogram.png (source)
 )

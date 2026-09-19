@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Connexion — Quincaillerie Franck</title>
-<link rel="icon" href="favicon.svg">
+<title>Connexion — Akuma</title>
+<link rel="icon" href="favicon.ico">
 <link rel="stylesheet" href="theme.css">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -13,8 +13,15 @@
 <div class="page">
   <main class="contenu contenu--etroit" style="display:flex; align-items:center; justify-content:center;">
     <div class="carte" style="width:100%; max-width:420px;">
-      <h1 style="text-align:center;">Ets Quincaillerie Franck</h1>
-      <div id="apercu-logo-connexion" style="text-align:center; margin-bottom:var(--e-3);"></div>
+      <div style="text-align:center; margin-bottom:var(--e-4);">
+        <!-- Marque Akuma (éditeur), jamais remplaçable par l'utilisateur.
+             Le logo complet ne descend jamais sous 120 px de large : la
+             baseline "Gestion de Quincaillerie" deviendrait illisible. -->
+        <img src="assets/akuma-logo.png" alt="Akuma — Gestion de Quincaillerie"
+             style="width:100%; max-width:200px; min-width:120px;">
+      </div>
+      <div id="apercu-logo-connexion" style="text-align:center; margin-bottom:var(--e-2);"></div>
+      <h1 style="text-align:center; font-size:var(--t-lg); margin:0;">Ets Quincaillerie Franck</h1>
       <p style="text-align:center; color:var(--c-texte-doux); margin-bottom:var(--e-5);">Connexion à l'application de gestion</p>
 
       <form id="form-connexion" novalidate>

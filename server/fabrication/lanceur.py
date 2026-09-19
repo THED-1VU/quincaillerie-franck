@@ -1,4 +1,5 @@
-"""Point d'entrée de l'exécutable QuincaillerieFranck.exe.
+"""Point d'entrée de l'exécutable Akuma.exe (cycle 28 : Akuma est la marque
+de l'éditeur — voir ADDENDUM_CAHIER_DES_CHARGES.md).
 
 Ce module est le SEUL fichier compilé par PyInstaller (voir
 quincaillerie_franck.spec). Il ne contient aucune logique métier : il se
@@ -126,7 +127,7 @@ _PORT_COURANT = [PORT_PAR_DEFAUT]
 
 
 def main() -> int:
-    print("Ets Quincaillerie Franck — démarrage du serveur local...")
+    print("Akuma — démarrage du serveur local...")
 
     try:
         config = charger_config()

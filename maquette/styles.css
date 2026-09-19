@@ -47,9 +47,13 @@ a { color: var(--c-primaire); }
   border-bottom: 1px solid var(--c-bordure);
 }
 .bandeau__titre { font-size: var(--t-md); font-weight: var(--poids-demi); margin: 0; }
+/* Cycle 28 : la marque Akuma est devenue une image (maquette/assets/
+   akuma-logo-compact.png) — .bandeau__marque ne stylait auparavant que
+   du texte (couleur, graisse) ; conservé comme point d'ancrage pour
+   afficherLogoBoutiqueDansBandeau() (api.js), qui insère le logo DU
+   CLIENT juste après. */
 .bandeau__marque {
-  font-weight: var(--poids-fort); color: var(--c-primaire);
-  white-space: nowrap;
+  height: 32px; width: auto; display: block;
 }
 /* Logo de la boutique cliente (cycle 28), distinct de la marque Akuma —
    posé par afficherLogoBoutiqueDansBandeau() (api.js), retiré du DOM par
@@ -238,7 +242,15 @@ a { color: var(--c-primaire); }
   display: flex; justify-content: space-between; align-items: baseline;
   margin-top: var(--e-3);
 }
-.total-ligne--grand .montant { font-size: var(--t-xl); font-weight: var(--poids-fort); }
+/* Cycle 28 : seule application de l'accent or de l'identité Akuma — le
+   montant total à encaisser, seul endroit où une mise en avant de couleur
+   supplémentaire a du sens (ce que le client va payer). Aucun autre écran
+   ni composant n'utilise cette variable : usage volontairement restreint,
+   voir ADDENDUM_CAHIER_DES_CHARGES.md. */
+.total-ligne--grand .montant {
+  font-size: var(--t-xl); font-weight: var(--poids-fort);
+  color: var(--c-accent-or);
+}
 .montant { font-variant-numeric: tabular-nums; }
 
 /* ---- Grille tableau de bord (mobile d'abord) ---- */
