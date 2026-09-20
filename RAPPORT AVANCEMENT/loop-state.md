@@ -2469,6 +2469,32 @@ responsable).
 
 ---
 
+### Cycle 34 — Candidat 13a : rapprochement des fiches homonymes — 2026-09-20
+
+- **Décisions du propriétaire verrouillées** : suggestion automatique sur
+  nom strictement identique (après `btrim`), validation humaine **une par
+  une**, jamais de fusion automatique ; prix et fournisseur communs à la
+  fiche unique ; catalogue visible aux deux sites, seule la quantité reste
+  cloisonnée.
+- **Livré** : migration 025 — table `rapprochements_articles` (décisions
+  définitives `fusionner`/`distincts`), fonction `candidats_rapprochement()`
+  et `enregistrer_rapprochement()` (`SECURITY DEFINER`, réservées à
+  `qf_app`, fenêtre étroite sans jamais exposer d'autre colonne d'articles)
+  + vue miroir ; outil console `db/outils/rapprocher_articles.ps1`
+  (liste, puis décision une par une ; mode automatisé par variables
+  d'environnement).
+- **Preuves par exécution réelle** : jeu d'essai (4 articles, aucun
+  homonyme) → « Aucune paire homonyme à traiter » ; paire synthétique
+  injectée (même nom, sites 1 et 2) → script en mode automatisé enregistre
+  `fusionner` pour la paire 5|6, plus aucune paire restante, décision
+  relue en base ; 10/10 tests pytest dédiés ; suite complète (voir CI).
+- **Scores** : aucun score C0-C14 modifié (13a est une préparation, la
+  migration 13b portera les scores).
+- **Reste (13b)** : la migration elle-même, plan validé en 6 phases
+  (schéma → données → fonctions → RLS/GRANT → routes/écrans → suites).
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
@@ -2667,6 +2693,15 @@ du jour.
     `ADDENDUM_CAHIER_DES_CHARGES.md`, point a. **Doit précéder** le
     candidat 15 (import du stock initial) — ordre non négociable, confirmé
     par le propriétaire. (Anciennement candidat 11 du cycle 29.)
+    **13a livré au cycle 34 (2026-09-20)** : mécanisme de rapprochement des
+    fiches homonymes prêt et prouvé — migration 025 (`rapprochements_articles`,
+    `candidats_rapprochement()`, `enregistrer_rapprochement()`) +
+    `db/outils/rapprocher_articles.ps1` (suggestion automatique nom strict,
+    validation humaine une par une, jamais de fusion aveugle) ; preuve réelle :
+    jeu d'essai sans homonyme → « aucune paire », paire synthétique injectée →
+    décision `fusionner` enregistrée, plus aucune paire restante ; 10/10 tests
+    dédiés. **Reste : 13b, la migration elle-même** (plan validé en 6 phases :
+    schéma → données → fonctions → RLS/GRANT → routes/écrans → suites).
 14. **Crédit client (point b, décidé le 2026-09-19)** — chantier C5/C1 non
     démarré : table clients, créance vs. recette, plafond configurable,
     règlements partiels, tableau de bord avec échéancier 30/60/90 jours,

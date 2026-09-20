@@ -8,8 +8,8 @@ par migrations successives, jamais en le remplaçant.
 db/
 ├── migrations/   NNN_nom.sql + NNN_nom_inverse.sql, appliquées dans l'ordre
 ├── outils/       migrer.sh, prevol.sql, definir_mot_de_passe_app.sql,
-│                 creer_compte_responsable.ps1, demarrer_pg.ps1,
-│                 arreter_pg.ps1
+│                 creer_compte_responsable.ps1, rapprocher_articles.ps1,
+│                 demarrer_pg.ps1, arreter_pg.ps1
 └── tests/        vérification PAR EXÉCUTION (protections, habilitations, concurrence)
 ```
 
@@ -174,6 +174,29 @@ demandé en mode masqué et haché en base (bcrypt `$2a$`, 12 tours). Pour la
 vérification automatisée, les variables `QF_PREMIER_COMPTE_NOM`,
 `QF_PREMIER_COMPTE_IDENTIFIANT` et `QF_PREMIER_COMPTE_MOT_DE_PASSE`
 remplacent les invites.
+
+### Rapprochement des fiches articles homonymes (chantier 13a, cycle 34)
+
+Avant la migration article/stock multi-site (cycle 13b), deux articles de
+**même nom sur des sites différents** doivent être rapprochés par un humain,
+une par une — jamais de fusion automatique (décision du propriétaire du
+2026-09-20). L'outil console ci-dessous liste les paires candidates
+(`candidats_rapprochement()`, migration 025, `SECURITY DEFINER`, réservée à
+`qf_app`) et enregistre chaque décision `fusionner` ou `distincts`
+(`enregistrer_rapprochement()`) :
+
+```powershell
+powershell -File db\outils\rapprocher_articles.ps1
+# ou avec un config.ini précis :
+powershell -File db\outils\rapprocher_articles.ps1 -ConfigIni "C:\...\config.ini"
+```
+
+Pour la vérification automatisée, les variables
+`QF_RAPPROCHEMENT_ARTICLE_1`, `QF_RAPPROCHEMENT_ARTICLE_2`,
+`QF_RAPPROCHEMENT_DECISION` (`fusionner`/`distincts`) et
+`QF_RAPPROCHEMENT_DECIDE_PAR` traitent une paire unique sans invite. Les
+décisions sont consignées dans `rapprochements_articles` et seront
+**consommées** par la migration de données du cycle 13b.
 
 ---
 
