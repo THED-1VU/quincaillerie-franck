@@ -136,8 +136,14 @@ async function xssDeclenche(page) {
     const termine = await pageAgent.isVisible("#zone-fin:not([hidden])");
     if (termine) break;
     await pageAgent.fill("#saisie", "0");
-    await pageAgent.click("#btn-suivant");
-    await pageAgent.waitForTimeout(200);
+    // Cycle 29 : un `waitForTimeout` fixe ici masquait la même bombe à
+    // retardement que celle trouvée et corrigée dans
+    // verifier-inventaire-reel.mjs (POST /inventaire/comptages non attendu
+    // avant de boucler) — on attend la réponse réelle plutôt qu'un délai.
+    await Promise.all([
+      pageAgent.waitForResponse((r) => r.url().endsWith("/inventaire/comptages") && r.request().method() === "POST", { timeout: 10000 }),
+      pageAgent.click("#btn-suivant"),
+    ]);
     tours++;
   }
   await contexteAgent.close();

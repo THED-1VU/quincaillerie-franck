@@ -1,0 +1,90 @@
+# CI minimale (cycle 33) — « vert/rouge » sur GitHub, sans dépendre de la
+# vérification manuelle du poste de développement.
+#
+# Porté par le service PostgreSQL officiel (image postgres:17, qui inclut
+# pgcrypto et pg_trgm), mappé sur 127.0.0.1:5433 — le port sur lequel
+# server/tests/conftest.py est câblé depuis le cycle 2 (instance portable
+# locale). Deux prérequis du poste de développement sont recréés ici, parce
+# qu'ils sont volontairement hors dépôt (jamais commités) :
+#   1. server/config.ini (gitignoré) — recréé avec des valeurs de TEST ;
+#   2. le mot de passe du rôle qf_app (db/outils/definir_mot_de_passe_app.sql,
+#      qui n'est jamais exécuté par les migrations, par conception).
+name: CI — tests pytest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: qf_dev_local
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Installer les dépendances Python
+        run: pip install -r server/requirements.txt
+
+      - name: Installer le client PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Créer la base de test (schéma d'origine)
+        env:
+          PGPASSWORD: qf_dev_local
+        run: |
+          psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE quincaillerie_test;"
+          psql -h 127.0.0.1 -p 5433 -U postgres -d quincaillerie_test -v ON_ERROR_STOP=1 \
+            -f QuincaillerieFranck_Test/creation_base_donnees.sql
+
+      - name: Appliquer les migrations, le jeu d'essai et le mot de passe de qf_app
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5433
+          PGUSER: postgres
+          PGPASSWORD: qf_dev_local
+          PGDATABASE: quincaillerie_test
+        run: |
+          PSQL=psql bash db/outils/migrer.sh appliquer
+          psql -v ON_ERROR_STOP=1 -q -f db/tests/00_jeu_essai.sql
+          psql -v ON_ERROR_STOP=1 -q -v mdp="'qf_app_dev_local'" -f db/outils/definir_mot_de_passe_app.sql
+
+      - name: Préparer la configuration de test (config.ini non versionné)
+        run: |
+          cat > server/config.ini <<'EOF'
+          [database]
+          host = 127.0.0.1
+          port = 5433
+          dbname = quincaillerie_test
+          user = qf_app
+          password = qf_app_dev_local
+
+          [api]
+          secret_key = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          duree_session_minutes = 480
+          tentatives_max_par_minute = 1000
+          EOF
+
+      - name: Suite pytest complète
+        run: python -m pytest server/tests -q

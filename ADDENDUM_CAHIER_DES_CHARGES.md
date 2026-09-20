@@ -50,12 +50,167 @@ Rappel des priorités du propriétaire, dans l'ordre : **1. rendu / ergonomie / 
 > seuil d'alerte (ce n'est pas une réception fournisseur). Déclenché par le
 > responsable, ou par l'agent stock **du site d'origine seulement**.
 > Appliqué dans `db/migrations/014_articles_stock_transferts_retours.sql`
-> (`transferer_stock`). Question 4 **non retranchée** : un transfert vise
-> deux articles déjà existants, un par site — aucune fiche miroir n'est
-> créée automatiquement côté destination ; si elle n'existe pas encore, le
-> transfert est refusé plutôt que d'inventer sa création. Questions 1 et 5
-> (réapprovisionnement exclusivement interne ? fréquence/volume) restent
-> sans réponse, sans effet sur ce qui est construit.
+> (`transferer_stock`). Questions 1 et 5 (réapprovisionnement exclusivement
+> interne ? fréquence/volume) restent sans réponse, sans effet sur ce qui
+> est construit.
+>
+> **Décidé (2026-09-19), question 4 — DÉCISION STRUCTURELLE, rupture avec
+> le modèle actuel.** Un article physique porte **une seule fiche** au
+> niveau de la quincaillerie (nom, catégorie, unité, prix) ; c'est le
+> **stock** qui est réparti par site. Exemple du propriétaire : 100 sacs de
+> ciment, 70 au magasin et 30 au comptoir, restent **une seule référence**
+> « Ciment X » totalisant 100 — jamais deux fiches. Un transfert déplace de
+> la quantité d'un site vers l'autre **sans dupliquer la fiche** ; si le
+> site de destination n'a pas encore de stock pour cet article, **le
+> transfert crée cet emplacement automatiquement** (ceci **inverse**
+> l'implémentation actuelle de `transferer_stock()`, qui refuse ce cas —
+> voir l'impact technique ci-dessous). Cette décision **confirme** la
+> **règle proposée** à l'origine de ce document (ci-dessous, « un article
+> logique... création automatique de l'instance cible ») : c'est le code
+> effectivement livré au cycle 9 qui s'en était écarté, pas l'inverse.
+>
+> **Transferts, précision complémentaire (2026-09-19).** Un transfert est
+> décidé par le **responsable**, ou par une **personne qu'il désigne** —
+> cohérent avec la règle déjà en vigueur (agent stock du site d'origine) ;
+> ne change pas qui peut techniquement déclencher un transfert, précise
+> seulement que la désignation est à la discrétion du responsable, pas
+> figée à un rôle système. Chaque mouvement enregistre explicitement la
+> **quantité partie** du site d'origine et la **quantité arrivée** au site
+> de destination — déjà le cas (`transferer_stock()` écrit une ligne
+> `sortie` et une ligne `entree` liées) : rien à changer sur ce point
+> précis.
+>
+> **Ce que cette décision règle enfin explicitement, dans
+> `VISION_PRODUIT.md`** : le principe « une fiche, un stock par site »
+> vaut pour toute la gamme Akuma, pas seulement pour ce client — voir la
+> section « Décisions d'éditeur » de ce document.
+
+### Impact technique et plan de migration (évalué le 2026-09-19, aucun code écrit)
+
+**Constat de départ, par lecture du code actuel.** Le modèle aujourd'hui en
+vigueur est documenté noir sur blanc dans le schéma lui-même
+(`QuincaillerieFranck_Test/creation_base_donnees.sql`, commentaire au-dessus
+de `CREATE TABLE articles`) : *« Un article appartient toujours à un seul
+site. Le ciment/fer du magasin n'apparaît jamais au catalogue du
+comptoir. »* — exactement l'inverse de la décision ci-dessus.
+`articles.site_id` est `NOT NULL` ; `quantite_stock` et `seuil_alerte` sont
+des colonnes de la fiche elle-même, pas d'un stock séparé.
+
+**C1 — schéma (impact le plus lourd).**
+- Nouvelle table de stock par site (ex. `stocks_sites` : `article_id`,
+  `site_id`, `quantite_stock`, `seuil_alerte`, clé primaire composite) —
+  `articles` perd `site_id`, `quantite_stock`, `seuil_alerte`.
+- `mouvements_stock` et `comptages_stock` ne référencent aujourd'hui que
+  `article_id` ; le site est déduit **implicitement** via `articles.site_id`
+  (utilisé par les policies RLS ET par le déclencheur
+  `figer_quantite_attendue()`, migration 003, qui lit
+  `articles.quantite_stock` directement). Les deux tables doivent gagner un
+  `site_id` **explicite**, et ce déclencheur doit lire la nouvelle table de
+  stock par (article_id, site_id).
+- La contrainte d'unicité « un comptage par article/moment/jour » doit
+  devenir « par article **et site**/moment/jour » : le même article peut
+  légitimement être compté le même jour, une fois par site.
+- **Migration des données existantes — la partie la plus délicate** :
+  aujourd'hui, « Ciment CIM II 50 kg » au Magasin et un éventuel « Ciment
+  CIM II 50 kg » au Comptoir sont deux lignes `articles` indépendantes, sans
+  aucune clé qui les relie. Les fusionner en une seule fiche + deux lignes
+  de stock exige une **règle de rapprochement** (nom strictement identique ?
+  confirmation humaine ligne par ligne ?) — un rapprochement automatique sur
+  le seul nom risquerait de fusionner à tort deux articles distincts qui
+  portent le même libellé par coïncidence. **Question ouverte, à trancher
+  avant d'écrire cette migration** : sur quel critère rapprocher deux fiches
+  existantes, et qui valide chaque fusion ?
+- Deux attributs de la fiche actuelle ne sont pas couverts par la décision
+  du propriétaire et restent **à confirmer** plutôt que devinés : le
+  **fournisseur** (`fournisseur_id`) et le **prix** (`prix_achat`,
+  `prix_vente`) sont-ils communs à la fiche (un seul prix, quel que soit le
+  site de vente), ou peuvent-ils différer selon le site de stockage ?
+  L'exemple du propriétaire (100 sacs, une seule référence) porte sur la
+  **quantité**, pas explicitement sur le prix.
+
+**C3 — cloisonnement par site.**
+- La politique RLS `p_articles_site` (migration 008) filtre aujourd'hui
+  directement sur `articles.site_id` — cette colonne disparaissant, la
+  politique doit être repensée. Conséquence directe du principe « une seule
+  fiche » : le **catalogue** (nom, catégorie, unité) devient visible aux
+  deux sites pour tout agent de terrain ; c'est la **nouvelle table de
+  stock** qui porte désormais le cloisonnement (chaque agent ne voit que la
+  ligne de stock de son propre site). C'est une déduction directe de la
+  décision ci-dessus, pas une règle inventée — mais elle mérite votre
+  confirmation explicite avant le cycle, car elle change ce qu'un agent
+  stock du Comptoir peut voir du Magasin (le nom des articles, pas leur
+  quantité).
+- Les politiques dérivées `p_mouvements_site` et `p_comptages_site`
+  (aujourd'hui une sous-requête vers `articles` pour retrouver le site) se
+  simplifient : elles filtreront directement sur leur propre colonne
+  `site_id`.
+- Les `GRANT` par colonne (prix invisibles à l'agent stock, quantité
+  invisible au comptable, migration 008) se répartiront différemment : le
+  prix reste sur `articles` (visible responsable/comptabilité, pas agent
+  stock), la quantité migre vers la nouvelle table de stock (visible
+  responsable/agent stock, pas comptabilité) — une séparation par **table**
+  remplace une partie de l'actuelle séparation par colonne, plutôt sain.
+
+**C4 — articles et stock.**
+- `POST`/`PUT /articles` ne crée plus jamais une paire (nom, site) mais la
+  fiche seule ; l'ouverture d'un stock à un site donné (première réception,
+  ou transfert entrant) devient une opération distincte.
+- `transferer_stock()` change de forme : un seul `article_id` en entrée
+  (plus deux), avec `site_origine`/`site_destination` explicites ; la ligne
+  de stock de destination est **créée automatiquement** si absente
+  (inversion du refus actuel, conformément à la décision).
+- `enregistrer_entree_stock`, `enregistrer_casse`,
+  `enregistrer_retour_client`/`fournisseur` : toutes agissent aujourd'hui
+  sur « la » quantité d'un article — qui n'existe plus au singulier ;
+  chacune doit désormais cibler explicitement un (article, site).
+- L'écran de vente/stock doit continuer à n'afficher que la quantité **du
+  site courant** de l'agent — jamais un total global qui révélerait le
+  stock de l'autre site (recoupe directement C3).
+
+**C7 — comptages.**
+- Un comptage cible désormais un couple (article, site), pas un article
+  seul — la liste « à compter » d'un agent reste filtrée à son site (sans
+  changement de principe), mais la clé de désignation change.
+- Le même article peut être compté le même jour une fois par site, sans
+  conflit — la contrainte d'unicité doit le permettre (voir C1).
+- Le principe « la quantité attendue n'atteint jamais le navigateur »
+  (garanti par grants de colonne + réponse API tronquée) reste intégralement
+  valable, simplement sur une clé composite.
+
+**C8 — tableaux de bord.**
+- Les écrans « vue consolidée / par site » (cycle 23) restent valides dans
+  leur principe (filtrer par site) ; la source de la quantité et du seuil
+  d'alerte change de table.
+- Un total « consolidé » de stock devient enfin un vrai total métier (100
+  sacs, comme dans l'exemple du propriétaire) — **à vérifier** si un tel
+  total de stock consolidé existe déjà quelque part dans les rapports
+  actuels (les totaux consolidés connus à ce jour concernent les ventes,
+  pas le stock ; à confirmer précisément au diagnostic du cycle qui
+  ouvrira ce chantier, pas ici).
+- Les alertes de stock faible doivent se déclencher par (article, site), pas
+  par fiche : un article en rupture au Comptoir mais bien fourni au Magasin
+  doit alerter, sans être masqué par un total global.
+
+**Plan de migration proposé (ordre, sans code)** :
+1. Créer la nouvelle table de stock par site (structure ci-dessus).
+2. Trancher la règle de rapprochement des fiches existantes homonymes et
+   fusionner les données (étape la plus sensible, nécessite une validation
+   humaine article par article, pas une fusion automatique aveugle).
+3. Ajouter `site_id` à `mouvements_stock` et `comptages_stock`, réamorcé
+   depuis le `site_id` de l'article d'origine avant sa suppression.
+4. Réécrire les fonctions `SECURITY DEFINER` du stock (entrée, sortie,
+   casse, retours, transfert, comptage) pour cibler la nouvelle table.
+5. Réécrire les politiques RLS et les `GRANT` par colonne/table concernés.
+6. Adapter les écrans et routes qui lisent aujourd'hui
+   `articles.quantite_stock`/`seuil_alerte` directement.
+7. Rejouer l'intégralité de la suite (SQL + pytest + Playwright) — C1, C3,
+   C4, C7 et C8 sont tous touchés **simultanément**, aucune non-régression
+   partielle n'est concluante ici.
+
+**Confirmé par le propriétaire (2026-09-19) : ce chantier est un cycle à
+part entière, à mener AVANT l'import du stock initial (point j)** —
+importer 800 à 1 200 références dans l'ancien modèle (une fiche par site)
+puis les fusionner après coup serait un travail double et risqué.
 
 **Contexte.** Le modèle a deux sites (magasin de stock, comptoir de vente) et un article
 appartient à un seul site (`articles.site_id`). Le réapprovisionnement du comptoir depuis le
@@ -101,14 +256,50 @@ entre sites »).
 
 ## b) Vente à crédit — créance client, solde, règlement
 
-> **Statu quo maintenu explicitement (cycle 6, 2026-09-12).** Le propriétaire
-> n'a pas encore répondu aux 6 questions ci-dessous. Plutôt que d'attendre
-> pour livrer le reste du chantier C5, `mode_paiement = 'credit_client'` est
-> **désactivé côté serveur** (`server/app/routes/ventes.py` le refuse avec un
-> message explicite) — aucune table Client, aucune créance créée. Ce n'est
-> pas une décision sur le FOND du point b, seulement la confirmation que rien
-> n'est inventé à sa place : dès que le propriétaire répond, ce statu quo est
-> le premier à lever.
+> **Statu quo tenu du cycle 6 (2026-09-12) au 2026-09-19.** Pendant cette
+> période, `mode_paiement = 'credit_client'` est resté **désactivé côté
+> serveur** (`server/app/routes/ventes.py` le refuse avec un message
+> explicite) — aucune table Client, aucune créance créée. Ce statu quo est
+> **levé par la décision ci-dessous** ; le code, lui, n'a pas encore changé
+> (aucun code écrit à la date de cette note).
+>
+> **Décidé (2026-09-19).** Le crédit **existe et sera repris** (réponses aux
+> questions 1 à 6 ci-dessous) :
+> 1. Un **fichier clients nominatif** existe : chaque client identifié par
+>    son **nom** et son **téléphone** (pas de liste courte informelle).
+> 2. Chaque client a un **plafond de crédit fixé par le responsable**, avec
+>    une **valeur par défaut configurable par boutique** — **100 000 FCFA**
+>    pour Ets Quincaillerie Franck — dépassable **au cas par cas** pour les
+>    clients réguliers et les professionnels (le responsable peut fixer un
+>    plafond différent du défaut, par client).
+> 3. Paiements mixtes : **non traités par cette décision**, question 3
+>    laissée sans réponse explicite — à ne pas construire tant qu'elle n'est
+>    pas confirmée séparément.
+> 4. Créance non recouvrée : **non traité** — aucune relance automatique, pas
+>    de règle d'abandon de créance en version 1 (voir ci-dessous, « aucun
+>    intérêt, aucune relance automatique »). Reste ouvert si le besoin se
+>    présente réellement.
+> 5. Enregistrement d'un règlement : **règlements partiels autorisés**, sans
+>    préciser explicitement qui peut les enregistrer (comptabilité,
+>    responsable, ou les deux) — à confirmer si cela devient un point de
+>    friction réel.
+> 6. Le tableau de bord du responsable montre l'**encours total** et les
+>    **créances de plus de 30, 60 et 90 jours** (échéancier par ancienneté,
+>    pas seulement un total).
+>
+> **Règles complémentaires, non demandées par les 6 questions d'origine mais
+> précisées par le propriétaire :** une vente à crédit crée une **créance**,
+> **jamais** une recette encaissée (cohérent avec la « Règle proposée »
+> ci-dessous, déjà correcte) ; **aucune relance automatique, aucun intérêt**
+> en version 1 ; la fonction crédit est **activable ou désactivable par
+> boutique** dans la gamme Akuma (consigné dans `VISION_PRODUIT.md` — une
+> boutique de la gamme peut fonctionner sans crédit client du tout).
+>
+> **Reprise nécessaire, à ne pas oublier au chargement du stock initial
+> (point j) :** 15 à 25 clients ont une dette en cours, tenue dans un
+> **cahier de crédit** physique — leur chargement initial (nom, téléphone,
+> solde de départ, plafond éventuel déjà connu) doit être prévu au même
+> titre que le stock, pas traité comme un cas annexe.
 
 **Contexte.** `mode_paiement = 'credit_client'` est autorisé. Le cahier des charges (§3.3)
 crée une **recette immédiate** à la validation de la vente. Or, en crédit, **aucun argent
@@ -176,12 +367,35 @@ rapprochement de caisse.
 > silencieusement les ventes d'un vendeur sans compte, si le cas existe
 > réellement.
 >
-> **Question 3 toujours ouverte, réponse attendue du propriétaire :** un
-> vendeur qui négocie un prix a-t-il, dans les faits, toujours un compte
-> de connexion dans l'application (responsable, agent stock ou agent
-> comptabilité) ? Ou une personne sans compte (apprenti, extra, aide
-> familiale) négocie-t-elle parfois un prix elle-même ? Aucun code n'en
-> dépend tant que la réponse n'est pas connue.
+> **Décidé (2026-09-19), question 3 — portée gamme Akuma, pas seulement ce
+> client.** L'employé et le compte utilisateur sont deux notions
+> **distinctes**. Le champ « vendeur » d'une vente pointe vers une **fiche
+> employé du module RH** (`employes`, chantier C6), jamais vers un compte de
+> connexion (`utilisateurs`, chantier C2). Un employé peut exister **sans
+> compte** — il vend, il est traçable par sa fiche employé, il ne se
+> connecte simplement jamais à l'application. Un compte, à l'inverse,
+> **appartient toujours** à un employé (pas de compte flottant sans fiche).
+> La liste proposée à la saisie de `vendeur_id` devient celle des **employés
+> actifs du site**, pas celle des comptes utilisables comme aujourd'hui
+> (`GET /ventes/vendeurs`, cycle 27). Le rapport « écarts de prix par
+> vendeur » (ci-dessus) devient un **rapport par employé**.
+>
+> **Conséquence sur le modèle de données actuel, non appliquée par cette
+> note** (aucun code écrit ici) : `ventes.vendeur_id` référence aujourd'hui
+> `utilisateurs(id)` (migration 020) — il devra référencer `employes(id)`
+> à la place. Implique une migration de schéma (nouvelle contrainte de clé
+> étrangère, reprise des lignes déjà saisies depuis le cycle 27 vers la
+> fiche employé correspondante) et la réécriture de `GET /ventes/vendeurs`
+> pour interroger `employes` plutôt que `utilisateurs`. Chantier à part
+> entière, non démarré, candidat pour un prochain cycle C5/C6.
+>
+> **Confirmé (2026-09-19), avec le contexte réel de la boutique.** 4 à 6
+> personnes négocient effectivement des prix, dont des **aides occasionnels
+> sans contrat** — exactement le cas « employé sans compte » anticipé
+> ci-dessus, pas une hypothèse théorique. Le responsable veut savoir
+> **chaque soir qui a vendu quoi et à quel prix** : c'est le rapport par
+> employé mentionné ci-dessus qui répond à ce besoin, une fois le chantier
+> mené.
 
 **Contexte.** La saisie des ventes est faite **a posteriori** par le comptable, d'après le
 **facturier papier** tenu par le responsable après négociation. Le schéma ne stocke ni la
@@ -218,8 +432,9 @@ catalogue et prix facturé ne peut être rattaché à personne.
    (ex. `MAG-0842`, `CPT-0842`) ?
 2. Le numéro de facturier est-il **purement numérique et séquentiel**, ou comporte-t-il déjà
    un format (année, série) ?
-3. Les vendeurs sont-ils **toujours** des personnes ayant un compte dans l'application, ou
-   faut-il une liste de vendeurs à part ?
+3. ~~Les vendeurs sont-ils **toujours** des personnes ayant un compte dans l'application, ou
+   faut-il une liste de vendeurs à part ?~~ **Tranché le 2026-09-19** : liste
+   à part — les employés actifs du site (voir le callout en tête de section).
 4. Veut-on **bloquer** la saisie d'une vente sans numéro de facturier, ou seulement
    **alerter** ?
 5. ~~L'écart prix catalogue / prix négocié doit-il déclencher une **validation du responsable**
@@ -241,6 +456,27 @@ catalogue et prix facturé ne peut être rattaché à personne.
 > Restent ouvertes, non bloquantes pour C5 : le numéro de contribuable et les
 > mentions légales (question 4 — aucun document imprimé n'existe encore) et
 > les ventes exonérées (question 5 — aucun cas rencontré à ce jour).
+>
+> **Décidé (2026-09-19), question 1.** Le régime fiscal réel de la boutique
+> est déterminé par le seuil légal : chiffre d'affaires annuel
+> **supérieur à 50 millions de FCFA** ⇒ **régime du réel**, TVA applicable au
+> taux de **19,25 %** — confirme et documente la valeur déjà appliquée
+> depuis le cycle 6, cette fois avec sa justification. Le taux **reste une
+> valeur de configuration** (`parametres.taux_tva`), jamais codée en dur, et
+> doit pouvoir être **nul** pour une autre boutique de la gamme Akuma dont le
+> chiffre d'affaires resterait sous ce seuil (mécanique déjà en place,
+> confirmée comme exigence permanente — voir `VISION_PRODUIT.md`).
+>
+> **Question 3 toujours ouverte, à confirmer par le comptable avant tout
+> code qui la figerait.** Les prix négociés au comptoir sont-ils saisis
+> **TTC** ou **HT** ? Hypothèse de travail du propriétaire, **non validée** :
+> au comptoir, le client négocie un **montant total à payer** — le prix
+> négocié serait donc **TTC**, le HT se recalculant pour les rapports
+> (cohérent avec le fonctionnement actuel de `server/app/routes/ventes.py`,
+> qui extrait la TVA d'un total TTC). **Aucun code n'est à écrire tant que
+> le comptable n'a pas confirmé** — l'hypothèse, si elle se révèle exacte,
+> ne fera que documenter un comportement déjà en place ; si elle se révèle
+> fausse, elle changerait un calcul déjà en production.
 
 **Contexte.** Le cahier des charges calcule « la TVA » mais ne précise ni le **régime
 fiscal**, ni le **taux**, ni les **règles d'arrondi**, ni les cas d'**exonération**.
@@ -644,6 +880,36 @@ de reprise**, ni la **mise à jour des 5 postes**.
 
 ## j) Reprise de l'existant : stock initial, volumétrie, formation
 
+> **Décidé (2026-09-19), question 1 et modalités de chargement.**
+> **Volumétrie** : 800 à 1 200 références au total ; 40 à 60 ventes par jour
+> ordinaire, 80 à 120 les jours de forte affluence ; 3 à 6 articles par
+> vente, davantage sur les ventes de matériaux. **Comptage** : fait par le
+> **responsable et les vendeurs**, sur **3 à 5 jours**, boutique **ouverte**
+> (pas fermée comme envisagé dans la « Règle proposée » d'origine
+> ci-dessous — à corriger en conséquence), **par zones puis par catégories
+> successives**.
+>
+> **Conséquence directe pour l'outil d'import, qui change de nature** : un
+> **import unique et global ne convient pas**. L'outil doit accepter
+> **plusieurs chargements successifs et partiels** (une zone ou une
+> catégorie à la fois, sur plusieurs jours), **sans jamais dupliquer** ce
+> qui a déjà été chargé, et **indiquer clairement ce qui reste à traiter**
+> (par zone/catégorie, pas seulement un total). Les articles trouvés en
+> magasin mais **absents du cahier** sont **créés après validation du
+> responsable**, avec désignation, unité, quantité et prix — jamais créés
+> automatiquement sans son regard.
+>
+> **Reprise du crédit client, à charger avec le stock** (voir point b) : 15
+> à 25 clients ont une dette en cours dans un cahier de crédit séparé — leur
+> chargement (nom, téléphone, solde, plafond éventuel) suit le même
+> principe de chargement progressif et validé, pas un import à part isolé.
+>
+> **Dépendance d'ordre, confirmée par le propriétaire** : ce chargement ne
+> peut démarrer **qu'après** le cycle de migration du modèle article/stock
+> (point a, « une fiche, un stock par site ») — importer dans l'ancien
+> modèle (une fiche par site) puis fusionner après coup doublerait le
+> travail et le risque d'erreur.
+
 **Contexte.** La gestion était manuelle (cahier, facturier papier). Il faut **charger le
 stock de départ**, connaître les **volumes réels**, et **former** des utilisateurs sans
 culture informatique.
@@ -680,8 +946,12 @@ culture informatique.
 - Bascule un site à la fois vs. les deux en même temps.
 
 **Questions au propriétaire.**
-1. Combien d'**articles** environ par site ? Combien de **ventes par jour** en moyenne et un
-   jour de pointe ? Combien d'**employés**, de **fournisseurs** ?
+1. ~~Combien d'**articles** environ par site ? Combien de **ventes par jour** en moyenne et un
+   jour de pointe ?~~ **Tranché le 2026-09-19** : voir le callout en tête de
+   section (800-1 200 références, 40-120 ventes/jour selon affluence).
+   Nombre exact d'employés et de fournisseurs non chiffré par ce même
+   callout — 4 à 6 vendeurs confirmés par ailleurs (point c), fournisseurs
+   non précisés.
 2. Le stock initial peut-il être fourni sous forme de **fichier Excel** exploitable, ou
    faudra-t-il tout **ressaisir** depuis le cahier ?
 3. Accepte-t-on une période de **double tenue** (papier + application) avant de basculer ?
