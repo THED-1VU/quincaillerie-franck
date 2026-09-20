@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comptes — Akuma</title>
+<link rel="icon" href="favicon.ico">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Écran câblé (cycle 32) : création, désactivation et réactivation de comptes réelles (<code>server/app/routes/comptes.py</code>, CDC §3.8). Réservé au responsable. Un compte désactivé est coupé immédiatement.</div>
+<div class="page">
+  <header class="bandeau">
+    <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <a class="btn btn--fantome" href="tableau-bord.html">Retour</a>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
+  </header>
+
+  <main class="contenu">
+    <h1>Comptes utilisateurs</h1>
+
+    <section class="carte" style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2>Comptes</h2>
+        <button class="btn btn--secondaire" id="bouton-formulaire" type="button">+ Nouveau compte</button>
+      </div>
+      <div id="zone-erreur-liste" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-comptes"></ul>
+    </section>
+
+    <section class="carte" id="carte-formulaire" hidden style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2>Nouveau compte</h2>
+        <button class="btn btn--fantome" id="formulaire-fermer" type="button">Fermer</button>
+      </div>
+      <p style="color:var(--c-texte-doux);">Créer un agent (stock ou comptabilité) rattaché à un site — le premier compte responsable se crée hors de l'application (<code>db/outils/creer_compte_responsable.ps1</code>).</p>
+      <div class="champ">
+        <label class="champ__label" for="compte-nom">Nom complet</label>
+        <input class="champ__saisie" id="compte-nom" type="text" maxlength="150">
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="compte-identifiant">Identifiant de connexion</label>
+        <input class="champ__saisie" id="compte-identifiant" type="text" maxlength="50" autocomplete="off">
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="compte-role">Rôle</label>
+        <select class="champ__select" id="compte-role">
+          <option value="agent_stock">Agent stock</option>
+          <option value="agent_comptabilite">Agent comptabilité</option>
+        </select>
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="compte-site">Site</label>
+        <select class="champ__select" id="compte-site">
+          <option value="1">Magasin de stock</option>
+          <option value="2">Comptoir</option>
+        </select>
+      </div>
+      <div class="champ">
+        <label class="champ__label" for="compte-mot-de-passe">Mot de passe (8 caractères minimum)</label>
+        <input class="champ__saisie" id="compte-mot-de-passe" type="password" maxlength="200" autocomplete="new-password">
+      </div>
+      <button class="btn btn--primaire" id="compte-valider" type="button">Créer le compte</button>
+      <div id="zone-erreur-formulaire" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+      <div id="zone-succes-formulaire" class="erreur-champ" hidden style="margin-top:var(--e-3); background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+    </section>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+(async function () {
+  "use strict";
+
+  // Écran réservé au responsable (CDC §3.8) — un agent reçoit une
+  // redirection vers son écran d'accueil par exigerSession.
+  const session = await exigerSession(["responsable"]);
+  if (!session) return;
+
+  const $ = (id) => document.getElementById(id);
+
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
+
+  function libelleRole(role) {
+    return LIBELLE_ROLE[role] || role;
+  }
+
+  function libelleSite(siteId) {
+    return siteId ? LIBELLE_SITE[siteId] || ("Site " + siteId) : "—";
+  }
+
+  function creerLigneCompte(compte) {
+    const li = document.createElement("li");
+    li.style.display = "flex";
+    li.style.alignItems = "center";
+    li.style.gap = "var(--e-3)";
+    li.style.flexWrap = "wrap";
+
+    const bloc = document.createElement("span");
+    bloc.style.minWidth = "0";
+    bloc.style.overflowWrap = "anywhere";
+    const principal = document.createElement("span");
+    principal.textContent = compte.nom_complet + " (" + compte.identifiant + ")";
+    bloc.appendChild(principal);
+    bloc.appendChild(document.createElement("br"));
+    const sous = document.createElement("span");
+    sous.style.color = "var(--c-texte-doux)";
+    sous.style.fontSize = "var(--t-xs)";
+    sous.textContent = libelleRole(compte.role) + " · " + libelleSite(compte.site_id);
+    bloc.appendChild(sous);
+    li.appendChild(bloc);
+
+    const aside = document.createElement("span");
+    aside.className = "pastille " + (compte.actif ? "pastille--info" : "pastille--neutre");
+    aside.textContent = compte.actif ? "Actif" : "Désactivé";
+    li.appendChild(aside);
+
+    if (compte.id !== session.utilisateur_id) {
+      const bouton = document.createElement("button");
+      bouton.type = "button";
+      bouton.className = "btn " + (compte.actif ? "btn--fantome" : "btn--secondaire");
+      bouton.textContent = compte.actif ? "Désactiver" : "Réactiver";
+      bouton.addEventListener("click", async () => {
+        $("zone-erreur-liste").hidden = true;
+        try {
+          await appelApi("/admin/comptes/" + compte.id + "/actif", {
+            method: "PATCH",
+            body: JSON.stringify({ actif: !compte.actif }),
+          });
+          await chargerComptes();
+        } catch (erreur) {
+          afficherErreurServeur("zone-erreur-liste", erreur);
+        }
+      });
+      li.appendChild(bouton);
+    }
+
+    return li;
+  }
+
+  async function chargerComptes() {
+    $("zone-erreur-liste").hidden = true;
+    const liste = $("liste-comptes");
+    liste.textContent = "";
+    try {
+      const donnees = await appelApi("/admin/comptes");
+      for (const compte of donnees.comptes) {
+        liste.appendChild(creerLigneCompte(compte));
+      }
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-liste", erreur);
+    }
+  }
+
+  $("bouton-formulaire").addEventListener("click", () => {
+    $("carte-formulaire").hidden = false;
+    $("zone-erreur-formulaire").hidden = true;
+    $("zone-succes-formulaire").hidden = true;
+    $("compte-nom").focus();
+  });
+  $("formulaire-fermer").addEventListener("click", () => {
+    $("carte-formulaire").hidden = true;
+  });
+
+  $("compte-valider").addEventListener("click", async () => {
+    $("zone-erreur-formulaire").hidden = true;
+    $("zone-succes-formulaire").hidden = true;
+    const corps = {
+      nom_complet: $("compte-nom").value.trim(),
+      identifiant: $("compte-identifiant").value.trim(),
+      mot_de_passe: $("compte-mot-de-passe").value,
+      role: $("compte-role").value,
+      site_id: Number($("compte-site").value),
+    };
+    try {
+      await appelApi("/admin/comptes", { method: "POST", body: JSON.stringify(corps) });
+      $("zone-succes-formulaire").textContent = "Compte créé.";
+      $("zone-succes-formulaire").hidden = false;
+      $("compte-nom").value = "";
+      $("compte-identifiant").value = "";
+      $("compte-mot-de-passe").value = "";
+      await chargerComptes();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-formulaire", erreur);
+    }
+  });
+
+  await chargerComptes();
+})();
+</script>
+</body>
+</html>

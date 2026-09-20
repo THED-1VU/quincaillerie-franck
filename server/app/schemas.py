@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date as _date
+from datetime import date as _date, datetime
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -375,3 +375,39 @@ class ReponseClotureCaisse(BaseModel):
     commentaire: Optional[str] = None
     utilisateur_id: int
     cloture_rectificative_de: Optional[int] = None
+
+
+# ---------------------------------------------------------------------------
+# Gestion des comptes (chantier C2, cycle 32) — réservée au responsable.
+# Le responsable crée des AGENTS uniquement (agent_stock / agent_comptabilite,
+# site obligatoire — décision du 2026-09-20) : le premier compte responsable
+# relève de l'outil C0-C, jamais de cette route.
+# ---------------------------------------------------------------------------
+
+class DemandeCompte(BaseModel):
+    """Création d'un compte agent par le responsable. ``mot_de_passe`` est le
+    mot de passe EN CLAIR envoyé une seule fois ; le serveur le hache en
+    bcrypt (``securite.hacher_mot_de_passe``) et ne le restitue jamais."""
+
+    nom_complet: str = Field(min_length=1, max_length=150)
+    identifiant: str = Field(min_length=1, max_length=50)
+    mot_de_passe: str = Field(min_length=8, max_length=200)
+    role: Literal["agent_stock", "agent_comptabilite"]
+    site_id: int
+
+
+class ReponseCompte(BaseModel):
+    """Profil public d'un compte — JAMAIS le hachage du mot de passe."""
+
+    id: int
+    nom_complet: str
+    identifiant: str
+    role: str
+    site_id: Optional[int] = None
+    actif: bool
+    doit_changer_mot_de_passe: bool
+    date_creation: datetime
+
+
+class DemandeActifCompte(BaseModel):
+    actif: bool
