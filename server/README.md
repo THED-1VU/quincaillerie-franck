@@ -141,6 +141,32 @@ une question ouverte pour le propriétaire — voir `ADDENDUM_CAHIER_DES_CHARGES
 et le dossier de recette (« session inactive »). Le jour où cette décision
 est prise, il suffit de mettre à jour `config.ini`.
 
+### Cycle 32 — gestion des comptes depuis l'application (CDC §3.8)
+
+`routes/comptes.py`, enregistré sous `/admin/comptes`, réservé au
+responsable :
+
+- `GET /admin/comptes` — liste des comptes (colonnes publiques uniquement,
+  **jamais** le hachage) ;
+- `POST /admin/comptes` — crée un **agent** (`agent_stock` ou
+  `agent_comptabilite`, site obligatoire) ; le rôle `responsable` est refusé
+  ici, le premier responsable relève de l'outil C0-C
+  (`db/outils/creer_compte_responsable.ps1`) ;
+- `PATCH /admin/comptes/{id}/actif` — désactive / réactive un compte.
+
+Règles du propriétaire (2026-09-20) : un responsable ne peut pas désactiver
+son propre compte ; le dernier responsable actif est protégé ; **la session
+d'un compte désactivé est coupée immédiatement** — `deps.obtenir_session`
+vérifie `compte_est_actif()` (migration 024, `SECURITY DEFINER`, seule
+fenêtre de `qf_app` sur `utilisateurs.actif`) à chaque requête
+authentifiée, en plus de la révocation C11.
+
+Écran : `maquette/comptes.html` (lien « Comptes » dans le bandeau de
+`tableau-bord.html`). Preuves : `server/tests/test_comptes.py` 10/10,
+`maquette/verification/verifier-comptes-reel.mjs` 21/21,
+`verifier-cablage.mjs` 94/94, suite SQL (migrations 000-024 + inverses) OK,
+pytest complet 200/200.
+
 ---
 
 ## Chantier C3 — habilitations au niveau des requêtes SQL

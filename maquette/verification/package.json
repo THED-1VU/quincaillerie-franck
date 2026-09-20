@@ -13,6 +13,7 @@
     "stock": "node verifier-stock-reel.mjs",
     "rapports": "node verifier-rapports-reel.mjs",
     "rh": "node verifier-rh-reel.mjs",
+    "comptes": "node verifier-comptes-reel.mjs",
     "caisse": "node verifier-caisse-reel.mjs"
   },
   "devDependencies": {
