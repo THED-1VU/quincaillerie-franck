@@ -8,7 +8,8 @@ par migrations successives, jamais en le remplaçant.
 db/
 ├── migrations/   NNN_nom.sql + NNN_nom_inverse.sql, appliquées dans l'ordre
 ├── outils/       migrer.sh, prevol.sql, definir_mot_de_passe_app.sql,
-│                 demarrer_pg.ps1, arreter_pg.ps1
+│                 creer_compte_responsable.ps1, demarrer_pg.ps1,
+│                 arreter_pg.ps1
 └── tests/        vérification PAR EXÉCUTION (protections, habilitations, concurrence)
 ```
 
@@ -153,6 +154,26 @@ psql -v mdp="'LeMotDePasseChoisi'" -f db/outils/definir_mot_de_passe_app.sql
 
 Puis reporter la valeur dans `config.ini` (fichier local, non versionné), avec
 `user = qf_app`. **Ne plus jamais faire tourner l'application sous `postgres`.**
+
+### Premier compte responsable (chantier C0-C, cycle 31)
+
+Sur une installation neuve, aucun compte n'existe : personne ne peut se
+connecter. L'outil console ci-dessous crée le **tout premier** compte
+`responsable` via la fonction `creer_premier_responsable()` (migration 023,
+`SECURITY DEFINER`, réservée à `qf_app`) :
+
+```powershell
+powershell -File db\outils\creer_compte_responsable.ps1
+# ou avec un config.ini précis :
+powershell -File db\outils\creer_compte_responsable.ps1 -ConfigIni "C:\...\config.ini"
+```
+
+Il refuse si un responsable existe déjà, si l'identifiant est vide ou déjà
+pris, ou si le mot de passe fait moins de 8 caractères. Le mot de passe est
+demandé en mode masqué et haché en base (bcrypt `$2a$`, 12 tours). Pour la
+vérification automatisée, les variables `QF_PREMIER_COMPTE_NOM`,
+`QF_PREMIER_COMPTE_IDENTIFIANT` et `QF_PREMIER_COMPTE_MOT_DE_PASSE`
+remplacent les invites.
 
 ---
 
