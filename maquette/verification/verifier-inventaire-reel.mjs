@@ -115,8 +115,16 @@ const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\
   verifier(compteurGardeFou < 20, "inventaire : « Ciment CIM II 50 kg » atteint dans la liste");
 
   await page.fill("#saisie", "22");
-  await page.click("#btn-suivant");
-  await page.waitForTimeout(300); // laisse la requête POST + l'avancée locale se faire
+  // Cycle 29 : un `waitForTimeout` fixe ne suffisait pas sous charge réelle
+  // (rejoué à la suite de la suite SQL + pytest + cablage + vente, comme le
+  // fait `verifier_tout.sh`) — le contexte se fermait parfois avant que le
+  // POST n'ait eu le temps d'aboutir, laissant la section 2 lire un état
+  // antérieur au comptage. On attend la réponse réelle, comme la section 4
+  // le fait déjà pour ce même endpoint.
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/inventaire/comptages") && r.request().method() === "POST", { timeout: 10000 }),
+    page.click("#btn-suivant"),
+  ]);
 
   const contenuPage = await page.content();
   const source = await page.evaluate(() => document.documentElement.outerHTML);
@@ -236,9 +244,14 @@ const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\
   verifier(await allerA(pageB, cible), `409 : onglet B atteint « ${cible} », sur sa PROPRE liste chargée avant la soumission de A`);
 
   // Onglet A compte réellement -> succès normal, la vraie soumission.
+  // Cycle 29 : même correctif que la section 1 — attendre la réponse réelle
+  // plutôt qu'un délai fixe, ici d'autant plus critique que le 409 attendu
+  // juste après par l'onglet B dépend de cette écriture déjà commise.
   await pageA.fill("#saisie", "40");
-  await pageA.click("#btn-suivant");
-  await pageA.waitForTimeout(300);
+  await Promise.all([
+    pageA.waitForResponse((r) => r.url().endsWith("/inventaire/comptages") && r.request().method() === "POST", { timeout: 10000 }),
+    pageA.click("#btn-suivant"),
+  ]);
 
   // Onglet B ignore que A vient de le faire (de son point de vue, c'est
   // comme si SA PROPRE tentative précédente avait échoué sans réponse) et
@@ -249,7 +262,38 @@ const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\
     pageB.click("#btn-suivant"),
   ]);
   verifier(reponseB.status() === 409, `409 : le serveur refuse bien le second envoi (statut ${reponseB.status()})`);
-  await pageB.waitForTimeout(300);
+  // Cycle 29, troisième reprise sur cette même section : `waitForResponse`
+  // ci-dessus n'attend que l'ARRIVÉE de la réponse réseau, pas la fin du
+  // traitement JS qui la suit dans la page (soumettre() -> afficher() ou
+  // terminer()) — un `waitForTimeout` fixe après, même généreux, restait
+  // sensible à la charge (trouvé en rejouant verifier_tout.sh en conditions
+  // réelles : échec reproductible ici précisément, alors que l'écriture en
+  // base, elle, était déjà correcte). On attend directement l'effet visible
+  // qu'on s'apprête à vérifier, plutôt qu'un délai qui le devine.
+  // Marge généreuse (15 s) et échec RAPPORTÉ plutôt que non intercepté :
+  // un `waitForFunction` qui expire ne doit jamais faire planter tout le
+  // script (perte de tous les résultats déjà acquis) — et le diagnostic
+  // capturé ici (état réel observé) sert de preuve si ça se reproduit.
+  try {
+    await pageB.waitForFunction(
+      (nomPrecedent) => {
+        const zoneFin = document.getElementById("zone-fin");
+        const nomActuel = document.getElementById("art-nom")?.textContent;
+        return (zoneFin && !zoneFin.hidden) || nomActuel !== nomPrecedent;
+      },
+      cible,
+      { timeout: 15000 }
+    );
+  } catch (erreurAttente) {
+    const etat = await pageB.evaluate(() => ({
+      artNom: document.getElementById("art-nom")?.textContent,
+      blocComptageHidden: document.getElementById("bloc-comptage")?.hidden,
+      zoneFinHidden: document.getElementById("zone-fin")?.hidden,
+      zoneErreurHidden: document.getElementById("zone-erreur-saisie")?.hidden,
+      zoneErreurTexte: document.getElementById("zone-erreur-saisie")?.textContent,
+    }));
+    ko.push(`409 : la page ne réagit pas au 409 après 15 s — état observé : ${JSON.stringify(etat)}`);
+  }
 
   verifier(await pageB.isHidden("#zone-erreur-saisie"), "409 : aucun message d'erreur bloquant affiché à l'agent (onglet B)");
   const encoreSurCible = (await pageB.isVisible("#bloc-comptage")) && (await pageB.textContent("#art-nom")) === cible;

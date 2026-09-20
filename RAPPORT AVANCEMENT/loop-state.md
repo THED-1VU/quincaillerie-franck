@@ -4,9 +4,13 @@ Référentiel fixe `C0`–`C14` — **ne jamais renuméroter**.
 Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 - Date d'initialisation : **2026-09-10**
-- Dernier cycle fusionné : **Cycle 27 — voyants de tableau de bord,
-  portabilité C13, rôle caissier C3, numéro de facturier C5** (PR #29,
-  fast-forward, commit `70a2006`), 2026-09-18. Précédé des
+- Dernier cycle fusionné : **Cycle 33 — rangement : clôture de
+  cycle-29-hygiene-inventaire + CI GitHub Actions minimale** (PR #38,
+  rebase, 2026-09-20). Précédé des **Cycles 31/32 — C0-C premier compte
+  responsable + C2 gestion des comptes** (PR #33 et #36, rebase), du
+  **Cycle 30 — C0-A : l'exécutable ouvre l'écran de connexion** (PR #31)
+  et de la **Documentation : décision du 2026-09-20 sur la gestion des
+  comptes** (PR #32), 2026-09-20. Précédé des
   **Cycles 24/25/26 — travail en parallèle, trois
   pistes simultanées** (voir `RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md`),
   2026-09-14 → 2026-09-18 : **Cycle 24 — piste UX, corrections
@@ -81,7 +85,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 
 | Code | Chantier | Score | Base d'évaluation |
 |------|----------|:-----:|-------------------|
-| C0 | Infrastructure et dépôt | **65 %** | Cycle 4. `server/fabrication/` : `QuincaillerieFranck.exe` produit par PyInstaller (`construire.ps1`, un humain n'a besoin d'aucune connaissance de PyInstaller), 17,9 Mo, autonome. **Vérifié par exécution depuis un dossier totalement isolé du dépôt** : démarrage, config chargée, `/sante` répond, connexion + hachage bcrypt + jeton fonctionnent — aucune dépendance Python résiduelle. Garde-fous C11 (refus `postgres`, refus clé d'exemple) confirmés survivre à l'empaquetage. **Cycle 30 (correctif C0-A, 2026-09-20)** : l'exécutable ouvre désormais l'écran de connexion réel et non plus `/docs` — `CHEMIN_A_OUVRIR = "/app/connexion.html"` (`lanceur.py`), la maquette est embarquée dans le paquet (`quincaillerie_franck.spec`, section `datas` — seuls les fichiers servis, jamais les artefacts de test) et `main.py` la résout en mode figé via `sys._MEIPASS`. **Prouvé par exécution réelle** : `Akuma.exe` reconstruit (26,4 Mo) et lancé — le navigateur ouvert charge `/app/connexion.html` en 200 (journal : 200 sur connexion.html, theme.css, styles.css, akuma-logo.png, api.js, favicon.ico) ; avant correctif, ce même chemin répondait 404 et `/docs` 200. **Cycle 31 (C0-C, 2026-09-20)** : outil de création du **premier compte responsable** livré — migration 023 (`creer_premier_responsable()`, `SECURITY DEFINER`, réservée à `qf_app`, hache elle-même le mot de passe en bcrypt `$2a$` 12 tours, refuse si un responsable existe déjà, trace `journal_comptes`) + `db/outils/creer_compte_responsable.ps1` (console, mot de passe masqué, lecture `config.ini`, mode de vérification automatisée par variables d'environnement). **Prouvé par exécution réelle** : base vierge `quincaillerie_c0c` reconstruite (schéma d'origine + migrations 000-023) — le script a créé le compte `premier.resp` (id 1, hash `$2a$12$`, actif, changement imposé), un second appel a été refusé (« Un compte responsable existe déjà »), la connexion réelle via `verifier_connexion()` a répondu `ok=t` (et `ok=f` pour un mauvais mot de passe) ; 7/7 tests pytest dédiés. Reste : **mode kiosque (plein écran), CI automatisée, lockfile figé avec hachages** — tous ouverts, chacun son chantier. |
+| C0 | Infrastructure et dépôt | **70 %** | Cycle 4. `server/fabrication/` : `QuincaillerieFranck.exe` produit par PyInstaller (`construire.ps1`, un humain n'a besoin d'aucune connaissance de PyInstaller), 17,9 Mo, autonome. **Vérifié par exécution depuis un dossier totalement isolé du dépôt** : démarrage, config chargée, `/sante` répond, connexion + hachage bcrypt + jeton fonctionnent — aucune dépendance Python résiduelle. Garde-fous C11 (refus `postgres`, refus clé d'exemple) confirmés survivre à l'empaquetage. **Cycle 30 (correctif C0-A, 2026-09-20)** : l'exécutable ouvre désormais l'écran de connexion réel et non plus `/docs` — `CHEMIN_A_OUVRIR = "/app/connexion.html"` (`lanceur.py`), la maquette est embarquée dans le paquet (`quincaillerie_franck.spec`, section `datas` — seuls les fichiers servis, jamais les artefacts de test) et `main.py` la résout en mode figé via `sys._MEIPASS`. **Prouvé par exécution réelle** : `Akuma.exe` reconstruit (26,4 Mo) et lancé — le navigateur ouvert charge `/app/connexion.html` en 200 (journal : 200 sur connexion.html, theme.css, styles.css, akuma-logo.png, api.js, favicon.ico) ; avant correctif, ce même chemin répondait 404 et `/docs` 200. **Cycle 31 (C0-C, 2026-09-20)** : outil de création du **premier compte responsable** livré — migration 023 (`creer_premier_responsable()`, `SECURITY DEFINER`, réservée à `qf_app`, hache elle-même le mot de passe en bcrypt `$2a$` 12 tours, refuse si un responsable existe déjà, trace `journal_comptes`) + `db/outils/creer_compte_responsable.ps1` (console, mot de passe masqué, lecture `config.ini`, mode de vérification automatisée par variables d'environnement). **Prouvé par exécution réelle** : base vierge `quincaillerie_c0c` reconstruite (schéma d'origine + migrations 000-023) — le script a créé le compte `premier.resp` (id 1, hash `$2a$12$`, actif, changement imposé), un second appel a été refusé (« Un compte responsable existe déjà »), la connexion réelle via `verifier_connexion()` a répondu `ok=t` (et `ok=f` pour un mauvais mot de passe) ; 7/7 tests pytest dédiés. **Cycle 33 (2026-09-20)** : **CI GitHub Actions minimale livrée** (`.github/workflows/ci.yml`) — service `postgres:17` mappé sur 127.0.0.1:5433, schéma d'origine + migrations + jeu d'essai rejoués, suite pytest complète exécutée sur chaque push/PR vers `main` ; premier « vert/rouge » réel sur GitHub. Reste : **mode kiosque (plein écran), lockfile figé avec hachages** — tous deux ouverts, chacun son chantier. |
 | C1 | Base de données et intégrité | **80 %** | Cycle 2. 9 migrations numérotées (`db/migrations/`) + inverses, appliquées et annulées par exécution réelle sur PostgreSQL 17.11. Corrigés et **prouvés** : contraintes de domaine, cohérence inter-tables, **écart d'inventaire calculé par la base** (et quantité attendue figée par déclencheur), historique non effaçable (`RESTRICT` + verrous de suppression + suppression logique), journaux de connexion et de comptes, annulation tracée et irréversible, table de paramètres avec sentinelle « à décider », index de recherche, **4 rôles non superutilisateurs à privilèges par colonne** + RLS par site. **100 contrôles, 0 échec** (`db/tests/DERNIER_RESULTAT.md`). Reste : décisions métier de l'addendum (points b, d, e, g), fonction d'authentification (C2), exploitation de la RLS (C3), reprise sur une base contenant de vraies données. |
 | C2 | Authentification et comptes | **72 %** | Cycle 3. Noyau serveur (`server/`, FastAPI) : connexion via `verifier_connexion()` (fonction PostgreSQL `SECURITY DEFINER`, migration 009, seule à lire le hachage, jamais restitué) ; verrouillage après 5 échecs, déverrouillage réservé au responsable, obligation de changement à la première connexion, libre-service limité à sa propre ligne, limitation de débit ; révocation de session (cycle 21). **Cycle 32 (gestion des comptes, 2026-09-20)** : routes `/admin/comptes` (GET liste, POST création d'un agent stock/comptabilité avec site obligatoire, PATCH actif) réservées au responsable, écran `maquette/comptes.html` ; règles du propriétaire : auto-désactivation refusée, dernier responsable actif protégé, session d'un compte désactivé **coupée immédiatement** (migration 024 `compte_est_actif()` vérifiée par `deps.obtenir_session` à chaque requête) ; le hachage n'est jamais lu ni restitué. **Prouvé par exécution** : 10/10 tests pytest dédiés (liste sans hash, création + connexion réelle du nouveau compte, refus doublon / mot de passe court / rôle responsable / site invalide, désactivation → session 401 immédiate → réactivation → connexion OK, auto-désactivation refusée), suite Playwright `verifier-comptes-reel.mjs` **21/21**, `verifier-cablage.mjs` **94/94** (lien Comptes ajouté au bandeau), suite SQL complète (migrations 000-024 + inverses) OK, suite pytest complète **200/200**. Reste : durée de session définitive (`duree_session_minutes` = `a_definir` en base — décision propriétaire), réinitialisation du mot de passe d'un agent par le responsable (hors périmètre, question posée), limiteur de débit partagé (C11). |
 | C3 | Habilitations et cloisonnement des rôles | **68 %** | Cycle 3, **rôle caissier (addendum point h) vérifié au cycle 27** : diagnostic par exécution réelle, aucun code nécessaire — `qf_agent_comptabilite` remplit déjà les deux fonctions décidées le 2026-09-13 (encaisse ET saisit) : `POST /ventes` l'autorise déjà, `vente.html` est son écran d'accueil par défaut. **Correction d'une inexactitude du diagnostic d'origine** (même esprit que C6/C13) : le cloisonnement RH **est** déjà testé par une route (`GET /rh/employes` avec un jeton `agent_comptabilite` → 403, `server/tests/test_rh.py`), contrairement à ce que ce tableau affirmait. Fournisseurs : pas un vrai manque — la table n'a pas de `site_id` (partagée entre les deux sites par construction) et aucune route `/fournisseurs` n'existe (`404` vérifié). Habilitations appliquées **au niveau des requêtes SQL** : privilèges par colonne + RLS par site posés au cycle 2, exploités par `BaseDeDonnees.connexion_pour()`. Prouvé par exécution en **contournant l'API** : `SELECT ... WHERE site_id=2` sous `qf_agent_stock` renvoie 0 ligne même en le demandant explicitement (`server/tests/test_cloisonnement_site.py`). Reste ouvert : question 3 de l'addendum h (le caissier voit-il le détail des prix ou seulement le total ?, non tranchée), pas d'écran dédié à un profil « caissier » distinct de `vente.html`. |
@@ -97,7 +101,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **60 %** | Cycle 20, complété au **cycle 27** : **172 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **9 suites Playwright** (261 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant. `db/outils/verifier_tout.sh` enchaîne les trois couches en une seule commande. **Cycle 27** : un des deux points bloquant une CI Linux, cité depuis le cycle 20, est corrigé — `server/tests/conftest.py` cherchait `psql.exe` en dur dans `_pgdev/pgsql/bin/` (distribution portable Windows, absente de tout runner CI) ; cherche désormais `psql` sur le `PATH` en premier (`shutil.which`), ne retombant sur le chemin Windows que s'il est introuvable — comportement du poste de développement inchangé (vérifié : aucun `psql` sur son `PATH`, le repli s'active toujours), 172/172 tests toujours au vert. Reste, non traité ce cycle : `PGHOST`/`PGPORT` (5433, instance portable) et le mot de passe de test en dur restent, eux aussi, propres à ce poste — un runner CI aurait besoin de ses propres variables d'environnement ; aucun pipeline CI (fichier de workflow) n'existe encore. Couverture des parcours nécessitant une imprimante ou un téléphone réels toujours hors de portée d'une suite automatisée. |
 | C14 | Documentation et livrables | **40 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration. |
 
-**Moyenne indicative après le cycle 32 (gestion des comptes C2) : ≈ 67 %** (C0 65, C1 80, C2 72, C3 68, C4 72, C5 72, C6 85, C7 50, C8 70, C9 58, C10 55, C11 68, C12 92, C13 60, C14 40).
+**Moyenne indicative après le cycle 33 (clôture cycle-29 + CI) : ≈ 67 %** (C0 70, C1 80, C2 72, C3 68, C4 72, C5 72, C6 85, C7 50, C8 70, C9 58, C10 55, C11 68, C12 92, C13 60, C14 40).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -2434,6 +2438,37 @@ responsable).
 
 ---
 
+### Cycle 33 — Rangement : clôture de cycle-29 + CI minimale — 2026-09-20
+
+- **Chantier de rangement** (décision propriétaire) : clôturer
+  `cycle-29-hygiene-inventaire` et poser une CI GitHub Actions minimale,
+  avant le prochain chantier de fond.
+- **Clôture de cycle-29, par fusion réelle** : `VISION_PRODUIT.md` (décisions
+  d'éditeur 2026-09-19 : UX-0, point k, multi-site point a, crédit client
+  point b, fiscalité, import point j + recensement des 10 éléments codés en
+  dur) ; ~12 décisions 2026-09-19 réconciliées dans l'addendum avec la
+  décision 2026-09-20 déjà sur main ; candidats de cycle-29 renumérotés
+  **13** (multi-site), **14** (crédit client), **15** (import stock),
+  références internes corrigées. **Scores C0-C14 inchangés** (vérifié :
+  aucun `%` modifié par le merge). Trois correctifs de code de la branche
+  reportés (validés par le propriétaire) : `Cache-Control: no-store` sur le
+  JSON de l'API (`server/app/main.py`), attente des vraies réponses réseau
+  dans `verifier-inventaire-reel.mjs` et `verifier-echappement-html.mjs`.
+- **CI minimale** : `.github/workflows/ci.yml` — sur chaque push/PR vers
+  `main`, service `postgres:17` mappé sur 127.0.0.1:5433, schéma d'origine
+  + migrations 000-024 + jeu d'essai rejoués, suite pytest complète. Le
+  « vert/rouge » existe enfin sur GitHub, sans dépendre de la vérification
+  manuelle du poste de développement. **Premier run réel : rouge**, pour
+  deux causes hors dépôt par conception (`server/config.ini` gitignoré,
+  `qf_app` sans mot de passe tant que `definir_mot_de_passe_app.sql` n'a pas
+  tourné) — corrigées dans le workflow lui-même, **second run vert**
+  (suite pytest 200/200 sur runner Ubuntu). La CI a donc prouvé dès son
+  premier jour qu'elle attrape les erreurs.
+- **Score** : C0 **65 % → 70 %** (CI automatisée livrée et verte ; reste
+  kiosque et lockfile). Moyenne indicative ≈ 67 %.
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
@@ -2488,10 +2523,75 @@ avant tout code (voir `ADDENDUM_CAHIER_DES_CHARGES.md`, callouts
   confirmant qu'aucun secret réel n'y a jamais été committé. **Clos**, ne
   débloque aucun chantier de code.
 
-Restent réellement non tranchés : le reste du point **b** (vente à
-crédit), le point **j** (volumétrie/reprise du stock initial, bloque le
-dimensionnement de C4), le point **k** (cibles ergonomiques comme
-critères de recette formels).
+### Décisions du propriétaire obtenues le 2026-09-19 (hors cycle de code)
+
+Trois décisions supplémentaires, sans code écrit — consignées dans
+`VISION_PRODUIT.md` (les deux premières, valables pour toute la gamme
+Akuma) et dans `ADDENDUM_CAHIER_DES_CHARGES.md` (la troisième, qui touche
+le modèle de données du premier client) :
+
+- **UX-0** (méthodologie de mesure) : deux critères distincts — **prise en
+  main** (1ᵉʳ essai d'un testeur naïf) et **usage courant** (3ᵉ essai du
+  même testeur) — relevés séparément ; une campagne exige 3 testeurs
+  différents dont au moins un jamais impliqué dans le projet. Débloque la
+  2ᵉ campagne humaine réelle de C9/C10 (candidat 6 ci-dessous).
+- **Point k** (cibles d'acceptation) : chiffré pour chaque parcours, deux
+  temps (usage courant bloquant, prise en main indicateur) + critères
+  qualitatifs (débordement, message technique, confirmation, retour
+  arrière). Deux valeurs transmises méritent une re-confirmation avant
+  toute campagne (incohérence relevée dans `VISION_PRODUIT.md`, non
+  corrigée d'elle-même).
+- **C5, question 3** (le vendeur) : le champ vendeur pointera une **fiche
+  employé** (`employes`, C6), jamais un compte utilisateur — un employé
+  peut vendre sans jamais se connecter. Débloque le rapport « écarts de
+  prix par vendeur » (devient un rapport par employé), mais exige d'abord
+  une migration de `ventes.vendeur_id` (`utilisateurs` → `employes`) et la
+  réécriture de `GET /ventes/vendeurs` — chantier à part entière, non
+  démarré.
+
+### Décisions du propriétaire obtenues le 2026-09-19, seconde série (hors cycle de code)
+
+Cinq décisions supplémentaires le même jour, toujours sans code écrit :
+
+- **Point a, question 4 — DÉCISION STRUCTURELLE** : une seule fiche article
+  par boutique, le stock réparti par site (jamais une fiche par site) ;
+  transfert qui crée l'emplacement de destination s'il n'existe pas —
+  **inverse l'implémentation actuelle**. Impact précis sur C1/C3/C4/C7/C8 et
+  plan de migration consignés dans `ADDENDUM_CAHIER_DES_CHARGES.md`, point
+  a ; principe gamme dans `VISION_PRODUIT.md`. **Confirmé comme cycle à
+  part entière, à mener avant l'import du stock initial (point j).**
+  Sous-question laissée ouverte : règle de rapprochement pour fusionner les
+  fiches homonymes existantes (un article par site aujourd'hui) — à
+  trancher avant d'écrire cette migration.
+- **Point d, question 1** (régime fiscal) : seuil légal >50 M FCFA/an ⇒
+  régime réel, TVA 19,25 % — confirme la valeur déjà appliquée depuis le
+  cycle 6. Question 3 (prix saisis HT ou TTC) reste ouverte, hypothèse de
+  travail (TTC) non validée par le comptable — **aucun code à écrire tant
+  qu'elle n'est pas confirmée**.
+- **Point b** (crédit client) : tranché en détail (créance jamais recette,
+  identification nom+téléphone, plafond par défaut 100 000 FCFA pour
+  Franck configurable par boutique, dépassable au cas par cas, règlements
+  partiels, tableau de bord avec échéancier 30/60/90 jours, aucune relance
+  ni intérêt en v1, fonction togglable par boutique dans la gamme). Reprise
+  de 15 à 25 clients depuis un cahier de crédit, à charger avec le stock.
+  Paiements mixtes (question 3) et qui enregistre un règlement (question 5,
+  partiel) restent sans réponse explicite.
+- **Point j** (volumétrie) : 800-1 200 références, 40-120 ventes/jour selon
+  affluence, comptage par le responsable et les vendeurs sur 3-5 jours,
+  boutique ouverte, par zones puis catégories. Outil d'import repensé :
+  chargements partiels et successifs obligatoires (un import global ne
+  convient pas), sans duplication, articles trouvés hors cahier créés après
+  validation du responsable. Dépend du point a (migration article/stock
+  d'abord).
+- **Vendeurs** : confirmation du point c (fiche employé, jamais compte) —
+  4 à 6 vendeurs réels dont des aides occasionnels sans contrat, besoin
+  quotidien du responsable de savoir qui a vendu quoi.
+
+Restent réellement non tranchés : les paiements mixtes et l'enregistrement
+d'un règlement (sous-questions du point b), la confirmation HT/TTC par le
+comptable (point d, question 3), la règle de rapprochement des fiches
+homonymes (point a). Le point **k** reste tranché depuis la première série
+du jour.
 
 ### Candidats
 
@@ -2507,17 +2607,18 @@ critères de recette formels).
 5. ~~**Câblage visuel des deux voyants de tableau de bord**~~ — **fait** au
    cycle 27 : lien vers `cloture-caisse.html` et carte « Dernière
    sauvegarde » (3 états réels vérifiés).
-6. **Deuxième campagne humaine réelle** (`UX_BASELINE.md`), pour confirmer
-   dans les conditions d'origine ce que le cycle 24 a corrigé par preuve
-   automatisée seule : l'objectif chronométré principal de C9 (vente
-   < 60 s, pire des 3 essais) et les constats mobiles UX-3/UX-4/UX-7 de
-   C10 sur le même téléphone que la première campagne. Nécessite aussi de
-   trancher UX-0 (la convention de mesure elle-même) avant de relancer.
-7. **Constats UX restants, non traités par le cycle 24** : UX-0
-   (méthodologie, décision du propriétaire, aucun code), UX-5 (saisie
+6. **Deuxième campagne humaine réelle** (`UX_BASELINE.md`, à mettre à jour
+   avec le protocole ci-dessous avant de la lancer), pour confirmer dans
+   les conditions d'origine ce que le cycle 24 a corrigé par preuve
+   automatisée seule : les cibles chiffrées de C9/C10 (point k, tranché le
+   2026-09-19 — voir `VISION_PRODUIT.md`), mesurées séparément en prise en
+   main (1ᵉʳ essai) et en usage courant (3ᵉ essai), sur 3 testeurs
+   différents dont au moins un nouveau. ~~Nécessite de trancher UX-0~~ —
+   **fait le 2026-09-19**, ne bloque plus le lancement de la campagne.
+7. **Constats UX restants, non traités par le cycle 24** : UX-5 (saisie
    d'une recette au téléphone toujours trop lente), UX-8 (annuler une
    ligne du panier toujours introuvable seul par un utilisateur non
-   formé).
+   formé). ~~UX-0~~ **tranché le 2026-09-19** (voir ci-dessus).
 8. ~~**C3 (rôle caissier, point h)**~~ — **fait** au cycle 27 : diagnostic
    par exécution, aucun code nécessaire, architecture déjà conforme.
    ~~**C5 (numéro facturier + vendeur, point c)**~~ — **fait au cycle 27,
@@ -2525,20 +2626,24 @@ critères de recette formels).
    préfixe par site. **Question 5 (seuil) tranchée le 2026-09-18** : 10 %
    sous le prix catalogue, en configuration, signale sans bloquer.
    **Rapport « écarts de prix par vendeur » toujours à construire**
-   (chantier non démarré, candidat pour un prochain cycle) — retenu par
-   la question 3 (vendeur sans compte), encore ouverte : ne pas coder le
-   rapport tant qu'elle n'a pas de réponse, sous peine d'exclure
-   silencieusement les ventes d'un vendeur sans compte si le cas existe.
+   (chantier non démarré, candidat pour un prochain cycle), devenu un
+   **rapport par employé** suite à la question 3, **tranchée le
+   2026-09-19** (voir le callout du point c dans l'addendum) : le vendeur
+   est une fiche employé (`employes`, C6), jamais un compte utilisateur.
+   Ne peut pas encore être codé : exige d'abord une migration de
+   `ventes.vendeur_id` (`utilisateurs` → `employes`) et la réécriture de
+   `GET /ventes/vendeurs`, non démarrées.
 9. **Sous-questions non bloquantes du point g** (fond de caisse initial,
    rattachement d'une vente saisie en retard, rapprochement Mobile Money
    exact, seuil d'écart de caisse à fixer, blocage d'une saisie après
    clôture) — chacune peut être tranchée indépendamment, sans bloquer le
    reste.
 10. **C13 — reste de la portabilité CI** (`PGHOST`/`PGPORT` et mot de passe
-    de test propres au poste de développement) et mise en place effective
-    d'un pipeline CI (fichier de workflow) — le point le plus bloquant
-    (chemin Windows en dur) est corrigé depuis le cycle 27, celui-ci ne
-    l'est pas encore.
+    de test propres au poste de développement, lisibles par variables
+    d'environnement plutôt que figés dans `conftest.py`). Le pipeline CI
+    (fichier de workflow) est **livré au cycle 33** (`.github/workflows/ci.yml`,
+    vert sur GitHub) ; ce reste-ci est un confort de portabilité, plus
+    bloquant.
 11. ~~**C0-C — outil de création du premier compte responsable**~~ — **fait
     au cycle 31** (2026-09-20) : migration 023 (`creer_premier_responsable()`,
     `SECURITY DEFINER`, réservée à `qf_app`) + `db/outils/creer_compte_responsable.ps1`.
@@ -2554,3 +2659,25 @@ critères de recette formels).
     000-024 + inverses OK, pytest 200/200. Reste C2 : durée de session
     définitive, réinitialisation de mot de passe par le responsable (hors
     périmètre), limiteur de débit partagé.
+13. **Migration article/stock multi-site (point a, décidé le 2026-09-19)** —
+    cycle à part entière, le plus lourd des candidats non encore démarré :
+    touche C1 (nouvelle table de stock par site), C3 (RLS repensée), C4
+    (fonctions de stock réécrites), C7 (comptage par article+site), C8
+    (alertes/totaux par site). Impact détaillé et plan de migration dans
+    `ADDENDUM_CAHIER_DES_CHARGES.md`, point a. **Doit précéder** le
+    candidat 15 (import du stock initial) — ordre non négociable, confirmé
+    par le propriétaire. (Anciennement candidat 11 du cycle 29.)
+14. **Crédit client (point b, décidé le 2026-09-19)** — chantier C5/C1 non
+    démarré : table clients, créance vs. recette, plafond configurable,
+    règlements partiels, tableau de bord avec échéancier 30/60/90 jours,
+    activable/désactivable par boutique. Reprise de 15-25 clients à charger
+    avec le stock (candidat 15). Paiements mixtes et qui enregistre un
+    règlement restent à préciser si le besoin se confirme en pratique.
+    (Anciennement candidat 12 du cycle 29.)
+15. **Import du stock initial et volumétrie (point j, décidé le
+    2026-09-19)** — outil à chargements partiels/successifs, sans
+    duplication, création d'articles non répertoriés après validation du
+    responsable ; charge aussi les 15-25 clients à crédit du candidat 14.
+    **Bloqué tant que le candidat 13 n'est pas livré** (importer dans
+    l'ancien modèle doublerait le travail). (Anciennement candidat 13 du
+    cycle 29.)

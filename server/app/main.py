@@ -142,6 +142,15 @@ def creer_application(config: Config | None = None) -> FastAPI:
         # requête, un identifiant de vente...) au site externe référencé par
         # un lien sortant.
         reponse.headers["Referrer-Policy"] = "no-referrer"
+        # Cycle 29 : trouvé par exécution — aucune réponse JSON de l'API ne
+        # posait d'en-tête de cache, laissant un navigateur libre de servir
+        # une réponse périmée (constat : `verifier-inventaire-reel.mjs`
+        # relisait un article déjà compté comme s'il ne l'était pas encore,
+        # reproductible hors ligne, indépendant de l'heure du jour). Limité
+        # au JSON pour ne jamais désactiver le cache des ressources
+        # statiques servies sous /app (CSS, JS, images du thème).
+        if "application/json" in reponse.headers.get("content-type", ""):
+            reponse.headers["Cache-Control"] = "no-store"
         return reponse
 
     app.include_router(auth.routeur)
