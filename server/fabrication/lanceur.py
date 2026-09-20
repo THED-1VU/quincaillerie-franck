@@ -11,13 +11,13 @@ applicatif web, livré comme un .exe Windows qui embarque ce serveur et ouvre
 l'interface en plein écran — aucune installation de Python sur les postes,
 double-clic comme l'application d'origine.
 
-ÉTAT ACTUEL (cycle 4, chantier C0) : les écrans de la maquette (cycle 1) ne
-sont pas encore câblés sur ce serveur (chantiers C9/C10, cycle ultérieur).
-Le navigateur ouvert par ce lanceur pointe donc, pour l'instant, sur la
-documentation interactive de l'API (/docs) — le seul « écran » que le
-serveur sait réellement servir aujourd'hui. Une fois C9/C10 fait, seule la
-constante URL_A_OUVRIR ci-dessous change ; le mécanisme de lancement, lui,
-ne change pas.
+ÉTAT ACTUEL (cycle 30, correctif C0-A) : les écrans de la maquette sont
+câblés sur ce serveur depuis le cycle 5 (chantiers C9/C10) et servis sous
+/app par server/app/main.py (StaticFiles, html=True). Le navigateur ouvert
+par ce lanceur pointe donc sur l'écran de connexion réel
+(/app/connexion.html), jamais sur la documentation technique (/docs). Le
+mode kiosque (plein écran) et l'outil de création du premier compte
+responsable restent des chantiers C0 séparés, non traités ici.
 """
 
 from __future__ import annotations
@@ -67,9 +67,10 @@ HOTE = "127.0.0.1"
 HOTE_ECOUTE = "0.0.0.0"
 PORT_PAR_DEFAUT = 8000
 
-# Placeholder documenté ci-dessus — à remplacer par l'écran de connexion une
-# fois C9/C10 fait.
-CHEMIN_A_OUVRIR = "/docs"
+# Écran d'accueil réel de l'application (C9/C10 câblés depuis le cycle 5,
+# servis sous /app par server/app/main.py) : le double-clic sur l'exécutable
+# doit ouvrir l'écran de connexion, jamais la documentation technique.
+CHEMIN_A_OUVRIR = "/app/connexion.html"
 
 
 def _adresse_lan() -> str | None:

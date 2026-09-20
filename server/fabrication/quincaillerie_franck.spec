@@ -27,6 +27,38 @@ from pathlib import Path
 
 RACINE_SERVEUR = Path(SPECPATH).resolve().parent
 
+DOSSIER_MAQUETTE = (RACINE_SERVEUR.parent / "maquette").resolve()
+
+# Correctif C0-A (cycle 30) : la maquette est servie par le serveur sous /app
+# (server/app/main.py, StaticFiles, html=True) — elle doit donc être EMBARQUÉE
+# dans l'exécutable, sinon le double-clic ouvre l'écran de connexion... en
+# 404 (constaté par exécution : datas=[] laissait /app introuvable en mode
+# figé). Seuls les fichiers réellement servis sont embarqués : les écrans
+# HTML, leurs CSS/JS, le favicon et les assets de la marque. Les artefacts de
+# test (maquette/verification/ — dont node_modules — et maquette/captures/)
+# restent volontairement hors du paquet.
+FICHIERS_MAQUETTE = [
+    "api.js",
+    "cloture-caisse.html",
+    "connexion.html",
+    "donnees-simulees.js",
+    "favicon.ico",
+    "index.html",
+    "inventaire.html",
+    "rapports.html",
+    "rh.html",
+    "stock.html",
+    "styles.css",
+    "tableau-bord.html",
+    "theme.css",
+    "vente.html",
+]
+
+datas = (
+    [(str(DOSSIER_MAQUETTE / nom), "maquette") for nom in FICHIERS_MAQUETTE]
+    + [(str(DOSSIER_MAQUETTE / "assets"), "maquette/assets")]
+)
+
 HIDDEN_IMPORTS = [
     # uvicorn choisit sa boucle d'événements et ses protocoles par
     # importlib au démarrage — invisibles à l'analyse statique.
@@ -59,7 +91,7 @@ a = Analysis(
     [str(RACINE_SERVEUR / "fabrication" / "lanceur.py")],
     pathex=[str(RACINE_SERVEUR)],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=HIDDEN_IMPORTS,
     hookspath=[],
     hooksconfig={},

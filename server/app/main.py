@@ -39,6 +39,7 @@ Lancer en développement :
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 import psycopg
@@ -69,14 +70,16 @@ from .securite import GestionnaireSessions, LimiteurDebit
 logger = logging.getLogger("quincaillerie")
 
 # maquette/ est à la racine du dépôt, deux niveaux au-dessus de server/app/.
-# NOTE (portée du cycle 5, C9/C10 uniquement — ne touche pas C0) : ce chemin
-# fonctionne en développement (uvicorn lancé depuis le dépôt). L'empaquetage
-# de ces fichiers DANS l'exécutable (server/fabrication/, chantier C0) n'a
-# pas été fait ce cycle — voir RAPPORT AVANCEMENT/loop-state.md, « reste à
-# faire ». Le montage est donc toléré manquant (avertissement, pas un crash)
-# pour ne pas casser l'exécutable déjà construit au cycle 4.
-RACINE_DEPOT = Path(__file__).resolve().parent.parent.parent
-MAQUETTE_DIR = RACINE_DEPOT / "maquette"
+# En mode figé (PyInstaller, correctif C0-A — cycle 30), la maquette est
+# EMBARQUÉE dans le paquet (voir fabrication/quincaillerie_franck.spec,
+# section datas) et décompressée dans le dossier temporaire désigné par
+# sys._MEIPASS : le chemin du dépôt n'existe pas sur un poste de boutique.
+# Le montage reste toléré manquant (avertissement, pas un crash) pour ne
+# jamais empêcher l'exécutable de démarrer si le paquet était mal fabriqué.
+if getattr(sys, "frozen", False):
+    MAQUETTE_DIR = Path(getattr(sys, "_MEIPASS", ".")) / "maquette"
+else:
+    MAQUETTE_DIR = Path(__file__).resolve().parent.parent.parent / "maquette"
 
 
 def creer_application(config: Config | None = None) -> FastAPI:
