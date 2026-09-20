@@ -14,6 +14,31 @@ d'origine laisse ouverts ou contradictoires. Pour chaque point :
 Rappel des priorités du propriétaire, dans l'ordre : **1. rendu / ergonomie / responsivité —
 2. usage téléphone (suivi ET saisie) — 3. fiabilité métier (droits, stock, anti-vol).**
 
+## Gestion des comptes utilisateurs (CDC §3.8)
+
+> **Décidé (2026-09-20).** La création des comptes se fait **par le
+> responsable, depuis l'intérieur de l'application**, conformément au CDC
+> (GS §3, DR Resp. B1-B2) : créer un agent stock ou un agent comptabilité
+> avec **site obligatoire**, identifiant unique, désactiver / réactiver
+> un compte. **Pas d'auto-inscription publique** — elle n'apparaît nulle
+> part dans le CDC et présenterait un risque de sécurité inutile pour
+> cette application métier.
+>
+> Deux chantiers distincts en découlent, à ne pas mélanger :
+> - **C0-C** (périmètre C0) : outil de création du **premier** compte
+>   responsable — résout l'œuf et la poule, car aucun compte ne peut être
+>   créé aujourd'hui dans l'application web reconstruite (diagnostic du
+>   2026-09-20 : aucune route, aucun écran ; seul l'ancien
+>   `CreerCompteResponsable.exe` de l'application d'origine existait,
+>   non reconstruit). **Non démarré.**
+> - **C2** (Authentification et comptes) : écran + route de gestion des
+>   comptes depuis l'application, pour l'usage courant du responsable une
+>   fois connecté (créer, désactiver, réactiver — CDC §3.8). **Non
+>   démarré** ; diagnostic à faire dans un cycle séparé. Le socle SQL
+>   existe déjà : `qf_responsable` a reçu `GRANT INSERT`/`UPDATE` sur
+>   `utilisateurs` (migration 008) — il ne manque que la route et
+>   l'écran.
+
 ---
 
 ## a) Transfert de stock entre le magasin et le comptoir

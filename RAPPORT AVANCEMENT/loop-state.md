@@ -2539,3 +2539,18 @@ critères de recette formels).
     d'un pipeline CI (fichier de workflow) — le point le plus bloquant
     (chemin Windows en dur) est corrigé depuis le cycle 27, celui-ci ne
     l'est pas encore.
+11. **C0-C — outil de création du premier compte responsable** (périmètre
+    C0, CDC §7 « second exécutable »). Décision de flux prise le
+    2026-09-20 : création par le responsable depuis l'app, **pas
+    d'auto-inscription publique** (voir `ADDENDUM_CAHIER_DES_CHARGES.md`,
+    section « Gestion des comptes utilisateurs »). Aujourd'hui, aucun
+    compte ne peut être créé dans l'application web reconstruite
+    (diagnostic du 2026-09-20) ; l'ancien `CreerCompteResponsable.exe`
+    d'origine n'est pas reconstruit. **Non démarré.**
+12. **C2 — gestion des comptes depuis l'application** (CDC §3.8) : écran +
+    route pour le responsable — créer un agent_stock / agent_comptabilite
+    avec site obligatoire, désactiver / réactiver un compte. Décision de
+    flux du 2026-09-20 : création par le responsable, pas
+    d'auto-inscription. Les `GRANT` SQL existent déjà
+    (`db/migrations/008_roles_applicatifs.sql`) — il manque la route et
+    l'écran. **Non démarré** ; diagnostic dans un cycle séparé.
