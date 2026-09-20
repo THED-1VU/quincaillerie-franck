@@ -41,21 +41,33 @@ def obtenir_session(
     except JetonInvalide as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
-    # Révocation (chantier C11, cycle 21) : la signature et l'expiration ne
-    # suffisent plus depuis que /auth/deconnexion existe — un jeton peut
-    # être signature-valide et pourtant explicitement révoqué. Vérifié SOUS
-    # qf_app (connexion_anonyme, comme verifier_connexion), avant toute
-    # bascule de rôle : la révocation n'est pas une donnée métier cloisonnée
-    # par site. Un jeton antérieur à ce cycle a jti="" (securite.py) —
-    # jeton_est_revoque("") ne trouve jamais de ligne, comportement inchangé
-    # pour lui (jamais révocable, comme avant ce cycle).
-    if session.jti:
-        bd: BaseDeDonnees = obtenir_bd(request)
-        with bd.connexion_anonyme() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT jeton_est_revoque(%s) AS revoque", (session.jti,))
-                if cur.fetchone()["revoque"]:
-                    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session déconnectée, reconnectez-vous.")
+    # Révocation (chantier C11, cycle 21) et compte désactivé (chantier C2,
+    # cycle 32) : la signature et l'expiration ne suffisent plus — un jeton
+    # peut être signature-valide et pourtant explicitement révoqué, et un
+    # compte peut être désactivé par le responsable alors qu'une session est
+    # en cours (décision du 2026-09-20 : la requête suivante est refusée).
+    # Vérifié SOUS qf_app (connexion_anonyme, comme verifier_connexion),
+    # avant toute bascule de rôle : ces deux faits ne sont pas des données
+    # métier cloisonnées par site. Un jeton antérieur au cycle 21 a jti=\"\"
+    # (securite.py) — jeton_est_revoque(\"\") ne trouve jamais de ligne,
+    # comportement inchangé pour lui (jamais révocable, comme avant ce
+    # cycle) ; le contrôle d'activité, lui, s'applique à tous les jetons.
+    bd: BaseDeDonnees = obtenir_bd(request)
+    with bd.connexion_anonyme() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT jeton_est_revoque(%s) AS revoque, "
+                "       compte_est_actif(%s) AS actif",
+                (session.jti, session.utilisateur_id),
+            )
+            ligne = cur.fetchone()
+            if ligne["revoque"]:
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session déconnectée, reconnectez-vous.")
+            if not ligne["actif"]:
+                raise HTTPException(
+                    status.HTTP_401_UNAUTHORIZED,
+                    "Ce compte est désactivé. Voyez le responsable.",
+                )
 
     return session
 
