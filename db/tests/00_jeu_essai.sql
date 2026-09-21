@@ -32,7 +32,7 @@ TRUNCATE TABLE
     historique_modifications_articles, historique_prix_articles,
     ventes_lignes, transactions, ventes,
     avances_salaire, absences_conges, employes,
-    articles, fournisseurs,
+    stocks_sites, articles, fournisseurs,
     historique_parametres, parametres,
     utilisateurs
 RESTART IDENTITY CASCADE;
@@ -90,12 +90,19 @@ INSERT INTO utilisateurs (id, nom_complet, identifiant, mot_de_passe_hash, role,
   (5, 'Dina Comptoir',    'comptoir.compta', 'hash_factice', 'agent_comptabilite', 2);
 SELECT setval('utilisateurs_id_seq', 5, TRUE);
 
-INSERT INTO articles (id, nom, categorie, unite, prix_achat, prix_vente, quantite_stock, seuil_alerte, site_id, fournisseur_id) VALUES
-  (1, 'Ciment CIM II 50 kg', 'Gros oeuvre', 'sac',   5000, 6500,  30, 6, 1, 1),
-  (2, 'Fer à béton 8 mm',    'Gros oeuvre', 'barre', 2800, 3500,  40, 8, 1, 1),
-  (3, 'Clou 5 cm',           'Quincaillerie', 'kg',   600,  800, 100, 20, 2, 1),
-  (4, 'Article rare',        'Divers',      'pièce', 1000, 2000,   1, 1, 1, 1);
+-- Une fiche article, un stock par site (décision 2026-09-19, migration 026).
+INSERT INTO articles (id, nom, categorie, unite, prix_achat, prix_vente, fournisseur_id) VALUES
+  (1, 'Ciment CIM II 50 kg', 'Gros oeuvre', 'sac',   5000, 6500, 1),
+  (2, 'Fer à béton 8 mm',    'Gros oeuvre', 'barre', 2800, 3500, 1),
+  (3, 'Clou 5 cm',           'Quincaillerie', 'kg',   600,  800, 1),
+  (4, 'Article rare',        'Divers',      'pièce', 1000, 2000, 1);
 SELECT setval('articles_id_seq', 4, TRUE);
+
+INSERT INTO stocks_sites (article_id, site_id, quantite_stock, seuil_alerte) VALUES
+  (1, 1,  30, 6),
+  (2, 1,  40, 8),
+  (3, 2, 100, 20),
+  (4, 1,   1, 1);
 
 INSERT INTO employes (id, nom_complet, poste, type_contrat, salaire_mensuel, site_id, date_embauche) VALUES
   (1, 'Employé Essai', 'Manutentionnaire', 'permanent', 60000, 1, '2026-01-15');

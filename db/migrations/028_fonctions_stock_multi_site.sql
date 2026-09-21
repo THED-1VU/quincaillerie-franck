@@ -144,6 +144,14 @@ BEGIN
           USING ERRCODE = 'foreign_key_violation';
     END IF;
 
+    -- Verrou de ligne : sérialise les ventes concurrentes du même
+    -- (article, site). Sans lui, deux sessions liraient le même stock et la
+    -- seconde échouerait à l'UPDATE (quantité négative) au lieu de consigner
+    -- un écart — prouvé par la suite de concurrence (03_concurrence.sh).
+    PERFORM 1 FROM stocks_sites
+      WHERE article_id = p_article_id AND site_id = p_site_id
+      FOR UPDATE;
+
     SELECT COALESCE(quantite_stock, 0) INTO stock_avant
       FROM stocks_sites WHERE article_id = p_article_id AND site_id = p_site_id;
 

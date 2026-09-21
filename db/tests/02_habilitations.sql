@@ -94,7 +94,9 @@ SELECT d_refus('lire toutes les colonnes d''articles (SELECT *)',
 SELECT d_refus('modifier un prix de vente',
   $$UPDATE articles SET prix_vente = 1 WHERE id = 1$$);
 SELECT d_refus('modifier le seuil d''alerte',
-  $$UPDATE articles SET seuil_alerte = 0 WHERE id = 1$$);
+  $$UPDATE stocks_sites SET seuil_alerte = 0 WHERE article_id = 1 AND site_id = 1$$);
+SELECT d_refus('écrire directement dans le stock',
+  $$UPDATE stocks_sites SET quantite_stock = quantite_stock WHERE article_id = 1 AND site_id = 1$$);
 SELECT d_refus('lire les ventes',
   $$SELECT count(*) FROM ventes$$);
 SELECT d_refus('lire les transactions comptables',
@@ -108,27 +110,29 @@ SELECT d_refus('lire l''historique des prix',
 SELECT d_refus('créer une table (DDL)',
   $$CREATE TABLE essai_ddl (x INTEGER)$$);
 
-SELECT d_succes('lire nom, unité et quantité en stock',
-  $$SELECT nom, unite, quantite_stock FROM articles LIMIT 1$$);
-SELECT d_succes('mettre à jour la quantité en stock',
-  $$UPDATE articles SET quantite_stock = quantite_stock WHERE id = 1$$);
+SELECT d_succes('lire nom et unité de la fiche, et la quantité de SON site',
+  $$SELECT a.nom, a.unite, s.quantite_stock
+      FROM articles a JOIN stocks_sites s ON s.article_id = a.id
+     LIMIT 1$$);
 SELECT d_succes('enregistrer un comptage d''inventaire',
-  $$INSERT INTO comptages_stock (article_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
-    VALUES (2, 2, 'soir', 0, 40)$$);
+  $$INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
+    VALUES (2, 1, 2, 'soir', 0, 40)$$);
 
 -- Le seuil d'alerte n'est pas saisi : il est recalculé par la base à l'entrée
 -- de stock (20 % de la quantité reçue). 50 reçus → seuil 10.
 SELECT d_succes('enregistrer une entrée de stock par la fonction dédiée',
-  $$SELECT enregistrer_entree_stock(1, 50, 2, 'Livraison essai')$$);
+  $$SELECT enregistrer_entree_stock(1, 1, 50, 2, 'Livraison essai')$$);
 SELECT d_valeur('seuil d''alerte recalculé par la base (20 % de 50)',
-  $$SELECT seuil_alerte::TEXT FROM articles WHERE id = 1$$, '10');
+  $$SELECT seuil_alerte::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$, '10');
 
--- Cloisonnement par site : l'article 3 appartient au Comptoir, il ne doit pas
--- être visible pour un agent du Magasin.
-SELECT d_valeur('aucun article d''un autre site visible',
-  $$SELECT count(*)::TEXT FROM articles WHERE site_id <> 1$$, '0');
-SELECT d_valeur('les articles de son propre site restent visibles',
-  $$SELECT (count(*) > 0)::TEXT FROM articles$$, 'true');
+-- Décision 2026-09-19/20 : catalogue (fiches) commun aux deux sites, SEULE la
+-- quantité est cloisonnée par site.
+SELECT d_valeur('le catalogue (fiches) est commun aux deux sites',
+  $$SELECT count(*)::TEXT FROM articles$$, '4');
+SELECT d_valeur('aucune quantité d''un autre site visible',
+  $$SELECT count(*)::TEXT FROM stocks_sites WHERE site_id <> 1$$, '0');
+SELECT d_valeur('les quantités de son propre site restent visibles',
+  $$SELECT (count(*) > 0)::TEXT FROM stocks_sites$$, 'true');
 
 RESET ROLE;
 
@@ -139,9 +143,9 @@ SET ROLE qf_agent_comptabilite;
 SET qf.site_id = '1';
 
 SELECT d_refus('lire la quantité en stock',
-  $$SELECT quantite_stock FROM articles LIMIT 1$$);
+  $$SELECT quantite_stock FROM stocks_sites LIMIT 1$$);
 SELECT d_refus('lire le seuil d''alerte (il révèle le volume reçu)',
-  $$SELECT seuil_alerte FROM articles LIMIT 1$$);
+  $$SELECT seuil_alerte FROM stocks_sites LIMIT 1$$);
 SELECT d_refus('lire toutes les colonnes d''articles (SELECT *)',
   $$SELECT * FROM articles LIMIT 1$$);
 SELECT d_refus('lire le prix d''achat (la marge)',
@@ -151,7 +155,7 @@ SELECT d_refus('lire les comptages d''inventaire',
 SELECT d_refus('lire les mouvements de stock',
   $$SELECT count(*) FROM mouvements_stock$$);
 SELECT d_refus('écrire directement dans le stock',
-  $$UPDATE articles SET quantite_stock = 0 WHERE id = 1$$);
+  $$UPDATE stocks_sites SET quantite_stock = 0 WHERE article_id = 1 AND site_id = 1$$);
 SELECT d_refus('lire les salaires des employés',
   $$SELECT salaire_mensuel FROM employes LIMIT 1$$);
 SELECT d_refus('lire les avances sur salaire',
@@ -170,7 +174,7 @@ SELECT d_succes('rattacher une dépense à un employé (sans voir son salaire)',
 -- écart, donc ecarts_stock_ventes n'est jamais touchée ici (voir migration
 -- 011) — seul le GRANT d'exécution est testé, pas le comportement métier.
 SELECT d_succes('décrémenter le stock via la fonction de pont',
-  $$SELECT decrementer_stock_vente(1, 1, 4, NULL, 'vente essai')$$);
+  $$SELECT decrementer_stock_vente(1, 1, 1, 4, NULL, 'vente essai')$$);
 
 RESET ROLE;
 
@@ -180,9 +184,9 @@ RESET ROLE;
 SET ROLE qf_responsable;
 
 SELECT d_succes('lire les prix',   $$SELECT prix_vente FROM articles LIMIT 1$$);
-SELECT d_succes('lire les stocks', $$SELECT quantite_stock FROM articles LIMIT 1$$);
-SELECT d_valeur('voir les DEUX sites (vue consolidée)',
-  $$SELECT count(DISTINCT site_id)::TEXT FROM articles$$, '2');
+SELECT d_succes('lire les stocks', $$SELECT quantite_stock FROM stocks_sites LIMIT 1$$);
+SELECT d_valeur('voir les DEUX sites (stocks par site)',
+  $$SELECT count(DISTINCT site_id)::TEXT FROM stocks_sites$$, '2');
 SELECT d_succes('fixer un prix de vente',
   $$UPDATE articles SET prix_vente = 6600 WHERE id = 1$$);
 SELECT d_succes('lire les paramètres à décider',
@@ -194,9 +198,9 @@ SELECT d_succes('créer un compte utilisateur (en écrivant le hachage)',
 SELECT d_refus('lire un hachage de mot de passe',
   $$SELECT mot_de_passe_hash FROM utilisateurs LIMIT 1$$);
 SELECT d_refus('modifier le seuil d''alerte à la main',
-  $$UPDATE articles SET seuil_alerte = 0 WHERE id = 1$$);
-SELECT d_refus('déplacer un article d''un site à l''autre (transfert non tranché)',
-  $$UPDATE articles SET site_id = 2 WHERE id = 1$$);
+  $$UPDATE stocks_sites SET seuil_alerte = 0 WHERE article_id = 1 AND site_id = 1$$);
+SELECT d_refus('déplacer un stock d''un site à l''autre à la main (réservé aux fonctions)',
+  $$UPDATE stocks_sites SET site_id = 2 WHERE article_id = 1 AND site_id = 1$$);
 SELECT d_refus('créer une table (DDL)',
   $$CREATE TABLE essai_ddl (x INTEGER)$$);
 SELECT d_refus('supprimer une table',
