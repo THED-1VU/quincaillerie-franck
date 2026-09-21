@@ -72,7 +72,7 @@ END $$;
 -- 1. Contraintes de domaine (migration 001)
 -- ============================================================================
 SELECT t_refus('001 · stock négatif',
-  $$UPDATE articles SET quantite_stock = -50 WHERE id = 1$$);
+  $$UPDATE stocks_sites SET quantite_stock = -50 WHERE article_id = 1 AND site_id = 1$$);
 
 SELECT t_refus('001 · prix de vente négatif',
   $$UPDATE articles SET prix_vente = -999 WHERE id = 1$$);
@@ -81,11 +81,11 @@ SELECT t_refus('001 · prix d''achat négatif',
   $$UPDATE articles SET prix_achat = -1 WHERE id = 1$$);
 
 SELECT t_refus('001 · seuil d''alerte négatif',
-  $$UPDATE articles SET seuil_alerte = -3 WHERE id = 1$$);
+  $$UPDATE stocks_sites SET seuil_alerte = -3 WHERE article_id = 1 AND site_id = 1$$);
 
 SELECT t_refus('001 · mouvement de stock de quantité 0',
-  $$INSERT INTO mouvements_stock (article_id, type, categorie, quantite, motif, utilisateur_id)
-    VALUES (1, 'entree', 'reception_fournisseur', 0, 'essai', 2)$$);
+  $$INSERT INTO mouvements_stock (article_id, site_id, type, categorie, quantite, motif, utilisateur_id)
+    VALUES (1, 1, 'entree', 'reception_fournisseur', 0, 'essai', 2)$$);
 
 SELECT t_refus('001 · taux de TVA à 500 %',
   $$INSERT INTO ventes (site_id, utilisateur_id, sous_total_ht, taux_tva, montant_tva, total_ttc)
@@ -138,14 +138,14 @@ SELECT t_refus('001 · ligne de vente de quantité négative',
 -- 2. Écart d'inventaire calculé par la base (migration 003) — LE POINT CLÉ
 -- ============================================================================
 SELECT t_refus('003 · écriture directe de l''écart d''inventaire',
-  $$INSERT INTO comptages_stock (article_id, utilisateur_id, moment,
+  $$INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment,
                                  quantite_attendue, quantite_comptee, ecart)
-    VALUES (1, 2, 'matin', 30, 25, 0)$$);
+    VALUES (1, 1, 2, 'matin', 30, 25, 0)$$);
 
 -- Le client ment sur la quantité attendue (999 au lieu de 30, stock réel).
 -- La base doit l'ignorer et calculer l'écart réel : 25 - 30 = -5.
-INSERT INTO comptages_stock (article_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
-VALUES (1, 2, 'matin', 999, 25);
+INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
+VALUES (1, 1, 2, 'matin', 999, 25);
 
 SELECT t_valeur('003 · quantité attendue forgée par le client → ignorée',
   $$SELECT quantite_attendue::TEXT FROM comptages_stock WHERE article_id = 1 AND moment = 'matin'$$,
@@ -158,13 +158,18 @@ SELECT t_valeur('003 · écart réellement calculé par la base',
 SELECT t_refus('003 · modification d''un comptage déjà enregistré',
   $$UPDATE comptages_stock SET quantite_comptee = 30 WHERE article_id = 1 AND moment = 'matin'$$);
 
-SELECT t_refus('003 · deuxième comptage même article / moment / jour',
-  $$INSERT INTO comptages_stock (article_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
-    VALUES (1, 2, 'matin', 30, 30)$$);
+SELECT t_refus('003 · deuxième comptage même article / site / moment / jour',
+  $$INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
+    VALUES (1, 1, 2, 'matin', 30, 30)$$);
+
+SELECT t_succes('003 · même article, même moment, autre SITE accepté (multi-site)',
+  $$INSERT INTO stocks_sites (article_id, site_id, quantite_stock, seuil_alerte) VALUES (1, 2, 0, 0);
+    INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
+    VALUES (1, 2, 2, 'matin', 0, 0)$$);
 
 SELECT t_succes('003 · comptage du soir accepté (moment différent)',
-  $$INSERT INTO comptages_stock (article_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
-    VALUES (1, 2, 'soir', 0, 30)$$);
+  $$INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
+    VALUES (1, 1, 2, 'soir', 0, 30)$$);
 
 -- ============================================================================
 -- 3. Historique non effaçable (migration 004)
@@ -183,8 +188,8 @@ SELECT t_refus('004 · suppression d''une ligne d''historique de prix',
 -- modifiante (WITH m AS (INSERT ...) DELETE ...), le DELETE ne verrait pas la
 -- ligne insérée dans la même instruction : il supprimerait 0 ligne et le
 -- déclencheur ne se déclencherait jamais — le test passerait à tort.
-INSERT INTO mouvements_stock (article_id, type, categorie, quantite, motif, utilisateur_id)
-VALUES (1, 'entree', 'reception_fournisseur', 5, 'essai suppression', 2);
+INSERT INTO mouvements_stock (article_id, site_id, type, categorie, quantite, motif, utilisateur_id)
+VALUES (1, 1, 'entree', 'reception_fournisseur', 5, 'essai suppression', 2);
 
 SELECT t_refus('004 · suppression d''un mouvement de stock',
   $$DELETE FROM mouvements_stock WHERE motif = 'essai suppression'$$);

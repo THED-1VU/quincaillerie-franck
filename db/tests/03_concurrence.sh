@@ -38,7 +38,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "===== Préparation : article 4 « Article rare », stock ramené à 1, deux ventes-test créées ====="
-"$PSQL" -q -c "UPDATE articles SET quantite_stock = 1 WHERE id = 4;"
+"$PSQL" -q -c "UPDATE stocks_sites SET quantite_stock = 1 WHERE article_id = 4 AND site_id = 1;"
 VENTE_A=$("$PSQL" -q -At -c "INSERT INTO ventes (site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc) VALUES (1, 4, 'en_attente', 0, 0, 0, 0) RETURNING id;")
 VENTE_B=$("$PSQL" -q -At -c "INSERT INTO ventes (site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc) VALUES (1, 4, 'en_attente', 0, 0, 0, 0) RETURNING id;")
 echo "vente-test A (id=$VENTE_A), vente-test B (id=$VENTE_B)"
@@ -49,19 +49,19 @@ echo "vente-test A (id=$VENTE_A), vente-test B (id=$VENTE_B)"
 # substitués par bash avant l'écriture du fichier.
 cat > "$TMP/poste_a.sql" <<SQL
 BEGIN;
-SELECT * FROM decrementer_stock_vente(4, 1, 4, $VENTE_A, 'vente poste A') AS resultat_a;
+SELECT * FROM decrementer_stock_vente(4, 1, 1, 4, $VENTE_A, 'vente poste A') AS resultat_a;
 SELECT pg_sleep(3);   -- garde le verrou : simule la saisie du poste A
 COMMIT;
 SQL
 
 cat > "$TMP/poste_b.sql" <<SQL
 BEGIN;
-SELECT * FROM decrementer_stock_vente(4, 1, 4, $VENTE_B, 'vente poste B') AS resultat_b;
+SELECT * FROM decrementer_stock_vente(4, 1, 1, 4, $VENTE_B, 'vente poste B') AS resultat_b;
 COMMIT;
 SQL
 
 AVANT_MVT=$("$PSQL" -At -c "SELECT count(*) FROM mouvements_stock WHERE article_id = 4;")
-echo "stock initial                : $("$PSQL" -At -c 'SELECT quantite_stock FROM articles WHERE id = 4;')"
+echo "stock initial                : $("$PSQL" -At -c 'SELECT quantite_stock FROM stocks_sites WHERE article_id = 4 AND site_id = 1;')"
 echo "mouvements déjà présents     : $AVANT_MVT"
 echo
 
@@ -83,7 +83,7 @@ cat "$TMP/a.out"
 echo "----- Poste B (code de sortie $CODE_B) -----"
 cat "$TMP/b.out"
 
-STOCK_FINAL=$("$PSQL" -At -c "SELECT quantite_stock FROM articles WHERE id = 4;")
+STOCK_FINAL=$("$PSQL" -At -c "SELECT quantite_stock FROM stocks_sites WHERE article_id = 4 AND site_id = 1;")
 APRES_MVT=$("$PSQL" -At -c "SELECT count(*) FROM mouvements_stock WHERE article_id = 4;")
 NB_SORTIES=$((APRES_MVT - AVANT_MVT))
 NB_ECARTS=$("$PSQL" -At -c "SELECT count(*) FROM ecarts_stock_ventes WHERE vente_id IN ($VENTE_A, $VENTE_B);")
