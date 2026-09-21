@@ -248,18 +248,20 @@ def enregistrer_vente(
                         (vente_id, ligne.article_id, ligne.quantite, ligne.prix_unitaire, site_cible),
                     )
                 except psycopg.errors.ForeignKeyViolation as exc:
-                    # Article inexistant, ou existant sur l'AUTRE site : la
-                    # clé étrangère composite (migration 002) refuse déjà de
-                    # vendre au mauvais site un article qui n'y est pas.
+                    # Article inexistant, ou sans stock sur ce site : la
+                    # clé étrangère composite (migration 002, révisée 027)
+                    # refuse déjà de vendre au mauvais site un article qui
+                    # n'y a pas de stock.
                     raise HTTPException(
                         status.HTTP_422_UNPROCESSABLE_ENTITY,
                         f"Article introuvable sur ce site (identifiant {ligne.article_id}).",
                     ) from exc
 
                 cur.execute(
-                    "SELECT * FROM decrementer_stock_vente(%s, %s, %s, %s, %s)",
+                    "SELECT * FROM decrementer_stock_vente(%s, %s, %s, %s, %s, %s)",
                     (
-                        ligne.article_id, ligne.quantite, session.utilisateur_id,
+                        ligne.article_id, site_cible, ligne.quantite,
+                        session.utilisateur_id,
                         vente_id, f"vente #{vente_id}",
                     ),
                 )

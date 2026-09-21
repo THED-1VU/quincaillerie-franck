@@ -120,6 +120,7 @@ class DemandeComptage(BaseModel):
     l'écrire par erreur."""
 
     article_id: int
+    site_id: Optional[int] = None
     moment: Literal["matin", "soir"]
     quantite_comptee: int = Field(ge=0)
 
@@ -146,7 +147,6 @@ class DemandeArticle(BaseModel):
     unite: str = Field(min_length=1, max_length=30)
     categorie: Optional[str] = Field(default=None, max_length=80)
     fournisseur_id: Optional[int] = None
-    site_id: Optional[int] = None
     prix_achat: Optional[float] = Field(default=None, ge=0)
     prix_vente: Optional[float] = Field(default=None, ge=0)
 
@@ -155,17 +155,16 @@ class ReponseArticle(BaseModel):
     article_id: int
     nom: str
     unite: str
-    site_id: int
 
 
 class DemandeModificationArticle(BaseModel):
     """Modification d'un article existant (cycle 11). Tous les champs sont
     optionnels : seuls ceux fournis sont modifiés. ``prix_achat``,
     ``prix_vente`` et ``fournisseur_id`` sont ignorés pour un agent stock —
-    même principe que ``DemandeArticle`` pour la création. ``quantite_stock``
-    et ``seuil_alerte`` n'existent délibérément PAS ici : toute quantité
-    passe par une fonction de mouvement (cycle 9), jamais par une
-    modification de fiche."""
+    même principe que ``DemandeArticle`` pour la création. La quantité et le
+    seuil d'alerte n'existent délibérément PAS ici (ni sur la fiche, depuis
+    le cycle 35) : toute quantité passe par une fonction de mouvement,
+    jamais par une modification de fiche."""
 
     nom: Optional[str] = Field(default=None, min_length=1, max_length=150)
     unite: Optional[str] = Field(default=None, min_length=1, max_length=30)
@@ -184,51 +183,48 @@ class ReponseModificationArticle(BaseModel):
     nom: str
     categorie: Optional[str] = None
     unite: str
-    site_id: int
     prix_achat: Optional[float] = None
     prix_vente: Optional[float] = None
 
 
-class ReponseArticleAutreSite(BaseModel):
-    """Un article de l'AUTRE site, pour choisir la destination d'un
-    transfert (cycle 11) — jamais de prix ni de quantité."""
-
-    id: int
-    nom: str
-    unite: str
-    site_id: int
-
-
 class DemandeEntreeStock(BaseModel):
     article_id: int
+    site_id: Optional[int] = None
     quantite: int = Field(gt=0)
     motif: Optional[str] = Field(default=None, max_length=200)
 
 
 class ReponseMouvementStock(BaseModel):
-    """Réponse générique à un mouvement de stock : le nouveau stock, jamais
-    plus (pas de fuite d'autres colonnes d'articles)."""
+    """Réponse générique à un mouvement de stock : le nouveau stock du
+    (article, site) visé, jamais plus (pas de fuite d'autres colonnes)."""
 
     article_id: int
+    site_id: int
     quantite_stock: int
 
 
 class DemandeTransfert(BaseModel):
-    article_id_origine: int
-    article_id_destination: int
+    """Transfert multi-site (décision 2026-09-19) : UN article, deux sites.
+    La ligne de stock de destination est créée automatiquement si absente."""
+
+    article_id: int
+    site_origine: int
+    site_destination: int
     quantite: int = Field(gt=0)
     motif: str = Field(min_length=1, max_length=200)
 
 
 class ReponseTransfert(BaseModel):
-    article_id_origine: int
-    article_id_destination: int
+    article_id: int
+    site_origine: int
+    site_destination: int
     quantite_stock_origine: int
     quantite_stock_destination: int
 
 
 class DemandeCasse(BaseModel):
     article_id: int
+    site_id: Optional[int] = None
     quantite: int = Field(gt=0)
     motif: str = Field(min_length=1, max_length=200)
 
