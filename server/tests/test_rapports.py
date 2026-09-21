@@ -62,9 +62,9 @@ def test_export_articles_agent_stock_pdf_sans_prix(client):
 
 
 def test_export_articles_agent_stock_limite_a_son_site(client):
-    """Constat du contrôle de boucle après le cycle 10 : le cloisonnement
-    par site des exports fonctionnait (RLS du cycle 2), vérifié deux fois
-    par exécution directe, mais jamais couvert par un test dédié."""
+    """Modèle multi-site (cycle 35) : le catalogue exporté est commun aux
+    deux sites, mais la QUANTITÉ est celle du site de l'agent — une fiche
+    dont le stock vit sur l'autre site apparaît avec quantité 0."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.get(
         "/rapports/articles", params={"format": "xlsx"}, headers=entete_autorisation(session["jeton"])
@@ -74,9 +74,11 @@ def test_export_articles_agent_stock_limite_a_son_site(client):
     feuille = classeur.active
     entetes = [c.value for c in next(feuille.iter_rows(min_row=1, max_row=1))]
     idx_nom = entetes.index("nom")
-    noms = [row[idx_nom].value for row in feuille.iter_rows(min_row=2)]
-    assert "Clou 5 cm" not in noms  # site 2 (Comptoir), hors du site de l'agent
-    assert "Ciment CIM II 50 kg" in noms  # site 1 (Magasin), bien présent
+    idx_qte = entetes.index("quantite_stock")
+    lignes = {row[idx_nom].value: row[idx_qte].value for row in feuille.iter_rows(min_row=2)}
+    assert "Clou 5 cm" in lignes  # catalogue commun, la fiche est visible
+    assert lignes["Clou 5 cm"] == 0  # mais son stock (100) est au Comptoir
+    assert lignes["Ciment CIM II 50 kg"] == 30  # site 1 (Magasin), bien présent
 
 
 def test_export_articles_responsable_xlsx_avec_prix(client):

@@ -165,8 +165,11 @@ BEGIN
            SET quantite_stock = quantite_stock - quantite_effective
          WHERE article_id = p_article_id AND site_id = p_site_id;
 
-        INSERT INTO mouvements_stock (article_id, site_id, type, categorie, quantite, motif, utilisateur_id)
-        VALUES (p_article_id, p_site_id, 'sortie', 'vente', quantite_effective, p_motif, p_utilisateur_id);
+        -- vente_id est conservé sur le mouvement : sans lui, annuler_vente()
+        -- (migration 017, révisée 031) ne pourrait jamais retrouver les
+        -- mouvements à restituer.
+        INSERT INTO mouvements_stock (article_id, site_id, type, categorie, quantite, motif, utilisateur_id, vente_id)
+        VALUES (p_article_id, p_site_id, 'sortie', 'vente', quantite_effective, p_motif, p_utilisateur_id, p_vente_id);
     END IF;
 
     IF manquant > 0 THEN

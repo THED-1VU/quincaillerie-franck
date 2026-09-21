@@ -33,10 +33,15 @@ NOM_TEST = "Homonyme Test 13a"
 
 
 def _inserer_article(nom, site_id):
+    """Crée une FICHE (modèle multi-site, cycle 35) et sa ligne de stock au
+    site demandé."""
     _executer_sql_admin(
-        "INSERT INTO articles (nom, categorie, unite, prix_achat, prix_vente, "
-        "quantite_stock, seuil_alerte, site_id, fournisseur_id) VALUES "
-        f"({_litteral(nom)}, 'Divers', 'piece', 100, 200, 5, 1, {site_id}, NULL)"
+        "INSERT INTO articles (nom, categorie, unite, prix_achat, prix_vente, fournisseur_id) "
+        f"VALUES ({_litteral(nom)}, 'Divers', 'piece', 100, 200, NULL)"
+    )
+    _executer_sql_admin(
+        "INSERT INTO stocks_sites (article_id, site_id, quantite_stock, seuil_alerte) "
+        f"VALUES ((SELECT max(id) FROM articles), {site_id}, 5, 1)"
     )
 
 

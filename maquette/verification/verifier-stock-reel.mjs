@@ -135,16 +135,12 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   const reponsesArticles = await page.evaluate(async () => {
     const session = JSON.parse(sessionStorage.getItem("qf_session"));
     const entetes = { Authorization: "Bearer " + session.jeton };
-    const [a, b] = await Promise.all([
-      fetch("/articles", { headers: entetes }).then((r) => r.json()),
-      fetch("/articles/autre-site", { headers: entetes }).then((r) => r.json()),
-    ]);
-    return { articles: a.articles, autreSite: b };
+    const a = await fetch("/articles", { headers: entetes }).then((r) => r.json());
+    return { articles: a.articles };
   });
   const champsInterdits = new Set();
   reponsesArticles.articles.forEach((a) => Object.keys(a).forEach((k) => { if (/prix|montant/i.test(k)) champsInterdits.add(k); }));
-  reponsesArticles.autreSite.forEach((a) => Object.keys(a).forEach((k) => { if (/prix|montant/i.test(k)) champsInterdits.add(k); }));
-  verifier(champsInterdits.size === 0, `agent stock : aucun champ de prix dans /articles ni /articles/autre-site (trouvé : ${[...champsInterdits].join(",") || "aucun"})`);
+  verifier(champsInterdits.size === 0, `agent stock : aucun champ de prix dans /articles (trouvé : ${[...champsInterdits].join(",") || "aucun"})`);
 
   // --- Création d'un article (sans prix, jamais proposé) ---
   await page.click("#lien-nouvel-article");
@@ -161,20 +157,20 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await page.fill("#f-motif", "Livraison test cycle 11");
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresReception = psqlValeur("SELECT quantite_stock FROM articles WHERE id = 1;");
+  const stockApresReception = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;");
   verifier(stockApresReception === "40", `agent stock : réception réelle (stock Ciment = ${stockApresReception}, attendu 40)`);
 
   // --- Transfert de « Ciment » vers le Comptoir ---
   await ouvrirArticle(page, "Ciment", "Transférer");
   await page.waitForFunction(() => document.querySelectorAll("#panneau-contenu select option").length > 1, { timeout: 5000 });
   const optionsDestination = await page.locator("#panneau-contenu select option").allTextContents();
-  verifier(optionsDestination.some((t) => t.includes("Comptoir")), "agent stock : sélecteur de transfert propose un article du Comptoir");
-  await page.selectOption("#panneau-contenu select", { label: optionsDestination.find((t) => t.includes("Clou")) });
+  verifier(optionsDestination.some((t) => t.includes("Comptoir")), "agent stock : sélecteur de transfert propose le site de destination Comptoir");
+  await page.selectOption("#panneau-contenu select", { label: optionsDestination.find((t) => t.includes("Comptoir")) });
   await page.fill("#f-quantite", "5");
   await page.fill("#f-motif", "Réappro comptoir, test cycle 11");
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresTransfert = psqlValeur("SELECT quantite_stock FROM articles WHERE id = 1;");
+  const stockApresTransfert = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;");
   verifier(stockApresTransfert === "35", `agent stock : transfert réel (stock Ciment = ${stockApresTransfert}, attendu 35)`);
 
   // --- Retour client sur « Ciment », contre la vraie vente n°900 ---
@@ -183,7 +179,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await page.fill("#f-vente-id", VENTE_ID);
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresRetourClient = psqlValeur("SELECT quantite_stock FROM articles WHERE id = 1;");
+  const stockApresRetourClient = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;");
   verifier(stockApresRetourClient === "36", `agent stock : retour client réel (stock Ciment = ${stockApresRetourClient}, attendu 36)`);
 
   // --- Retour fournisseur, contre la réception faite plus haut ---
@@ -195,7 +191,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await page.fill("#f-mouvement-id", idReception);
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresRetourFournisseur = psqlValeur("SELECT quantite_stock FROM articles WHERE id = 1;");
+  const stockApresRetourFournisseur = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;");
   verifier(stockApresRetourFournisseur === "34", `agent stock : retour fournisseur réel (stock Ciment = ${stockApresRetourFournisseur}, attendu 34)`);
 
   // --- Pas de bouton Casse pour un agent stock ---
@@ -251,7 +247,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await page.fill("#f-motif", "Barre pliée, essai cycle 11");
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresCasse = psqlValeur("SELECT quantite_stock FROM articles WHERE id = 2;");
+  const stockApresCasse = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 2 AND site_id = 1;");
   verifier(stockApresCasse === "39", `responsable : casse réelle (stock Fer = ${stockApresCasse}, attendu 39)`);
 
   for (const largeur of LARGEURS) {

@@ -268,14 +268,16 @@ for (const largeur of LARGEURS) {
   }));
   verifier(champsInterdits.size === 0, `agent comptabilité : /articles sans AUCUN champ de quantité (trouvé : ${[...champsInterdits].join(",") || "aucun"})`);
   verifier(articles.articles.every((a) => "prix_vente" in a), "agent comptabilité : /articles contient bien le prix de vente");
-  verifier(articles.articles.every((a) => a.site_id === 1), "agent comptabilité : /articles limité au site 1 (Magasin de stock)");
+  verifier(articles.articles.every((a) => !("site_id" in a) && !("quantite_stock" in a)),
+    "agent comptabilité : /articles sans site ni quantité (fiche commune, modèle multi-site)");
 
-  // Recherche réelle dans le catalogue : un article de l'AUTRE site n'apparaît pas.
-  await page.fill("#recherche", "clou"); // "Clou 5 cm" appartient au Comptoir (site 2)
+  // Recherche réelle dans le catalogue : catalogue COMMUN (décision
+  // 2026-09-19), un article dont le stock est sur l'autre site apparaît.
+  await page.fill("#recherche", "clou"); // « Clou 5 cm » a son stock au Comptoir (site 2)
   await page.waitForTimeout(150);
   verifier(
-    await page.getAttribute("#suggestions", "hidden") !== null,
-    "agent comptabilité : recherche d'un article de l'autre site -> aucun résultat"
+    await page.getAttribute("#suggestions", "hidden") === null,
+    "agent comptabilité : recherche d'un article dont le stock est sur l'autre site -> résultat visible (catalogue commun)"
   );
   await page.fill("#recherche", "rare"); // "Article rare" existe au Magasin (site 1)
   await page.waitForTimeout(150);

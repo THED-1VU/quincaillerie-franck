@@ -76,7 +76,7 @@ def test_vente_normale_decremente_le_stock_et_calcule_la_tva(client):
 
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute("SELECT quantite_stock FROM articles WHERE id = 1")
+            cur.execute("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1")
             assert cur.fetchone()["quantite_stock"] == 28  # 30 - 2
 
             cur.execute(
@@ -124,7 +124,7 @@ def test_vente_a_decouvert_nest_jamais_refusee_et_consigne_lecart(client):
 
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute("SELECT quantite_stock FROM articles WHERE id = 4")
+            cur.execute("SELECT quantite_stock FROM stocks_sites WHERE article_id = 4 AND site_id = 1")
             assert cur.fetchone()["quantite_stock"] == 0  # jamais négatif
 
             cur.execute(
@@ -201,7 +201,7 @@ def test_agent_comptabilite_ne_peut_pas_vendre_pour_lautre_site(client):
 
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute("SELECT quantite_stock FROM articles WHERE id = 3")
+            cur.execute("SELECT quantite_stock FROM stocks_sites WHERE article_id = 3 AND site_id = 2")
             assert cur.fetchone()["quantite_stock"] == 100  # inchangé
 
 
@@ -283,7 +283,7 @@ def test_annuler_vente_restitue_le_stock_et_contre_passe_la_recette(client):
 
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute("SELECT quantite_stock FROM articles WHERE id = 1")
+            cur.execute("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1")
             assert cur.fetchone()["quantite_stock"] == 30  # restitué intégralement
 
             cur.execute(
@@ -334,7 +334,7 @@ def test_annuler_vente_a_decouvert_ne_restitue_que_le_stock_reellement_decrement
 
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute("SELECT quantite_stock FROM articles WHERE id = 4")
+            cur.execute("SELECT quantite_stock FROM stocks_sites WHERE article_id = 4 AND site_id = 1")
             assert cur.fetchone()["quantite_stock"] == 0  # tombé à 0, jamais négatif
 
     session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
@@ -350,7 +350,7 @@ def test_annuler_vente_a_decouvert_ne_restitue_que_le_stock_reellement_decrement
 
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute("SELECT quantite_stock FROM articles WHERE id = 4")
+            cur.execute("SELECT quantite_stock FROM stocks_sites WHERE article_id = 4 AND site_id = 1")
             assert cur.fetchone()["quantite_stock"] == 1  # pas 3 : seul le réel décrémenté
 
             cur.execute(
