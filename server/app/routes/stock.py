@@ -170,7 +170,16 @@ def enregistrer_retour_client(
                      session.utilisateur_id, demande.motif),
                 )
                 ligne = cur.fetchone()
-                cur.execute("SELECT site_id FROM ventes WHERE id = %s", (demande.vente_id,))
+                # Le site est celui de la vente d'origine ; plutôt que de
+                # relire `ventes` (interdit à un agent stock), on relit le
+                # mouvement d'entrée que la fonction vient d'inscrire — la
+                # RLS de mouvements_stock le limite déjà au site de l'agent.
+                cur.execute(
+                    "SELECT site_id FROM mouvements_stock"
+                    " WHERE vente_id = %s AND categorie = 'retour_client'"
+                    " ORDER BY id DESC LIMIT 1",
+                    (demande.vente_id,),
+                )
                 vente = cur.fetchone()
             except (psycopg.errors.CheckViolation, psycopg.errors.ForeignKeyViolation) as exc:
                 raise _erreur_metier(exc) from exc

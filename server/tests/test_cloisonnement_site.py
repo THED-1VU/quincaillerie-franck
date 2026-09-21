@@ -37,23 +37,25 @@ def test_agent_ignore_le_site_fourni_en_parametre_de_requete(client):
 def test_rls_bloque_meme_en_sql_direct_hors_de_lapi(base_reinitialisee):
     """Preuve la plus forte : on contourne entièrement l'API et le code
     Python. Sous le rôle qf_agent_stock avec qf.site_id='1', une requête SQL
-    qui demande EXPLICITEMENT site_id = 2 ne renvoie rien — et sans aucun
-    filtre, seul le site 1 apparaît. La protection est dans PostgreSQL, pas
-    dans une ligne de code applicatif qui pourrait avoir un bug."""
+    qui demande EXPLICITEMENT site_id = 2 sur stocks_sites ne renvoie rien —
+    et sans aucun filtre, seul le site 1 apparaît. La protection est dans
+    PostgreSQL, pas dans une ligne de code applicatif qui pourrait avoir un
+    bug. (Depuis le cycle 35, c'est la QUANTITÉ qui est cloisonnée : le
+    catalogue, lui, est commun — la RLS de stocks_sites fait foi.)"""
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.transaction():
             with conn.cursor() as cur:
                 cur.execute("SET LOCAL ROLE qf_agent_stock")
                 cur.execute("SELECT set_config('qf.site_id', '1', true)")
 
-                cur.execute("SELECT id, site_id FROM articles WHERE site_id = 2")
+                cur.execute("SELECT article_id, site_id FROM stocks_sites WHERE site_id = 2")
                 lignes_site_force = cur.fetchall()
                 assert lignes_site_force == [], (
                     "la RLS aurait dû bloquer toute ligne du site 2, "
                     f"a renvoyé : {lignes_site_force}"
                 )
 
-                cur.execute("SELECT DISTINCT site_id FROM articles")
+                cur.execute("SELECT DISTINCT site_id FROM stocks_sites")
                 sites_visibles = {ligne[0] for ligne in cur.fetchall()}
                 assert sites_visibles == {1}, (
                     f"sans filtre, seul le site 1 devrait être visible, vu : {sites_visibles}"
@@ -68,7 +70,7 @@ def test_rls_laisse_le_responsable_voir_les_deux_sites_en_sql_direct(base_reinit
         with conn.transaction():
             with conn.cursor() as cur:
                 cur.execute("SET LOCAL ROLE qf_responsable")
-                cur.execute("SELECT DISTINCT site_id FROM articles ORDER BY site_id")
+                cur.execute("SELECT DISTINCT site_id FROM stocks_sites ORDER BY site_id")
                 sites_visibles = {ligne[0] for ligne in cur.fetchall()}
                 assert sites_visibles == {1, 2}
 

@@ -17,10 +17,13 @@ from conftest import (
 )
 
 
-def _seuil_et_stock(article_id: int) -> dict:
+def _seuil_et_stock(article_id: int, site_id: int = 1) -> dict:
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute("SELECT quantite_stock, seuil_alerte FROM articles WHERE id = %s", (article_id,))
+            cur.execute(
+                "SELECT quantite_stock, seuil_alerte FROM stocks_sites WHERE article_id = %s AND site_id = %s",
+                (article_id, site_id),
+            )
             return cur.fetchone()
 
 
@@ -41,17 +44,21 @@ def test_reception_recalcule_le_seuil(client):
     assert avant_apres["seuil_alerte"] == 10    # 20 % de 50
 
 
-def test_reception_refusee_pour_un_article_de_lautre_site(client):
-    """Trouvé lors du contrôle de boucle sur ce cycle : enregistrer_entree_
-    stock() n'avait jamais été exposée par une route avant, et ne vérifiait
-    aucun site."""
+def test_reception_ouvre_le_stock_au_site_de_lagent(client):
+    """Décision 2026-09-19 : la première réception d'une fiche à un site
+    OUVRE sa ligne de stock — un agent du Magasin peut donc réceptionner une
+    fiche dont le stock n'existait qu'au Comptoir, pour SON site."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.post(
         "/stock/entrees",
         headers=entete_autorisation(session["jeton"]),
-        json={"article_id": 3, "quantite": 10, "motif": "essai cross-site"},
+        json={"article_id": 3, "quantite": 10, "motif": "ouverture du stock magasin"},
     )
-    assert reponse.status_code == 403
+    assert reponse.status_code == 201, reponse.text
+    assert reponse.json()["site_id"] == 1
+    assert reponse.json()["quantite_stock"] == 10
+    ligne = _seuil_et_stock(3, site_id=1)
+    assert ligne["quantite_stock"] == 10
 
 
 # ---------------------------------------------------------------------------
@@ -60,18 +67,18 @@ def test_reception_refusee_pour_un_article_de_lautre_site(client):
 
 def test_transfert_normal_ne_recalcule_pas_le_seuil(client):
     session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
-    avant = _seuil_et_stock(3)
     reponse = client.post(
         "/stock/transferts",
         headers=entete_autorisation(session["jeton"]),
-        json={"article_id_origine": 1, "article_id_destination": 3, "quantite": 5, "motif": "réassort comptoir"},
+        json={"article_id": 1, "site_origine": 1, "site_destination": 2,
+              "quantite": 5, "motif": "réassort comptoir"},
     )
     assert reponse.status_code == 201, reponse.text
     corps = reponse.json()
-    assert corps["quantite_stock_origine"] == 25   # 30 - 5
-    assert corps["quantite_stock_destination"] == 105  # 100 + 5
-    apres = _seuil_et_stock(3)
-    assert apres["seuil_alerte"] == avant["seuil_alerte"], "le seuil ne doit JAMAIS bouger sur un transfert"
+    assert corps["quantite_stock_origine"] == 25    # 30 - 5
+    assert corps["quantite_stock_destination"] == 5  # ligne de destination créée (0 + 5)
+    destination = _seuil_et_stock(1, site_id=2)
+    assert destination["seuil_alerte"] == 0, "le seuil ne doit JAMAIS être recalculé sur un transfert"
 
 
 def test_transfert_motif_blanc_refuse_par_la_base(client):
@@ -82,7 +89,8 @@ def test_transfert_motif_blanc_refuse_par_la_base(client):
     reponse = client.post(
         "/stock/transferts",
         headers=entete_autorisation(session["jeton"]),
-        json={"article_id_origine": 1, "article_id_destination": 3, "quantite": 1, "motif": "   "},
+        json={"article_id": 1, "site_origine": 1, "site_destination": 2,
+              "quantite": 1, "motif": "   "},
     )
     assert reponse.status_code == 422
     assert "motif" in reponse.json()["detail"].lower()
@@ -93,7 +101,8 @@ def test_transfert_stock_insuffisant_refuse(client):
     reponse = client.post(
         "/stock/transferts",
         headers=entete_autorisation(session["jeton"]),
-        json={"article_id_origine": 4, "article_id_destination": 3, "quantite": 100, "motif": "trop"},
+        json={"article_id": 4, "site_origine": 1, "site_destination": 2,
+              "quantite": 100, "motif": "trop"},
     )
     assert reponse.status_code == 422
     assert "insuffisant" in reponse.json()["detail"].lower()
@@ -104,7 +113,8 @@ def test_transfert_vers_le_meme_site_refuse(client):
     reponse = client.post(
         "/stock/transferts",
         headers=entete_autorisation(session["jeton"]),
-        json={"article_id_origine": 1, "article_id_destination": 2, "quantite": 1, "motif": "même site"},
+        json={"article_id": 1, "site_origine": 1, "site_destination": 1,
+              "quantite": 1, "motif": "même site"},
     )
     assert reponse.status_code == 422
     assert "site" in reponse.json()["detail"].lower()
@@ -115,7 +125,8 @@ def test_agent_stock_ne_transfere_que_depuis_son_site(client):
     reponse = client.post(
         "/stock/transferts",
         headers=entete_autorisation(session_comptoir["jeton"]),
-        json={"article_id_origine": 1, "article_id_destination": 3, "quantite": 1, "motif": "depuis comptoir, interdit"},
+        json={"article_id": 1, "site_origine": 1, "site_destination": 2,
+              "quantite": 1, "motif": "depuis comptoir, interdit"},
     )
     assert reponse.status_code == 403
 
@@ -123,7 +134,8 @@ def test_agent_stock_ne_transfere_que_depuis_son_site(client):
     reponse2 = client.post(
         "/stock/transferts",
         headers=entete_autorisation(session_magasin["jeton"]),
-        json={"article_id_origine": 1, "article_id_destination": 3, "quantite": 1, "motif": "depuis magasin, autorisé"},
+        json={"article_id": 1, "site_origine": 1, "site_destination": 2,
+              "quantite": 1, "motif": "depuis magasin, autorisé"},
     )
     assert reponse2.status_code == 201, reponse2.text
 
@@ -146,7 +158,7 @@ def test_casse_reservee_au_responsable(client):
     reponse2 = client.post(
         "/stock/casse",
         headers=entete_autorisation(session_resp["jeton"]),
-        json={"article_id": 1, "quantite": 3, "motif": "sac éventré"},
+        json={"article_id": 1, "site_id": 1, "quantite": 3, "motif": "sac éventré"},
     )
     assert reponse2.status_code == 201, reponse2.text
     assert reponse2.json()["quantite_stock"] == avant["quantite_stock"] - 3

@@ -186,26 +186,16 @@
       const nom = champ("f-nom", "Nom");
       const unite = champ("f-unite", "Unité (ex. sac, kg, pièce)");
       const categorie = champ("f-categorie", "Catégorie (optionnel)");
-      let prixAchat, prixVente, siteSel;
+      let prixAchat, prixVente;
       if (estResponsable) {
         prixAchat = champ("f-prix-achat", "Prix d'achat", "number");
         prixVente = champ("f-prix-vente", "Prix de vente", "number");
-        const divSite = document.createElement("div");
-        divSite.className = "champ";
-        const label = document.createElement("label");
-        label.className = "champ__label"; label.textContent = "Site";
-        siteSel = document.createElement("select");
-        siteSel.className = "champ__select";
-        siteSel.innerHTML = '<option value="">— Choisir —</option><option value="1">Magasin de stock</option><option value="2">Comptoir</option>';
-        divSite.appendChild(label); divSite.appendChild(siteSel);
-        contenu.appendChild(divSite);
       }
       boutonValider.textContent = "Créer l'article";
       boutonValider.addEventListener("click", async () => {
         const corps = { nom: nom.value.trim(), unite: unite.value.trim() };
         if (categorie.value.trim()) corps.categorie = categorie.value.trim();
         if (estResponsable) {
-          if (siteSel.value) corps.site_id = Number(siteSel.value);
           if (prixAchat.value) corps.prix_achat = Number(prixAchat.value);
           if (prixVente.value) corps.prix_vente = Number(prixVente.value);
         }
@@ -247,6 +237,7 @@
       boutonValider.textContent = "Enregistrer la réception";
       boutonValider.addEventListener("click", async () => {
         const corps = { article_id: article.id, quantite: Number(quantite.value) };
+        if (article.site_id) corps.site_id = article.site_id;
         if (motif.value.trim()) corps.motif = motif.value.trim();
         await appeler("/stock/entrees", "POST", corps, "Réception enregistrée.");
       });
@@ -258,36 +249,31 @@
       const divDest = document.createElement("div");
       divDest.className = "champ";
       const labelDest = document.createElement("label");
-      labelDest.className = "champ__label"; labelDest.textContent = "Article de destination (autre site)";
+      labelDest.className = "champ__label"; labelDest.textContent = "Site de destination";
       const selDest = document.createElement("select");
       selDest.className = "champ__select";
-      selDest.innerHTML = '<option value="">— Chargement… —</option>';
+      // UN article, deux sites : la destination est un SITE, plus un article
+      // (décision 2026-09-19). La ligne de destination est créée si absente.
+      selDest.innerHTML = '<option value="">— Choisir —</option>';
+      [1, 2].forEach((site) => {
+        if (String(site) !== String(article.site_id)) {
+          const opt = document.createElement("option");
+          opt.value = site;
+          opt.textContent = LIBELLE_SITE[site] || ("Site " + site);
+          selDest.appendChild(opt);
+        }
+      });
       divDest.appendChild(labelDest); divDest.appendChild(selDest);
       contenu.appendChild(divDest);
       const motif = champ("f-motif", "Motif (obligatoire)", "text",
         "Ne recalcule jamais le seuil d'alerte : ce n'est pas une réception.");
 
-      (async () => {
-        try {
-          const cible = estResponsable
-            ? { articles: (await appelApi("/articles")).articles.filter((a) => a.site_id !== article.site_id) }
-            : { articles: await appelApi("/articles/autre-site") };
-          selDest.innerHTML = '<option value="">— Choisir —</option>';
-          cible.articles.forEach((a) => {
-            const opt = document.createElement("option");
-            opt.value = a.id; opt.textContent = a.nom + (a.site_id ? " (" + (LIBELLE_SITE[a.site_id] || a.site_id) + ")" : "");
-            selDest.appendChild(opt);
-          });
-        } catch (erreur) {
-          afficherErreurServeur("zone-erreur-panneau", erreur);
-        }
-      })();
-
       boutonValider.textContent = "Transférer";
       boutonValider.addEventListener("click", async () => {
         const corps = {
-          article_id_origine: article.id,
-          article_id_destination: Number(selDest.value),
+          article_id: article.id,
+          site_origine: Number(article.site_id),
+          site_destination: Number(selDest.value),
           quantite: Number(quantite.value),
           motif: motif.value.trim(),
         };
@@ -302,6 +288,7 @@
       boutonValider.textContent = "Enregistrer la casse";
       boutonValider.addEventListener("click", async () => {
         const corps = { article_id: article.id, quantite: Number(quantite.value), motif: motif.value.trim() };
+        if (article.site_id) corps.site_id = article.site_id;
         await appeler("/stock/casse", "POST", corps, "Casse enregistrée.");
       });
     }

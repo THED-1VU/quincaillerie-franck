@@ -175,9 +175,11 @@
 
     const valeur = Math.max(0, parseInt(brut, 10));
     try {
+      const corps = { article_id: articles[i].id, moment, quantite_comptee: valeur };
+      if (articles[i].site_id) corps.site_id = articles[i].site_id;
       await appelApi("/inventaire/comptages", {
         method: "POST",
-        body: JSON.stringify({ article_id: articles[i].id, moment, quantite_comptee: valeur }),
+        body: JSON.stringify(corps),
       });
       s.soumis = true;
       s.valeur = valeur;

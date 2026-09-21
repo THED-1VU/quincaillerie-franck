@@ -68,10 +68,19 @@ def test_agent_stock_ne_voit_que_son_site(client):
     assert sites_vus == {1}, f"l'agent du Magasin ne doit voir que le site 1, a vu : {sites_vus}"
 
 
-def test_agent_comptabilite_ne_voit_que_son_site(client):
+def test_agent_comptabilite_voit_le_catalogue_commun_sans_quantite(client):
+    """Le catalogue est commun (décision 2026-09-19) : la comptabilité voit
+    les fiches des deux sites — mais JAMAIS de quantité ni de site (aucun
+    champ de stocks_sites n'apparaît)."""
     articles, _ = _articles(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
-    sites_vus = {a["site_id"] for a in articles}
-    assert sites_vus == {1}, f"le comptable du Magasin ne doit voir que le site 1, a vu : {sites_vus}"
+    noms = {a["nom"] for a in articles}
+    assert "Ciment CIM II 50 kg" in noms  # fiche dont le stock est au Magasin
+    assert "Clou 5 cm" in noms  # fiche dont le stock est au Comptoir
+    for article in articles:
+        champs_presents = set(article.keys())
+        interdits = champs_presents & CHAMPS_STOCK
+        assert not interdits, f"champ(s) de stock présent(s) pour la comptabilité : {interdits}"
+        assert "site_id" not in article, "aucun site sur la fiche (modèle multi-site)"
 
 
 def test_agent_stock_interdit_sur_synthese_ventes(client):

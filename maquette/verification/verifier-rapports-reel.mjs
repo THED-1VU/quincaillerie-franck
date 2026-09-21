@@ -65,7 +65,7 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 // Un comptage réel d'aujourd'hui sur « Ciment CIM II 50 kg » (article 1,
 // stock 30) : compté à 28, écart -2 — pour prouver que l'historique affiche
 // un vrai écart, pas seulement une ligne « conforme ».
-psql(`INSERT INTO comptages_stock (article_id, utilisateur_id, moment, quantite_comptee) VALUES (1, 2, 'matin', 28);`);
+psql(`INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_comptee) VALUES (1, 1, 2, 'matin', 28);`);
 
 console.log("Base prête.\n");
 

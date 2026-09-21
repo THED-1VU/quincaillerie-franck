@@ -1,8 +1,9 @@
-"""Chantier C4 (articles et stock) — cycle 9 : création d'articles.
+"""Chantier C4 (articles et stock) — cycle 9, révisé cycle 35 (13b).
 
-Un article naît TOUJOURS à quantite_stock = 0 (le chargement du stock
-initial dépend du point j de l'addendum, non tranché) ; le prix n'est
-accepté que pour un responsable.
+Depuis la décision 2026-09-19, un article est une FICHE sans site ; le stock
+vit dans ``stocks_sites``. La création d'une fiche ne prend plus de site, le
+prix n'est accepté que pour un responsable, et le catalogue est commun aux
+deux sites (seule la quantité est cloisonnée).
 """
 
 from __future__ import annotations
@@ -23,23 +24,27 @@ def test_responsable_cree_un_article_avec_prix(client):
     reponse = client.post(
         "/articles",
         headers=entete_autorisation(session["jeton"]),
-        json={"nom": "Marteau 500g", "unite": "pièce", "site_id": 1, "prix_achat": 1500, "prix_vente": 2500},
+        json={"nom": "Marteau 500g", "unite": "pièce", "prix_achat": 1500, "prix_vente": 2500},
     )
     assert reponse.status_code == 201, reponse.text
     corps = reponse.json()
     assert corps["nom"] == "Marteau 500g"
-    assert corps["site_id"] == 1
 
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
             cur.execute(
-                "SELECT quantite_stock, seuil_alerte, prix_achat, prix_vente FROM articles WHERE id = %s",
+                "SELECT prix_achat, prix_vente FROM articles WHERE id = %s",
                 (corps["article_id"],),
             )
             ligne = cur.fetchone()
-            assert ligne["quantite_stock"] == 0, "un article naît toujours sans stock (point j non tranché)"
             assert float(ligne["prix_achat"]) == 1500
             assert float(ligne["prix_vente"]) == 2500
+
+            cur.execute(
+                "SELECT count(*) AS n FROM stocks_sites WHERE article_id = %s",
+                (corps["article_id"],),
+            )
+            assert cur.fetchone()["n"] == 0, "une fiche naît sans aucune ligne de stock"
 
 
 def test_agent_stock_cree_un_article_sans_prix(client):
@@ -51,38 +56,36 @@ def test_agent_stock_cree_un_article_sans_prix(client):
     )
     assert reponse.status_code == 201, reponse.text
     corps = reponse.json()
-    assert corps["site_id"] == 1  # toujours son propre site, jamais un paramètre
 
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute("SELECT prix_vente, quantite_stock FROM articles WHERE id = %s", (corps["article_id"],))
-            ligne = cur.fetchone()
-            assert float(ligne["prix_vente"]) == 0
-            assert ligne["quantite_stock"] == 0
+            cur.execute("SELECT prix_vente FROM articles WHERE id = %s", (corps["article_id"],))
+            assert float(cur.fetchone()["prix_vente"]) == 0
 
 
-def test_agent_stock_ne_peut_pas_choisir_un_autre_site(client):
-    """Le site vient TOUJOURS de la session pour un agent — un site_id
-    fourni dans le corps est ignoré, jamais utilisé."""
+def test_agent_stock_cree_une_fiche_sans_site(client):
+    """La fiche n'a plus de site : un ``site_id`` envoyé par un agent est
+    simplement ignoré (le schéma n'en veut plus du tout)."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.post(
         "/articles",
         headers=entete_autorisation(session["jeton"]),
-        json={"nom": "Essai site forcé", "unite": "pièce", "site_id": 2},
+        json={"nom": "Essai sans site", "unite": "pièce", "site_id": 2},
     )
     assert reponse.status_code == 201, reponse.text
-    assert reponse.json()["site_id"] == 1
+    assert "site_id" not in reponse.json()
 
 
-def test_responsable_doit_preciser_un_site(client):
+def test_responsable_cree_une_fiche_sans_site(client):
+    """Le responsable non plus n'a plus à préciser de site : la fiche est
+    unique, le stock viendra par les fonctions de mouvement."""
     session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     reponse = client.post(
         "/articles",
         headers=entete_autorisation(session["jeton"]),
         json={"nom": "Sans site", "unite": "pièce"},
     )
-    assert reponse.status_code == 422
-    assert "site" in reponse.json()["detail"].lower()
+    assert reponse.status_code == 201, reponse.text
 
 
 def test_agent_comptabilite_ne_peut_pas_creer_darticle(client):
@@ -95,19 +98,6 @@ def test_agent_comptabilite_ne_peut_pas_creer_darticle(client):
         json={"nom": "Interdit", "unite": "pièce"},
     )
     assert reponse.status_code == 403
-
-
-def test_site_invalide_refuse_proprement(client):
-    """Trouvé au contrôle de boucle après le cycle 9 : remontait en 500
-    générique avant ce correctif (cycle 11)."""
-    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
-    reponse = client.post(
-        "/articles",
-        headers=entete_autorisation(session["jeton"]),
-        json={"nom": "Site invalide", "unite": "pièce", "site_id": 999},
-    )
-    assert reponse.status_code == 422, reponse.text
-    assert "erreur interne" not in reponse.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -162,14 +152,18 @@ def test_agent_stock_modifie_le_nom_mais_pas_le_prix(client):
             assert float(cur.fetchone()["prix_vente"]) == 6500, "prix inchangé, ignoré silencieusement"
 
 
-def test_agent_stock_ne_modifie_pas_un_article_de_lautre_site(client):
+def test_agent_stock_peut_modifier_une_fiche_du_catalogue_commun(client):
+    """Le catalogue est commun aux deux sites : la fiche « Clou 5 cm » (dont
+    le stock est au Comptoir) est modifiable par un agent du Magasin — la
+    quantité, elle, reste cloisonnée dans stocks_sites."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.put(
-        "/articles/3",  # Clou 5 cm, site 2 (Comptoir)
+        "/articles/3",
         headers=entete_autorisation(session["jeton"]),
-        json={"nom": "Essai"},
+        json={"nom": "Clou 5 cm (commun)"},
     )
-    assert reponse.status_code == 404, reponse.text
+    assert reponse.status_code == 200, reponse.text
+    assert reponse.json()["nom"] == "Clou 5 cm (commun)"
 
 
 def test_modification_article_inexistant_refusee(client):
@@ -241,32 +235,35 @@ def test_modification_prix_identique_ne_trace_rien(client):
 
 
 # ---------------------------------------------------------------------------
-# Articles de l'autre site (GET /articles/autre-site, cycle 11)
+# Catalogue commun (GET /articles, décision 2026-09-19) — l'ancien
+# GET /articles/autre-site n'existe plus.
 # ---------------------------------------------------------------------------
 
-def test_agent_stock_voit_les_articles_de_lautre_site_sans_prix(client):
-    from conftest import MOT_DE_PASSE_AGENT_STOCK_COMPTOIR
-
-    session = se_connecter(client, "comptoir.stock", MOT_DE_PASSE_AGENT_STOCK_COMPTOIR)
-    reponse = client.get("/articles/autre-site", headers=entete_autorisation(session["jeton"]))
-    assert reponse.status_code == 200, reponse.text
-    noms = [a["nom"] for a in reponse.json()]
-    assert "Ciment CIM II 50 kg" in noms  # site 1 (Magasin)
-    assert not any("prix" in a for a in reponse.json())
-
-
-def test_agent_stock_ne_voit_pas_son_propre_site_dans_lautre_site(client):
+def test_agent_stock_voit_tout_le_catalogue_sans_prix(client):
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
-    reponse = client.get("/articles/autre-site", headers=entete_autorisation(session["jeton"]))
+    reponse = client.get("/articles", headers=entete_autorisation(session["jeton"]))
     assert reponse.status_code == 200, reponse.text
-    noms = [a["nom"] for a in reponse.json()]
-    assert "Ciment CIM II 50 kg" not in noms  # son propre site (Magasin), exclu
-    assert "Clou 5 cm" in noms  # Comptoir
+    noms = [a["nom"] for a in reponse.json()["articles"]]
+    assert "Ciment CIM II 50 kg" in noms  # fiche dont le stock est au Magasin
+    assert "Clou 5 cm" in noms  # fiche dont le stock est au Comptoir — catalogue commun
+    assert not any("prix_vente" in a for a in reponse.json()["articles"])
 
 
-def test_responsable_ne_peut_pas_appeler_articles_autre_site(client):
-    """Réservée à un agent stock — un responsable n'en a pas besoin (GET
-    /articles lui montre déjà les deux sites)."""
+def test_agent_stock_ne_voit_que_la_quantite_de_son_site(client):
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.get("/articles", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    clou = [a for a in reponse.json()["articles"] if a["nom"] == "Clou 5 cm"][0]
+    # Le stock du Clou (100) vit au Comptoir : l'agent du Magasin voit 0.
+    assert clou["quantite_stock"] == 0
+    assert clou["site_id"] == 1
+
+
+def test_responsable_voit_une_ligne_par_article_et_site(client):
     session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
-    reponse = client.get("/articles/autre-site", headers=entete_autorisation(session["jeton"]))
-    assert reponse.status_code == 403
+    reponse = client.get("/articles", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    articles = reponse.json()["articles"]
+    sites = {a["site_id"] for a in articles}
+    assert sites == {1, 2}
+    assert all("prix_vente" in a and "quantite_stock" in a for a in articles)
