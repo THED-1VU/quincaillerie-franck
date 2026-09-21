@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from ..colonnes import COLONNES_ARTICLES
 from ..deps import obtenir_bd, obtenir_session
 from ..roles import role_pg
 from ..securite import Session
@@ -30,28 +29,55 @@ routeur = APIRouter(tags=["démonstration"])
 def liste_articles(request: Request, session: Session = Depends(obtenir_session)):
     """Catalogue des articles, colonnes et périmètre selon le rôle.
 
-    - agent stock : quantités, pas de prix ;
+    - agent stock : sa quantité (son site), pas de prix ;
     - agent comptabilité : prix de vente, pas de quantité ;
-    - responsable : tout, sur les deux sites.
+    - responsable : tout, une ligne par (article, site) — la fiche est unique,
+      le stock est par site (décision 2026-09-19).
 
-    Le cloisonnement par site n'est pas fait par cette requête : il vient de
-    la politique RLS d'``articles`` (cycle 2), déclenchée par
-    ``qf_site_courant()``, lui-même positionné par ``connexion_pour`` à
-    partir de la session — jamais d'un paramètre de la requête HTTP.
+    Le cloisonnement par site de la quantité n'est pas fait par cette requête :
+    il vient de la politique RLS de ``stocks_sites`` (migration 029),
+    déclenchée par ``qf_site_courant()``, lui-même positionné par
+    ``connexion_pour`` — jamais d'un paramètre de la requête HTTP.
     """
     bd = obtenir_bd(request)
-    colonnes = COLONNES_ARTICLES[session.role]
+
+    if session.role == "responsable":
+        requete = """
+            SELECT a.id, a.nom, a.unite, a.prix_achat, a.prix_vente,
+                   s.site_id, s.quantite_stock, s.seuil_alerte
+              FROM articles a
+              JOIN stocks_sites s ON s.article_id = a.id
+             WHERE a.actif = TRUE
+             ORDER BY a.nom, s.site_id
+        """
+        parametres = ()
+    elif session.role == "agent_stock":
+        requete = """
+            SELECT a.id, a.nom, a.unite,
+                   COALESCE(s.site_id, qf_site_courant()) AS site_id,
+                   COALESCE(s.quantite_stock, 0) AS quantite_stock,
+                   COALESCE(s.seuil_alerte, 0) AS seuil_alerte
+              FROM articles a
+              LEFT JOIN stocks_sites s
+                ON s.article_id = a.id AND s.site_id = qf_site_courant()
+             WHERE a.actif = TRUE
+             ORDER BY a.nom
+        """
+        parametres = ()
+    else:
+        requete = """
+            SELECT a.id, a.nom, a.unite, a.prix_vente
+              FROM articles a
+             WHERE a.actif = TRUE
+             ORDER BY a.nom
+        """
+        parametres = ()
 
     with bd.connexion_pour(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
     ) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                f"SELECT {colonnes} FROM articles WHERE actif = TRUE ORDER BY nom"  # noqa: S608
-                # Pas d'injection possible : `colonnes` vient d'une whitelist
-                # fixe indexée par session.role (3 valeurs possibles, ci-dessus),
-                # jamais d'une entrée de la requête HTTP.
-            )
+            cur.execute(requete, parametres)
             lignes = cur.fetchall()
 
     return {"articles": lignes}

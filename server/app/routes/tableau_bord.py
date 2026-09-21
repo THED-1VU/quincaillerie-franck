@@ -39,11 +39,13 @@ def alertes_stock(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id AS article_id, nom, unite, site_id, quantite_stock, seuil_alerte
-                  FROM articles
-                 WHERE actif = TRUE
-                   AND quantite_stock <= seuil_alerte
-                 ORDER BY site_id, nom
+                SELECT a.id AS article_id, a.nom, a.unite, s.site_id,
+                       s.quantite_stock, s.seuil_alerte
+                  FROM stocks_sites s
+                  JOIN articles a ON a.id = s.article_id
+                 WHERE a.actif = TRUE
+                   AND s.quantite_stock <= s.seuil_alerte
+                 ORDER BY s.site_id, a.nom
                 """
             )
             lignes = cur.fetchall()

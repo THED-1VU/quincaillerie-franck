@@ -56,21 +56,46 @@ def articles_a_compter(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
     ) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT a.id, a.nom, a.unite, a.site_id
-                  FROM articles a
-                 WHERE a.actif = TRUE
-                   AND NOT EXISTS (
-                         SELECT 1 FROM comptages_stock c
-                          WHERE c.article_id = a.id
-                            AND c.moment = %s
-                            AND c.date_comptage::date = CURRENT_DATE
-                       )
-                 ORDER BY a.site_id, a.nom
-                """,
-                (moment,),
-            )
+            if session.site_id is not None:
+                # Agent : uniquement les fiches qui ont une ligne de stock à
+                # SON site, non comptées aujourd'hui pour ce moment.
+                cur.execute(
+                    """
+                    SELECT a.id, a.nom, a.unite, %s::INTEGER AS site_id
+                      FROM articles a
+                      JOIN stocks_sites s ON s.article_id = a.id
+                     WHERE a.actif = TRUE
+                       AND s.site_id = %s
+                       AND NOT EXISTS (
+                             SELECT 1 FROM comptages_stock c
+                              WHERE c.article_id = a.id
+                                AND c.site_id = %s
+                                AND c.moment = %s
+                                AND c.date_comptage::date = CURRENT_DATE
+                           )
+                     ORDER BY a.nom
+                    """,
+                    (session.site_id, session.site_id, session.site_id, moment),
+                )
+            else:
+                # Responsable : tous les (article, site) — sans quantités.
+                cur.execute(
+                    """
+                    SELECT a.id, a.nom, a.unite, s.site_id
+                      FROM articles a
+                      JOIN stocks_sites s ON s.article_id = a.id
+                     WHERE a.actif = TRUE
+                       AND NOT EXISTS (
+                             SELECT 1 FROM comptages_stock c
+                              WHERE c.article_id = a.id
+                                AND c.site_id = s.site_id
+                                AND c.moment = %s
+                                AND c.date_comptage::date = CURRENT_DATE
+                           )
+                     ORDER BY s.site_id, a.nom
+                    """,
+                    (moment,),
+                )
             lignes = cur.fetchall()
 
     return {"articles": lignes}
@@ -82,6 +107,16 @@ def enregistrer_comptage(
     request: Request,
     session: Session = Depends(exiger_role("agent_stock", "responsable")),
 ):
+    if session.site_id is not None:
+        site_cible = session.site_id
+    elif demande.site_id is not None:
+        site_cible = demande.site_id
+    else:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Le site est obligatoire pour un compte responsable.",
+        )
+
     bd = obtenir_bd(request)
     with bd.connexion_pour(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
@@ -90,22 +125,22 @@ def enregistrer_comptage(
             try:
                 cur.execute(
                     """
-                    INSERT INTO comptages_stock (article_id, utilisateur_id, moment, quantite_comptee)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_comptee)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (demande.article_id, session.utilisateur_id, demande.moment, demande.quantite_comptee),
+                    (demande.article_id, site_cible, session.utilisateur_id,
+                     demande.moment, demande.quantite_comptee),
                 )
                 comptage_id = cur.fetchone()["id"]
             except psycopg.errors.UniqueViolation as exc:
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
-                    "Cet article a déjà été compté ce " + demande.moment + " aujourd'hui.",
+                    "Cet article a déjà été compté ce " + demande.moment + " aujourd'hui pour ce site.",
                 ) from exc
             except psycopg.errors.ForeignKeyViolation as exc:
                 # Levée par le déclencheur figer_quantite_attendue() quand
-                # l'article n'existe pas ou n'est pas visible pour ce site
-                # (la RLS d'articles le rend introuvable, pas "interdit").
+                # l'article n'a pas de stock à ce site (ou n'existe pas).
                 raise HTTPException(
                     status.HTTP_422_UNPROCESSABLE_ENTITY,
                     "Article introuvable pour ce site.",
@@ -136,7 +171,7 @@ def ecarts_du_jour(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT c.id, a.nom AS article_nom, a.site_id, c.moment,
+                SELECT c.id, a.nom AS article_nom, c.site_id, c.moment,
                        c.quantite_comptee, c.quantite_attendue, c.ecart, c.date_comptage
                   FROM comptages_stock c
                   JOIN articles a ON a.id = c.article_id
@@ -190,7 +225,7 @@ def historique_comptages(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT c.id, a.nom AS article_nom, a.site_id, c.moment,
+                SELECT c.id, a.nom AS article_nom, c.site_id, c.moment,
                        c.quantite_comptee, c.quantite_attendue, c.ecart, c.date_comptage
                   FROM comptages_stock c
                   JOIN articles a ON a.id = c.article_id
@@ -219,7 +254,7 @@ def ecarts_ventes_du_jour(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT e.id, a.nom AS article_nom, a.site_id, e.vente_id,
+                SELECT e.id, a.nom AS article_nom, e.site_id, e.vente_id,
                        e.quantite_manquante, e.regularise, e.date_ecart
                   FROM ecarts_stock_ventes e
                   JOIN articles a ON a.id = e.article_id

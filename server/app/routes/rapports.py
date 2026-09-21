@@ -41,7 +41,6 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 
-from ..colonnes import COLONNES_ARTICLES
 from ..deps import exiger_role, obtenir_bd
 from ..roles import role_pg
 from ..securite import Session
@@ -107,22 +106,50 @@ def exporter_articles(
     session: Session = Depends(exiger_role("responsable", "agent_stock", "agent_comptabilite")),
 ):
     """Catalogue articles/stock, colonnes gatées par rôle EN SQL — voir le
-    docstring du module. Instantané : aucun filtre de période."""
+    docstring du module. Instantané : aucun filtre de période. Le modèle
+    multi-site (cycle 35) : une fiche, un stock par site ; l'export du
+    responsable porte une ligne par (article, site)."""
     format_ = _valider_format(format)
-    colonnes = [c.strip() for c in COLONNES_ARTICLES[session.role].split(",")]
+
+    if session.role == "responsable":
+        requete = """
+            SELECT a.id, a.nom, a.unite, a.prix_achat, a.prix_vente,
+                   s.site_id, s.quantite_stock, s.seuil_alerte
+              FROM articles a
+              JOIN stocks_sites s ON s.article_id = a.id
+             WHERE a.actif = TRUE
+             ORDER BY a.nom, s.site_id
+        """
+        colonnes = ["id", "nom", "unite", "prix_achat", "prix_vente",
+                    "site_id", "quantite_stock", "seuil_alerte"]
+    elif session.role == "agent_stock":
+        requete = """
+            SELECT a.id, a.nom, a.unite,
+                   COALESCE(s.site_id, qf_site_courant()) AS site_id,
+                   COALESCE(s.quantite_stock, 0) AS quantite_stock,
+                   COALESCE(s.seuil_alerte, 0) AS seuil_alerte
+              FROM articles a
+              LEFT JOIN stocks_sites s
+                ON s.article_id = a.id AND s.site_id = qf_site_courant()
+             WHERE a.actif = TRUE
+             ORDER BY a.nom
+        """
+        colonnes = ["id", "nom", "unite", "site_id", "quantite_stock", "seuil_alerte"]
+    else:
+        requete = """
+            SELECT a.id, a.nom, a.unite, a.prix_vente
+              FROM articles a
+             WHERE a.actif = TRUE
+             ORDER BY a.nom
+        """
+        colonnes = ["id", "nom", "unite", "prix_vente"]
 
     bd = obtenir_bd(request)
     with bd.connexion_pour(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
     ) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                f"SELECT {COLONNES_ARTICLES[session.role]} FROM articles WHERE actif = TRUE ORDER BY nom"  # noqa: S608
-                # Pas d'injection : `COLONNES_ARTICLES[session.role]` vient
-                # d'une whitelist fixe à 3 valeurs indexée par le rôle de la
-                # session, jamais d'une entrée de la requête HTTP — même
-                # garantie que GET /articles (routes/demonstration.py).
-            )
+            cur.execute(requete)
             lignes = cur.fetchall()
 
     if format_ == "xlsx":
