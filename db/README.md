@@ -534,6 +534,13 @@ Le script compare le schéma d'origine à celui obtenu après *appliquer* puis
 2. **Les extensions `pg_trgm` et `pgcrypto` restent installées.** Les
    migrations 007 et 009 inverses ne les retirent volontairement pas : elles
    peuvent servir ailleurs et leur présence est sans effet de bord.
+3. **Après le cycle 35 (migrations 026-031), l'aller-retour laisse ~10
+   différences** au lieu de 4 : les inverses de 030/031 ne recréent pas les
+   anciennes fonctions du rapprochement et de l'annulation (elles
+   référencent des colonnes d'`articles` qui n'existent plus à ce stade de
+   la chaîne) — les versions multi-site restent en place, inoffensives en
+   fin de chaîne, et l'écart de schéma est attendu et contrôlé par la suite
+   SQL (étape « schéma comparé : OK »).
 
 Un point d'exploitation à connaître : **les rôles PostgreSQL sont globaux au
 serveur**, pas propres à une base. Si les rôles `qf_*` servent à une autre base
