@@ -137,6 +137,35 @@
         }
       });
       li.appendChild(bouton);
+
+      // Réinitialisation du mot de passe d'un agent (cycle 38, décision
+      // 2026-09-22) : le responsable saisit le nouveau mot de passe, jamais
+      // affiché ensuite, changement forcé à la première connexion.
+      if (compte.role !== "responsable") {
+        const boutonMdp = document.createElement("button");
+        boutonMdp.type = "button";
+        boutonMdp.className = "btn btn--fantome";
+        boutonMdp.textContent = "Réinitialiser le mot de passe";
+        boutonMdp.addEventListener("click", async () => {
+          const nouveau = window.prompt("Nouveau mot de passe (8 caractères minimum) :");
+          if (nouveau === null) return; // annulé par le responsable
+          if (nouveau.length < 8) {
+            afficherErreurServeur("zone-erreur-liste", { statut: 422, message: "Le mot de passe doit faire au moins 8 caractères." });
+            return;
+          }
+          $("zone-erreur-liste").hidden = true;
+          try {
+            await appelApi("/admin/comptes/" + compte.id + "/mot-de-passe", {
+              method: "PATCH",
+              body: JSON.stringify({ mot_de_passe: nouveau }),
+            });
+            await chargerComptes();
+          } catch (erreur) {
+            afficherErreurServeur("zone-erreur-liste", erreur);
+          }
+        });
+        li.appendChild(boutonMdp);
+      }
     }
 
     return li;

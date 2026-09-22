@@ -83,8 +83,12 @@ class GestionnaireSessions:
         site_id: Optional[int],
         nom_complet: str,
         doit_changer_mot_de_passe: bool,
+        duree_minutes: int | None = None,
     ) -> str:
         maintenant = int(time.time())
+        duree_secondes = (
+            duree_minutes * 60 if duree_minutes is not None else self._duree_secondes
+        )
         charge = {
             "uid": utilisateur_id,
             "role": role,
@@ -92,7 +96,7 @@ class GestionnaireSessions:
             "nom": nom_complet,
             "chg": doit_changer_mot_de_passe,
             "iat": maintenant,
-            "exp": maintenant + self._duree_secondes,
+            "exp": maintenant + duree_secondes,
             # Identifiant du jeton (cycle 21) : 16 octets aléatoires en
             # hexadécimal (32 caractères, tient dans jetons_revoques.jti
             # VARCHAR(32)) — permet de révoquer CE jeton précis, jamais

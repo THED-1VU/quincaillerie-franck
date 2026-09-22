@@ -52,6 +52,7 @@ def connexion(demande: DemandeConnexion, request: Request):
 
     bd: BaseDeDonnees = obtenir_bd(request)
     adresse_ip = request.client.host if request.client else None
+    config: Config = request.app.state.config
 
     with bd.connexion_anonyme() as conn:
         with conn.cursor() as cur:
@@ -60,6 +61,18 @@ def connexion(demande: DemandeConnexion, request: Request):
                 (demande.identifiant, demande.mot_de_passe, adresse_ip, "api"),
             )
             ligne = cur.fetchone()
+            # Durée de session : valeur DÉCIDÉE en base (parametres, migration
+            # 033) — le config.ini ne sert que de repli si la base ne répond
+            # pas. Une seule source de vérité, la base sauvegardée.
+            duree_minutes = config.api.duree_session_minutes
+            if ligne["ok"]:
+                try:
+                    cur.execute("SELECT duree_session_minutes_decidee() AS minutes")
+                    valeur = cur.fetchone()["minutes"]
+                    if valeur is not None:
+                        duree_minutes = int(valeur)
+                except Exception:  # noqa: BLE001 - repli volontaire, jamais bloquant
+                    duree_minutes = config.api.duree_session_minutes
         conn.commit()
 
     if not ligne["ok"]:
@@ -78,11 +91,11 @@ def connexion(demande: DemandeConnexion, request: Request):
         site_id=ligne["site_id"],
         nom_complet=ligne["nom_complet"],
         doit_changer_mot_de_passe=ligne["doit_changer_mot_de_passe"],
+        duree_minutes=duree_minutes,
     )
-    config: Config = request.app.state.config
     return ReponseConnexion(
         jeton=jeton,
-        expire_dans_secondes=config.api.duree_session_minutes * 60,
+        expire_dans_secondes=duree_minutes * 60,
         utilisateur_id=ligne["utilisateur_id"],
         nom_complet=ligne["nom_complet"],
         role=ligne["role"],

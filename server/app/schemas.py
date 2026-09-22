@@ -423,5 +423,18 @@ class ReponseCompte(BaseModel):
     date_creation: datetime
 
 
+class DemandeReinitialisationMotDePasse(BaseModel):
+    """Le responsable saisit le nouveau mot de passe d'un agent (cycle 38) :
+    >= 8 caractères, jamais restitué, changement forcé à la première
+    connexion."""
+
+    mot_de_passe: str = Field(min_length=8, max_length=200)
+
+
+class ReponseReinitialisationMotDePasse(BaseModel):
+    compte_id: int
+    doit_changer_mot_de_passe: bool
+
+
 class DemandeActifCompte(BaseModel):
     actif: bool
