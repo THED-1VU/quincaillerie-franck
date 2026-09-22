@@ -203,8 +203,10 @@ def ecarts_du_jour(
                        c.quantite_comptee, c.quantite_attendue, c.ecart, c.date_comptage
                   FROM comptages_stock c
                   JOIN articles a ON a.id = c.article_id
+                  LEFT JOIN regularisations_ecarts_comptage r ON r.comptage_id = c.id
                  WHERE c.ecart <> 0
                    AND c.date_comptage::date = CURRENT_DATE
+                   AND r.id IS NULL
                  ORDER BY c.date_comptage DESC
                 """
             )
