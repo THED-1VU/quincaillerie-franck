@@ -114,6 +114,25 @@ def test_comptage_sans_ecart_refuse(client):
     assert "aucun écart" in reponse.json()["detail"].lower()
 
 
+def test_ecart_regularise_disparait_de_la_liste_du_jour(client):
+    comptage_id = _inserer_comptage(1, 1, "matin", 25)
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    avant = client.get("/inventaire/ecarts", headers=entete_autorisation(session["jeton"]))
+    assert any(e["id"] == comptage_id for e in avant.json()["ecarts"])
+
+    reponse = client.post(
+        f"/inventaire/ecarts/{comptage_id}/regulariser",
+        headers=entete_autorisation(session["jeton"]),
+        json={"type_resolution": "erreur_de_comptage"},
+    )
+    assert reponse.status_code == 201, reponse.text
+
+    apres = client.get("/inventaire/ecarts", headers=entete_autorisation(session["jeton"]))
+    assert not any(e["id"] == comptage_id for e in apres.json()["ecarts"]), (
+        "un écart régularisé ne doit plus apparaître dans la liste à traiter"
+    )
+
+
 def test_agent_stock_ne_peut_pas_regulariser(client):
     comptage_id = _inserer_comptage(1, 1, "matin", 25)
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)

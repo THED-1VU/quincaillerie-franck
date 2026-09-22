@@ -244,12 +244,59 @@
     } else {
       lignes.forEach((e) => {
         const signe = e.ecart > 0 ? "+" + e.ecart : e.ecart;
-        ulE.appendChild(creerLigneListe(
+        const li = creerLigneListe(
           e.article_nom,
           (LIBELLE_SITE[e.site_id] || "Site " + e.site_id) + " · " + e.moment,
           "écart " + signe,
           "pastille--alerte"
-        ));
+        );
+        const bouton = document.createElement("button");
+        bouton.type = "button";
+        bouton.className = "btn btn--fantome";
+        bouton.style.marginLeft = "var(--e-2)";
+        bouton.textContent = "Régulariser";
+        bouton.addEventListener("click", () => {
+          // Mini-formulaire de résolution (4 types décidés le 2026-09-22).
+          const conteneur = document.createElement("div");
+          conteneur.className = "regularisation-formulaire";
+          const sel = document.createElement("select");
+          sel.className = "champ__select";
+          sel.innerHTML =
+            '<option value="erreur_de_comptage">Erreur de comptage</option>' +
+            '<option value="retrouve">Retrouvé</option>' +
+            '<option value="vol_presume">Vol présumé</option>' +
+            '<option value="casse_deja_enregistree">Casse déjà enregistrée</option>';
+          const motif = document.createElement("input");
+          motif.type = "text";
+          motif.className = "champ__input";
+          motif.placeholder = "Motif (obligatoire sauf erreur de comptage)";
+          const valider = document.createElement("button");
+          valider.type = "button";
+          valider.className = "btn btn--primaire";
+          valider.textContent = "Valider";
+          valider.addEventListener("click", async () => {
+            valider.disabled = true;
+            try {
+              const corps = { type_resolution: sel.value };
+              if (motif.value.trim()) corps.motif = motif.value.trim();
+              await appelApi("/inventaire/ecarts/" + e.id + "/regulariser", {
+                method: "POST",
+                body: JSON.stringify(corps),
+              });
+              await chargerEcarts();
+            } catch (erreur) {
+              valider.disabled = false;
+              afficherErreurServeur("zone-erreur-ecarts", erreur);
+            }
+          });
+          conteneur.appendChild(sel);
+          conteneur.appendChild(motif);
+          conteneur.appendChild(valider);
+          li.appendChild(conteneur);
+          bouton.remove();
+        });
+        li.appendChild(bouton);
+        ulE.appendChild(li);
       });
     }
   }
@@ -322,14 +369,19 @@
 
   // --- Écarts d'inventaire du jour : RÉEL, via /inventaire/ecarts ---
   // (chantier C7 ; ne renvoie que des comptages où l'écart est non nul —
-  // voir server/app/routes/inventaire.py)
-  try {
-    const donnees = await appelApi("/inventaire/ecarts");
-    donneesBrutes.ecarts = donnees.ecarts;
-    rendreEcarts();
-  } catch (erreur) {
-    afficherErreurServeur("zone-erreur-ecarts", erreur);
+  // voir server/app/routes/inventaire.py). Régularisation RÉELLE
+  // (cycle 36) : POST /inventaire/ecarts/{id}/regulariser.
+  async function chargerEcarts() {
+    $("zone-erreur-ecarts").hidden = true;
+    try {
+      const donnees = await appelApi("/inventaire/ecarts");
+      donneesBrutes.ecarts = donnees.ecarts;
+      rendreEcarts();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-ecarts", erreur);
+    }
   }
+  await chargerEcarts();
 
   // --- Écarts de stock issus d'une vente à découvert : RÉEL (chantier C5) ---
   // Régularisation RÉELLE (chantier C5, cycle 17) : POST /inventaire/ecarts-ventes/{id}/regulariser.
