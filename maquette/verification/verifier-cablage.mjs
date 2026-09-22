@@ -263,7 +263,12 @@ for (const largeur of LARGEURS) {
     return r.json();
   });
   const champsInterdits = new Set();
+  // "quantite_decimale_autorisee" (migration 033, point f) est un booléen de
+  // PARAMÉTRAGE de la fiche (décimales autorisées ou non), pas une quantité
+  // ni un seuil réels — volontairement exclu de ce contrôle, qui garde son
+  // sens pour toute autre colonne "quantite*"/"seuil*".
   articles.articles.forEach((a) => Object.keys(a).forEach((k) => {
+    if (k === "quantite_decimale_autorisee") return;
     if (/quantite|seuil/i.test(k)) champsInterdits.add(k);
   }));
   verifier(champsInterdits.size === 0, `agent comptabilité : /articles sans AUCUN champ de quantité (trouvé : ${[...champsInterdits].join(",") || "aucun"})`);

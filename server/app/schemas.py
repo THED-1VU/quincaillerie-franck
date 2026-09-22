@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date as _date, datetime
+from decimal import Decimal
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -47,7 +48,7 @@ class LigneVenteDemande(BaseModel):
     qui peut légitimement différer du prix catalogue."""
 
     article_id: int
-    quantite: int = Field(gt=0)
+    quantite: Decimal = Field(gt=0)
     prix_unitaire: float = Field(ge=0)
 
 
@@ -74,7 +75,7 @@ class LigneEcartReponse(BaseModel):
     disponible, la différence a été consignée pour le responsable."""
 
     article_id: int
-    quantite_manquante: int
+    quantite_manquante: float
 
 
 class ReponseVente(BaseModel):
@@ -122,7 +123,7 @@ class DemandeComptage(BaseModel):
     article_id: int
     site_id: Optional[int] = None
     moment: Literal["matin", "soir"]
-    quantite_comptee: int = Field(ge=0)
+    quantite_comptee: Decimal = Field(ge=0)
 
 
 class ReponseComptage(BaseModel):
@@ -132,7 +133,7 @@ class ReponseComptage(BaseModel):
     comptage_id: int
     article_id: int
     moment: str
-    quantite_comptee: int
+    quantite_comptee: float
 
 
 class DemandeRegularisationComptage(BaseModel):
@@ -167,12 +168,16 @@ class DemandeArticle(BaseModel):
     fournisseur_id: Optional[int] = None
     prix_achat: Optional[float] = Field(default=None, ge=0)
     prix_vente: Optional[float] = Field(default=None, ge=0)
+    quantite_decimale_autorisee: bool = False
+    """Décision 2026-09-22 (addendum, point f) : entier seulement si faux
+    (défaut) — décidé par article, comme l'unité elle-même."""
 
 
 class ReponseArticle(BaseModel):
     article_id: int
     nom: str
     unite: str
+    quantite_decimale_autorisee: bool
 
 
 class DemandeModificationArticle(BaseModel):
@@ -190,6 +195,7 @@ class DemandeModificationArticle(BaseModel):
     fournisseur_id: Optional[int] = None
     prix_achat: Optional[float] = Field(default=None, ge=0)
     prix_vente: Optional[float] = Field(default=None, ge=0)
+    quantite_decimale_autorisee: Optional[bool] = None
 
 
 class ReponseModificationArticle(BaseModel):
@@ -203,12 +209,13 @@ class ReponseModificationArticle(BaseModel):
     unite: str
     prix_achat: Optional[float] = None
     prix_vente: Optional[float] = None
+    quantite_decimale_autorisee: bool
 
 
 class DemandeEntreeStock(BaseModel):
     article_id: int
     site_id: Optional[int] = None
-    quantite: int = Field(gt=0)
+    quantite: Decimal = Field(gt=0)
     motif: Optional[str] = Field(default=None, max_length=200)
 
 
@@ -218,7 +225,7 @@ class ReponseMouvementStock(BaseModel):
 
     article_id: int
     site_id: int
-    quantite_stock: int
+    quantite_stock: float
 
 
 class DemandeTransfert(BaseModel):
@@ -228,7 +235,7 @@ class DemandeTransfert(BaseModel):
     article_id: int
     site_origine: int
     site_destination: int
-    quantite: int = Field(gt=0)
+    quantite: Decimal = Field(gt=0)
     motif: str = Field(min_length=1, max_length=200)
 
 
@@ -236,27 +243,27 @@ class ReponseTransfert(BaseModel):
     article_id: int
     site_origine: int
     site_destination: int
-    quantite_stock_origine: int
-    quantite_stock_destination: int
+    quantite_stock_origine: float
+    quantite_stock_destination: float
 
 
 class DemandeCasse(BaseModel):
     article_id: int
     site_id: Optional[int] = None
-    quantite: int = Field(gt=0)
+    quantite: Decimal = Field(gt=0)
     motif: str = Field(min_length=1, max_length=200)
 
 
 class DemandeRetourClient(BaseModel):
     article_id: int
     vente_id: int
-    quantite: int = Field(gt=0)
+    quantite: Decimal = Field(gt=0)
     motif: Optional[str] = Field(default=None, max_length=200)
 
 
 class DemandeRetourFournisseur(BaseModel):
     mouvement_origine_id: int
-    quantite: int = Field(gt=0)
+    quantite: Decimal = Field(gt=0)
     motif: Optional[str] = Field(default=None, max_length=200)
 
 

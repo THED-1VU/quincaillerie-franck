@@ -122,8 +122,10 @@ SELECT d_succes('enregistrer un comptage d''inventaire',
 -- de stock (20 % de la quantité reçue). 50 reçus → seuil 10.
 SELECT d_succes('enregistrer une entrée de stock par la fonction dédiée',
   $$SELECT enregistrer_entree_stock(1, 1, 50, 2, 'Livraison essai')$$);
+-- '10.000', pas '10' : seuil_alerte est NUMERIC(12,3) depuis la migration 034
+-- (point f, unités décimales) — même valeur, représentation textuelle différente.
 SELECT d_valeur('seuil d''alerte recalculé par la base (20 % de 50)',
-  $$SELECT seuil_alerte::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$, '10');
+  $$SELECT seuil_alerte::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$, '10.000');
 
 -- Décision 2026-09-19/20 : catalogue (fiches) commun aux deux sites, SEULE la
 -- quantité est cloisonnée par site.
