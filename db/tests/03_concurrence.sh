@@ -108,10 +108,14 @@ verifier() {
 
 verifier "les DEUX ventes réussissent (plus de blocage, addendum point e)" \
          "$( [ "$CODE_A" -eq 0 ] && [ "$CODE_B" -eq 0 ] && echo oui || echo non )" "oui"
-verifier "le stock n'est jamais négatif, il tombe à 0" "$STOCK_FINAL" "0"
+# "0.000"/"1.000", pas "0"/"1" : quantite_stock et quantite_manquante sont
+# NUMERIC(12,3) depuis la migration 034 (point f, unités décimales) — même
+# valeur, représentation textuelle différente. NB_SORTIES/NB_ECARTS restent
+# des COUNT(*) (entiers réels), inchangés.
+verifier "le stock n'est jamais négatif, il tombe à 0" "$STOCK_FINAL" "0.000"
 verifier "une seule marchandise réelle n'est sortie qu'une fois (1 mouvement)" "$NB_SORTIES" "1"
 verifier "un seul écart consigné, pour la vente arrivée après coup"          "$NB_ECARTS"   "1"
-verifier "l'écart consigné vaut exactement 1 unité (rien d'inventé)"        "$SOMME_ECARTS" "1"
+verifier "l'écart consigné vaut exactement 1 unité (rien d'inventé)"        "$SOMME_ECARTS" "1.000"
 verifier "aucun message de refus : la saisie n'est jamais bloquée" \
          "$(grep -qi 'stock insuffisant' "$TMP/a.out" "$TMP/b.out" && echo trouve || echo absent)" "absent"
 

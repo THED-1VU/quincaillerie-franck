@@ -44,6 +44,7 @@ def liste_articles(request: Request, session: Session = Depends(obtenir_session)
     if session.role == "responsable":
         requete = """
             SELECT a.id, a.nom, a.unite, a.prix_achat, a.prix_vente,
+                   a.quantite_decimale_autorisee,
                    s.site_id, s.quantite_stock, s.seuil_alerte
               FROM articles a
               JOIN stocks_sites s ON s.article_id = a.id
@@ -53,7 +54,7 @@ def liste_articles(request: Request, session: Session = Depends(obtenir_session)
         parametres = ()
     elif session.role == "agent_stock":
         requete = """
-            SELECT a.id, a.nom, a.unite,
+            SELECT a.id, a.nom, a.unite, a.quantite_decimale_autorisee,
                    COALESCE(s.site_id, qf_site_courant()) AS site_id,
                    COALESCE(s.quantite_stock, 0) AS quantite_stock,
                    COALESCE(s.seuil_alerte, 0) AS seuil_alerte
@@ -66,7 +67,7 @@ def liste_articles(request: Request, session: Session = Depends(obtenir_session)
         parametres = ()
     else:
         requete = """
-            SELECT a.id, a.nom, a.unite, a.prix_vente
+            SELECT a.id, a.nom, a.unite, a.prix_vente, a.quantite_decimale_autorisee
               FROM articles a
              WHERE a.actif = TRUE
              ORDER BY a.nom

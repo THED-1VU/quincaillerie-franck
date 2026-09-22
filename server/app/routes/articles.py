@@ -51,33 +51,44 @@ def creer_article(
                 if session.role == "responsable":
                     cur.execute(
                         """
-                        INSERT INTO articles (nom, categorie, unite, prix_achat, prix_vente, fournisseur_id)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        INSERT INTO articles
+                            (nom, categorie, unite, prix_achat, prix_vente, fournisseur_id,
+                             quantite_decimale_autorisee)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                         """,
                         (
                             demande.nom, demande.categorie, demande.unite,
                             demande.prix_achat or 0, demande.prix_vente or 0,
-                            demande.fournisseur_id,
+                            demande.fournisseur_id, demande.quantite_decimale_autorisee,
                         ),
                     )
                 else:
                     # Agent stock : ni prix_achat ni prix_vente ne sont écrits
                     # (la colonne prend son DEFAULT 0 en base, migration 008) —
                     # un prix envoyé quand même est silencieusement ignoré.
+                    # quantite_decimale_autorisee suit l'unité (migration 033,
+                    # point f) : même paire de rôles autorisée à la fixer.
                     cur.execute(
                         """
-                        INSERT INTO articles (nom, categorie, unite, fournisseur_id)
-                        VALUES (%s, %s, %s, %s)
+                        INSERT INTO articles
+                            (nom, categorie, unite, fournisseur_id, quantite_decimale_autorisee)
+                        VALUES (%s, %s, %s, %s, %s)
                         RETURNING id
                         """,
-                        (demande.nom, demande.categorie, demande.unite, demande.fournisseur_id),
+                        (
+                            demande.nom, demande.categorie, demande.unite,
+                            demande.fournisseur_id, demande.quantite_decimale_autorisee,
+                        ),
                     )
             except psycopg.errors.ForeignKeyViolation as exc:
                 raise erreur_metier(exc) from exc
             article_id = cur.fetchone()["id"]
 
-    return ReponseArticle(article_id=article_id, nom=demande.nom, unite=demande.unite)
+    return ReponseArticle(
+        article_id=article_id, nom=demande.nom, unite=demande.unite,
+        quantite_decimale_autorisee=demande.quantite_decimale_autorisee,
+    )
 
 
 @routeur.put("/{article_id}", response_model=ReponseModificationArticle)
@@ -106,13 +117,15 @@ def modifier_article(
         with conn.cursor() as cur:
             if session.role == "responsable":
                 cur.execute(
-                    "SELECT nom, categorie, unite, prix_achat, prix_vente, fournisseur_id"
+                    "SELECT nom, categorie, unite, prix_achat, prix_vente, fournisseur_id,"
+                    " quantite_decimale_autorisee"
                     " FROM articles WHERE id = %s",
                     (article_id,),
                 )
             else:
                 cur.execute(
-                    "SELECT nom, categorie, unite FROM articles WHERE id = %s",
+                    "SELECT nom, categorie, unite, quantite_decimale_autorisee"
+                    " FROM articles WHERE id = %s",
                     (article_id,),
                 )
             actuel = cur.fetchone()
@@ -126,6 +139,8 @@ def modifier_article(
                 champs["unite"] = demande.unite
             if demande.categorie is not None:
                 champs["categorie"] = demande.categorie
+            if demande.quantite_decimale_autorisee is not None:
+                champs["quantite_decimale_autorisee"] = demande.quantite_decimale_autorisee
             if session.role == "responsable":
                 if demande.fournisseur_id is not None:
                     champs["fournisseur_id"] = demande.fournisseur_id
@@ -137,7 +152,7 @@ def modifier_article(
             if not champs:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Aucun champ à modifier.")
 
-            colonnes_retour = "id, nom, categorie, unite"
+            colonnes_retour = "id, nom, categorie, unite, quantite_decimale_autorisee"
             if session.role == "responsable":
                 colonnes_retour += ", prix_achat, prix_vente"
             set_clause = ", ".join(f"{colonne} = %s" for colonne in champs)
@@ -151,7 +166,7 @@ def modifier_article(
             except (psycopg.errors.ForeignKeyViolation, psycopg.errors.CheckViolation) as exc:
                 raise erreur_metier(exc) from exc
 
-            for champ in ("nom", "categorie", "unite", "fournisseur_id"):
+            for champ in ("nom", "categorie", "unite", "fournisseur_id", "quantite_decimale_autorisee"):
                 if champ in champs and str(actuel[champ]) != str(champs[champ]):
                     cur.execute(
                         """
@@ -191,6 +206,6 @@ def modifier_article(
 
     return ReponseModificationArticle(
         article_id=ligne["id"], nom=ligne["nom"], categorie=ligne["categorie"],
-        unite=ligne["unite"],
+        unite=ligne["unite"], quantite_decimale_autorisee=ligne["quantite_decimale_autorisee"],
         prix_achat=ligne.get("prix_achat"), prix_vente=ligne.get("prix_vente"),
     )

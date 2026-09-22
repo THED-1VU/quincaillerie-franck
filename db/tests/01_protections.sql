@@ -147,13 +147,16 @@ SELECT t_refus('003 · écriture directe de l''écart d''inventaire',
 INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_attendue, quantite_comptee)
 VALUES (1, 1, 2, 'matin', 999, 25);
 
+-- '30.000'/'-5.000', pas '30'/'-5' : quantite_attendue/ecart sont NUMERIC(12,3)
+-- depuis la migration 034 (point f, unités décimales) — même valeur,
+-- représentation textuelle différente.
 SELECT t_valeur('003 · quantité attendue forgée par le client → ignorée',
   $$SELECT quantite_attendue::TEXT FROM comptages_stock WHERE article_id = 1 AND moment = 'matin'$$,
-  '30');
+  '30.000');
 
 SELECT t_valeur('003 · écart réellement calculé par la base',
   $$SELECT ecart::TEXT FROM comptages_stock WHERE article_id = 1 AND moment = 'matin'$$,
-  '-5');
+  '-5.000');
 
 SELECT t_refus('003 · modification d''un comptage déjà enregistré',
   $$UPDATE comptages_stock SET quantite_comptee = 30 WHERE article_id = 1 AND moment = 'matin'$$);
@@ -323,6 +326,40 @@ SELECT t_refus('033 · réinitialisation d''un compte responsable refusée',
 
 SELECT t_succes('033 · réinitialisation d''un agent acceptée',
   $$SELECT reinitialiser_mot_de_passe_agent(2, 'UnMotDePasseLong', 1)$$);
+
+-- ============================================================================
+-- 9. Quantités décimales par article (migration 034, point f, addendum,
+--    décision 2026-09-22) — refusées par défaut, autorisées si l'article
+--    le permet.
+-- ============================================================================
+
+-- Article 1 (Ciment) : quantite_decimale_autorisee = FALSE par défaut (jeu
+-- d'essai). Une entrée décimale doit être refusée AU NIVEAU DE LA BASE,
+-- pas seulement par discipline applicative — même principe que le reste
+-- du projet (contourner l'API ne doit rien changer).
+SELECT t_refus('034 · entrée de stock décimale sur un article entier-seul',
+  $$SELECT enregistrer_entree_stock(1, 1, 12.5, 2, 'essai décimal refusé')$$);
+
+SELECT t_refus('034 · casse décimale sur un article entier-seul',
+  $$SELECT enregistrer_casse(1, 1, 2.5, 2, 'essai décimal refusé')$$);
+
+SELECT t_refus('034 · comptage décimal sur un article entier-seul',
+  $$INSERT INTO comptages_stock (article_id, utilisateur_id, moment, quantite_comptee, site_id)
+    VALUES (1, 2, 'soir', 29.5, 1)$$);
+
+-- Autoriser explicitement les décimales sur l'article 1, le temps du test
+-- suivant seulement (restauré juste après, jeu d'essai inchangé pour le
+-- reste de la suite).
+UPDATE articles SET quantite_decimale_autorisee = TRUE WHERE id = 1;
+
+SELECT t_succes('034 · entrée de stock décimale acceptée si l''article l''autorise',
+  $$SELECT enregistrer_entree_stock(1, 1, 12.5, 2, 'essai décimal accepté')$$);
+
+SELECT t_valeur('034 · la quantité décimale est bien celle enregistrée, non arrondie',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
+  '42.500');
+
+UPDATE articles SET quantite_decimale_autorisee = FALSE WHERE id = 1;
 
 -- ============================================================================
 -- Résultat
