@@ -474,7 +474,25 @@ Sous la lecture du testeur (3ᵉ essai) : 5/7 conforme.
 - **UX-8** — Un utilisateur non formé ne trouve pas seul comment annuler
   une ligne du panier (C2, ~20 s de recherche). Non traité par la piste UX
   ce tour-ci (hors du plan validé — voir
-  `RAPPORT AVANCEMENT/cycles/piste-ux.md`).
+  `RAPPORT AVANCEMENT/cycles/piste-ux.md`). **Cycle 37 (2026-09-22)** :
+  cause trouvée par lecture du code — le bouton de retrait
+  (`maquette/vente.html`, `.panier__sup`) était un « × » nu, sans fond ni
+  bordure au repos, visible **seulement au survol** (`:hover`) — donc
+  invisible au doigt sur téléphone, qui n'a pas d'état hover. Corrigé
+  (`maquette/styles.css`) : fond et bordure de couleur d'alerte
+  **permanents** (se lit comme un bouton, pas une ponctuation),
+  `:hover`/`:focus-visible` inversent les couleurs pour le retour visuel ;
+  `title="Retirer cette ligne du panier"` ajouté en plus de l'`aria-label`
+  déjà présent (infobulle native au survol souris, sans effet sur
+  mobile). Preuve par exécution réelle : `verifier-cablage.mjs` 94/94 et
+  `verifier-vente-reelle.mjs` 12/12 (0 régression) ; script Playwright
+  dédié — à 390px et 1366px, le bouton a désormais un fond
+  `rgb(251, 231, 225)` et une bordure `rgb(168, 50, 10)` au repos (avant :
+  transparent), et le clic retire toujours correctement la ligne (0 ligne
+  restante après clic). **La discoverabilité réelle pour un utilisateur
+  non formé reste à reconfirmer par un vrai testeur** — ce correctif rend
+  le bouton visuellement identifiable sans interaction, ce n'est pas une
+  nouvelle mesure humaine.
 - **UX-9** — Un utilisateur non formé comprend mal le prix affiché en
   gris, le prenant pour le prix à facturer (C3) — à rapprocher de
   l'addendum, point d (prix négociés vs. prix catalogue) : la confusion
