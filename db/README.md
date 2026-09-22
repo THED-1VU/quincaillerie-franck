@@ -210,6 +210,20 @@ correction physique passe par les fonctions C4. Seule voie d'écriture :
 amorcé à `a_definir` : aucun comptage n'est refusé pour vraisemblance tant
 que le propriétaire ne fixe pas de valeur.
 
+### Durée de session et réinitialisation de mot de passe (chantier C2, cycle 38)
+
+Durée de session **décidée le 2026-09-22 : 8 heures (480 minutes)** — le
+paramètre `duree_session_minutes` n'est plus `a_definir`, et le serveur le
+lit à chaque connexion via `duree_session_minutes_decidee()`
+(`SECURITY DEFINER`, fenêtre minimale pour `qf_app`, repli sur `config.ini`
+si la base ne répond pas). Réinitialisation par le responsable :
+`reinitialiser_mot_de_passe_agent()` (migration 033, réservée à
+`qf_responsable`) saisit un nouveau mot de passe **jamais restitué**
+(>= 8 caractères), force `doit_changer_mot_de_passe = TRUE`, remet les
+tentatives échouées à zéro, trace dans `journal_comptes`
+(action `reinitialisation_mot_de_passe`), et refuse de viser un compte
+responsable.
+
 ---
 
 ## Ce que chaque migration corrige

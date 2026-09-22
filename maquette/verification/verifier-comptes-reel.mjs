@@ -37,6 +37,7 @@ const MDP_AGENT_STOCK = "AgentStockTest123";
 const MDP_AGENT_COMPTA = "AgentComptaTest123";
 const NOUVEAU_IDENTIFIANT = "c2.agent";
 const NOUVEAU_MDP = "C2AgentTest123";
+const NOUVEAU_MDP_RESET = "C2AgentReset123";
 
 const ok = [], ko = [];
 const verifier = (cond, libelle) => (cond ? ok : ko).push(libelle);
@@ -187,6 +188,32 @@ for (const largeur of [360, 390, 768, 1366, 1920]) {
     const pageAgent = await contexteAgent.newPage();
     await seConnecter(pageAgent, NOUVEAU_IDENTIFIANT, NOUVEAU_MDP);
     verifier(!pageAgent.url().endsWith("connexion.html"), "connexion de nouveau possible après réactivation");
+    await contexteAgent.close();
+  }
+
+  // Réinitialisation du mot de passe depuis l'écran (cycle 38) : le
+  // responsable saisit le nouveau mot de passe dans la boîte de dialogue,
+  // l'ancien est refusé, le nouveau est accepté avec changement forcé.
+  page.once("dialog", (dialogue) => dialogue.accept(NOUVEAU_MDP_RESET));
+  const [reponseReset] = await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/mot-de-passe") && r.request().method() === "PATCH", { timeout: 10000 }),
+    page.locator("li", { hasText: NOUVEAU_IDENTIFIANT }).getByRole("button", { name: "Réinitialiser le mot de passe" }).click(),
+  ]);
+  verifier(reponseReset.ok(), "PATCH /admin/comptes/{id}/mot-de-passe (réinitialisation) réussi");
+
+  {
+    const contexteAgent = await navigateur.newContext({ viewport: { width: 1366, height: 900 } });
+    const pageAgent = await contexteAgent.newPage();
+    await seConnecter(pageAgent, NOUVEAU_IDENTIFIANT, NOUVEAU_MDP);
+    await pageAgent.waitForSelector("#zone-erreur:not([hidden])", { timeout: 10000 });
+    verifier(true, "l'ancien mot de passe est refusé après réinitialisation");
+    await contexteAgent.close();
+  }
+  {
+    const contexteAgent = await navigateur.newContext({ viewport: { width: 1366, height: 900 } });
+    const pageAgent = await contexteAgent.newPage();
+    await seConnecter(pageAgent, NOUVEAU_IDENTIFIANT, NOUVEAU_MDP_RESET);
+    verifier(!pageAgent.url().endsWith("connexion.html"), "le nouveau mot de passe permet de se connecter");
     await contexteAgent.close();
   }
 

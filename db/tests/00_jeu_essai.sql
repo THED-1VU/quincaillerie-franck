@@ -72,8 +72,9 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
 ('tentatives_max_connexion', '5', 'entier',
  'Nombre d''échecs consécutifs avant verrouillage du compte. Valeur proposée, '
  'à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
-('duree_session_minutes', 'a_definir', 'entier',
- 'Durée d''inactivité au bout de laquelle la session se ferme.', TRUE, TRUE, 'dossier de recette §6, session inactive'),
+('duree_session_minutes', '480', 'entier',
+ 'Durée d''inactivité au bout de laquelle la session se ferme. Décidée le '
+ '2026-09-22 : 8 heures.', TRUE, FALSE, 'décision propriétaire 2026-09-22 (8 heures)'),
 ('seuil_ecart_caisse_tolere', 'a_definir', 'decimal',
  'Écart de caisse toléré (FCFA, par mode de paiement) au-delà duquel un '
  'commentaire devient obligatoire à la clôture. Tant que ce n''est pas '

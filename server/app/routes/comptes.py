@@ -14,8 +14,10 @@ Règles tranchées par le propriétaire le 2026-09-20 :
 - le dernier responsable actif ne peut pas être désactivé ;
 - un compte désactivé est coupé immédiatement : la requête suivante est
   refusée (voir ``deps.obtenir_session`` et la migration 024) ;
-- la réinitialisation du mot de passe d'un agent par le responsable est
-  HORS périmètre de ce cycle (question posée, non retenue pour l'instant).
+- réinitialisation du mot de passe d'un agent par le responsable
+  (cycle 38, décision 2026-09-22) : le responsable saisit le nouveau mot
+  de passe (>= 8 caractères), jamais restitué, changement forcé à la
+  première connexion (``reinitialiser_mot_de_passe_agent()``, migration 033).
 
 Le hachage du mot de passe n'est jamais lu ni restitué : l'INSERT écrit un
 hachage produit ici (``securite.hacher_mot_de_passe``), et les SELECT ne
@@ -31,7 +33,13 @@ from .. import securite
 from ..deps import exiger_role, obtenir_bd
 from ..erreurs import erreur_metier
 from ..roles import role_pg
-from ..schemas import DemandeActifCompte, DemandeCompte, ReponseCompte
+from ..schemas import (
+    DemandeActifCompte,
+    DemandeCompte,
+    DemandeReinitialisationMotDePasse,
+    ReponseCompte,
+    ReponseReinitialisationMotDePasse,
+)
 from ..securite import Session
 
 routeur = APIRouter(prefix="/admin/comptes", tags=["administration"])
@@ -182,3 +190,48 @@ def changer_actif_compte(
             profil = _profil(cur, compte_id)
 
     return ReponseCompte(**profil)
+
+
+@routeur.patch(
+    "/{compte_id}/mot-de-passe",
+    response_model=ReponseReinitialisationMotDePasse,
+)
+def reinitialiser_mot_de_passe(
+    compte_id: int,
+    demande: DemandeReinitialisationMotDePasse,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Réinitialisation du mot de passe d'un AGENT par le responsable
+    (cycle 38, décision 2026-09-22) : le responsable saisit le nouveau mot
+    de passe (>= 8 caractères), il n'est JAMAIS restitué, et l'agent devra
+    le changer à sa première connexion. La vraie protection est en base :
+    ``reinitialiser_mot_de_passe_agent()`` (migration 033, SECURITY DEFINER,
+    réservée à qf_responsable) refuse un mot de passe court et refuse de
+    viser un compte responsable."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(role_pg(session.role), utilisateur_id=session.utilisateur_id) as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT reinitialiser_mot_de_passe_agent(%s, %s, %s)",
+                    (compte_id, demande.mot_de_passe, session.utilisateur_id),
+                )
+            except (
+                psycopg.errors.ForeignKeyViolation,
+                psycopg.errors.CheckViolation,
+            ) as exc:
+                raise erreur_metier(exc) from exc
+
+            cur.execute(
+                "SELECT doit_changer_mot_de_passe FROM utilisateurs WHERE id = %s",
+                (compte_id,),
+            )
+            ligne = cur.fetchone()
+            if ligne is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable.")
+
+    return ReponseReinitialisationMotDePasse(
+        compte_id=compte_id,
+        doit_changer_mot_de_passe=ligne["doit_changer_mot_de_passe"],
+    )

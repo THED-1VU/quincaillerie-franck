@@ -266,8 +266,8 @@ SELECT t_valeur('005 · date d''annulation non antidatable',
 -- (cycle 6, migration 011) : ils ne sont plus des exemples valables de
 -- paramètre « a_definir ». La durée de session, elle, l'est toujours — voir
 -- ADDENDUM_CAHIER_DES_CHARGES.md, point k / dossier de recette §6.
-SELECT t_refus('006 · lecture d''un paramètre non tranché (durée de session)',
-  $$SELECT parametre_texte('duree_session_minutes')$$);
+SELECT t_refus('006 · lecture d''un paramètre non tranché (téléphone boutique)',
+  $$SELECT parametre_texte('boutique_telephone')$$);
 
 SELECT t_valeur('006 · taux de TVA lisible (régime du réel, décidé cycle 6)',
   $$SELECT parametre_numerique('taux_tva')::TEXT$$, '19.25');
@@ -311,6 +311,18 @@ SELECT t_refus('032 · type de résolution invalide refusé',
   $$SELECT regulariser_ecart_comptage(
       (SELECT id FROM comptages_stock WHERE article_id = 2 AND moment = 'matin' LIMIT 1),
       'nimporte_quoi', 1)$$);
+
+-- ============================================================================
+-- 8. Réinitialisation de mot de passe (migration 033, cycle 38)
+-- ============================================================================
+SELECT t_refus('033 · mot de passe trop court refusé',
+  $$SELECT reinitialiser_mot_de_passe_agent(2, 'court', 1)$$);
+
+SELECT t_refus('033 · réinitialisation d''un compte responsable refusée',
+  $$SELECT reinitialiser_mot_de_passe_agent(1, 'UnMotDePasseLong', 1)$$);
+
+SELECT t_succes('033 · réinitialisation d''un agent acceptée',
+  $$SELECT reinitialiser_mot_de_passe_agent(2, 'UnMotDePasseLong', 1)$$);
 
 -- ============================================================================
 -- Résultat
