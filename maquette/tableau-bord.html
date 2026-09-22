@@ -23,6 +23,20 @@
      stock.html, qui n'ont pas ce constat et ne doivent pas changer). */
   .tb-grille .kv dd { font-size: var(--t-md); font-weight: var(--poids-demi); }
   .tb-grille .pastille { font-size: var(--t-base); }
+
+  /* UX-5 (UX_BASELINE.md §4 bis, B5) : saisir une recette depuis le
+     téléphone prend 1 min 02, cible < 45 s (VISION_PRODUIT.md, point k —
+     usage courant bloquant). Cause probable : la carte « Saisie rapide »
+     est la 5e sur 7, sous 3 listes de longueur variable (alertes, écarts) —
+     le responsable doit faire défiler tout ça avant d'atteindre un
+     formulaire pourtant court (3 champs). Remontée en tête UNIQUEMENT sous
+     700px, là où .tb-grille repasse à une seule colonne (styles.css) — le
+     DOM n'est pas réordonné (lecteur d'écran/tabulation inchangés), seul
+     l'ordre visuel change ; le PC de caisse (2-3 colonnes) n'est pas
+     touché. */
+  @media (max-width: 699px) {
+    .carte--saisie-rapide { order: -1; }
+  }
 </style>
 </head>
 <body>
@@ -86,7 +100,7 @@
         <p class="champ__aide">Vente enregistrée alors que le stock était insuffisant (chantier C5) — jamais bloquée, toujours consignée.</p>
       </section>
 
-      <section class="carte">
+      <section class="carte carte--saisie-rapide">
         <h2>Saisie rapide</h2>
         <p style="color:var(--c-texte-doux);">Enregistrer une opération de caisse hors vente (une vente crée déjà sa propre recette).</p>
         <div class="actions-rapides">
