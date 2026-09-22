@@ -614,6 +614,81 @@ son rôle est d'empêcher la **corruption concurrente**, pas de rejeter une vent
 > `enregistrer_retour_fournisseur`). Les **remises** et la **conversion
 > d'unités** ne sont pas traitées par cette décision et restent
 > entièrement ouvertes.
+>
+> **Décidé (2026-09-22), réponses aux 5 questions ci-dessous — complète la
+> décision du cycle 9, ne la remplace pas.** Principe directeur, formulé
+> par le propriétaire lui-même et transversal à tout ce point : **aucune
+> différence entre stock théorique et stock réel ne doit pouvoir
+> apparaître sans une opération explicite qui l'explique** — chaque
+> mouvement ci-dessous est une opération tracée et identifiable, jamais
+> une modification manuelle silencieuse.
+>
+> 1. **Retours clients** : validation du responsable **obligatoire** avant
+>    tout retour (aucune réintégration automatique) — l'état de l'article
+>    est vérifié avant réintégration au stock (une marchandise invendable
+>    reprise ne revient **pas** en stock, cf. « Cas limites » ci-dessous,
+>    déjà anticipé). **Trois issues possibles**, jamais une seule : échange,
+>    avoir client, remboursement espèces — ce dernier exige une
+>    **autorisation explicite du responsable**. Chaque retour est tracé
+>    **à la fois** dans l'historique du stock **et** dans celui de la
+>    vente d'origine (pas l'un ou l'autre).
+> 2. **Casse / avaries** : la **déclaration** (constat) est ouverte à
+>    **n'importe quel utilisateur** (magasinier, vendeur, responsable) qui
+>    la constate, mais la **validation de la sortie de stock** reste
+>    réservée au responsable **seul** — un simple utilisateur ne retire
+>    jamais un article du stock unilatéralement (distinction
+>    déclaration/validation qui **durcit** ce qu'`enregistrer_casse`
+>    posait au cycle 9 — voir « conséquence technique » plus bas). Le
+>    mouvement retient systématiquement : article, quantité, motif, site,
+>    utilisateur déclarant, date/heure, validation du responsable,
+>    observation libre optionnelle.
+> 3. **Unités de vente — le point le plus structurant.** Chaque article
+>    porte sa **propre** unité de vente (sac, pièce, barre, mètre, litre,
+>    kilogramme, …), définie sur sa fiche — **pas** de référentiel
+>    global imposé uniformément. Chaque article est en outre configuré
+>    **individuellement** pour n'accepter **que** des quantités entières
+>    (ex. sac de ciment) ou pour accepter des **quantités décimales**
+>    (ex. 12,50 m de câble, 2,5 L de peinture) : ce paramétrage se fait
+>    **par article**, jamais globalement. Exemples cités : fil électrique
+>    au mètre, peinture/liquides en quantité inférieure au contenant,
+>    matériaux coupés à la longueur demandée quand techniquement
+>    possible, clous/vis vendus en quantité plutôt qu'au conditionnement
+>    complet. **Conséquence technique directe** : les colonnes de
+>    quantité concernées (`stocks_sites.quantite_stock`,
+>    `mouvements_stock`, `comptages_stock`, lignes de vente/retour/casse)
+>    doivent devenir **`NUMERIC`** au lieu d'`INTEGER`, avec un indicateur
+>    par article (`articles.quantite_decimale_autorisee` ou équivalent)
+>    qui **contraint la saisie/la vente** à un entier quand il est faux —
+>    validation applicative **et** contrainte base (`CHECK`), pas l'une
+>    sans l'autre.
+> 4. **Remises** : **toujours visibles explicitement** sur le ticket (prix
+>    normal, montant de la remise, total réellement payé) — **jamais**
+>    une modification silencieuse du prix affiché. Applicable **au choix**
+>    au niveau d'**une ligne** d'article **ou** de la **vente entière**
+>    (deux mécanismes, pas un seul). Exprimée en **montant ou en
+>    pourcentage**, au choix du vendeur. Les trois valeurs — prix initial,
+>    montant de la remise, montant réellement payé — sont **conservées
+>    séparément**, jamais fusionnées en une seule colonne de prix
+>    modifié. **Autorisation du responsable exigée au-delà d'un seuil** —
+>    **valeur du seuil non donnée par le propriétaire, reste `a_definir`**
+>    (même sentinelle que `duree_session_minutes`, `seuil_ecart_caisse_tolere`,
+>    `plafond_vraisemblance_comptage` : aucun blocage tant qu'un chiffre
+>    n'est pas fixé). Le cumul des remises accordées doit rester
+>    exploitable dans un rapport ultérieur (chantier C8, pas ce point).
+> 5. **Articles offerts** : **distinct** d'une remise à 100 % — c'est une
+>    **« sortie commerciale gratuite »** identifiée comme telle en base,
+>    **jamais** une vente à prix nul. L'article est bien **déduit du
+>    stock**, même si le montant facturé est zéro. Conservés
+>    systématiquement : article, quantité, **valeur normale** (pour ne
+>    **pas** fausser la marge dans les rapports C8 — la valeur théorique
+>    perdue doit rester visible même si la recette encaissée est nulle),
+>    client si identifié, motif, utilisateur, validation du responsable
+>    si nécessaire.
+>
+> **Reste ouvert, non tranché par cette décision** : le chiffre exact du
+> seuil de remise nécessitant validation responsable (point 4 —
+> `a_definir`, mécanique prête mais aucun blocage tant qu'il n'est pas
+> fixé, même principe que les autres sentinelles du projet).
 
 **Contexte.** Aucun de ces éléments n'est modélisé. `mouvements_stock.type` ne connaît que
 `entree` / `sortie`. Les remises sont noyées dans `ventes_lignes.prix_unitaire`. `unite` est
