@@ -9,8 +9,11 @@ db/
 ├── migrations/   NNN_nom.sql + NNN_nom_inverse.sql, appliquées dans l'ordre
 ├── outils/       migrer.sh, prevol.sql, definir_mot_de_passe_app.sql,
 │                 creer_compte_responsable.ps1, rapprocher_articles.ps1,
-│                 demarrer_pg.ps1, arreter_pg.ps1
-└── tests/        vérification PAR EXÉCUTION (protections, habilitations, concurrence)
+│                 demarrer_pg.ps1, arreter_pg.ps1, sauvegarder.ps1,
+│                 restaurer.ps1, planifier_sauvegarde.ps1,
+│                 generer_volume_realiste.ps1
+└── tests/        vérification PAR EXÉCUTION (protections, habilitations, concurrence,
+                  volume_realiste.sql pour la preuve de reprise C1)
 ```
 
 ---

@@ -23,12 +23,25 @@ faite, son contenu a vocation à être repris (en tout ou partie) dans
 | `db/outils/restaurer.ps1` | Cycle 21, étendu cycle 28 | Déchiffre puis restaure une sauvegarde vers une base **séparée**, jamais par-dessus une base existante ; restaure aussi le logo |
 | `db/outils/planifier_sauvegarde.ps1` | Cycle 22, étendu cycle 28 | Enregistre une tâche planifiée Windows qui déclenche `sauvegarder.ps1` automatiquement (RPO 1 heure), **sans exiger de session ouverte** (`-CompteSysteme`) |
 | `db/outils/enregistrer_service_pg.ps1` | Cycle 28 (nouveau) | Enregistre PostgreSQL comme **service Windows**, avec reprise automatique après un plantage |
+| `db/outils/generer_volume_realiste.ps1` + `db/tests/volume_realiste.sql` | Cycle 39 (C1) | Reconstruit une base à **~1 000 références / 2 sites / 30 jours de ventes** pour **prouver** la chaîne sauvegarde → restauration sur un volume réaliste |
 
 Décision du propriétaire (2026-09-13, `ADDENDUM_CAHIER_DES_CHARGES.md`,
 point i, question 1) : **RPO cible 1 heure** — une sauvegarde automatique
 **toutes les heures pendant les heures d'ouverture, plus une en fin de
 journée**. C'est exactement ce que `planifier_sauvegarde.ps1` met en
 place.
+
+**Décision du propriétaire (2026-09-22, cycle 39 — C1) : RTO 2 heures**
+(temps de remonter une base sur un poste de secours, conformément à la
+règle proposée dans l'addendum, point i). **Preuve de reprise exécutée le
+2026-09-22** sur volume généré : 1 000 articles, 2 000 stocks, 1 996
+mouvements, 1 200 ventes, 3 600 lignes, 120 comptages — sauvegarde
+chiffrée AES-256 de 308,8 Ko, restauration de 28 tables sur
+`quincaillerie_restore`, comptages identiques (8 tables), 10 dernières
+ventes et soldes par site identiques, API reprise (`/sante`, connexion
+`resp.volume`, `GET /admin/comptes` → 3 comptes). Chiffrement de la copie
+distante et notification d'échec : **documentés comme limites** (pas de
+canal réel disponible) — voir section 5.
 
 **Mise à jour cycle 28 (2026-09-18)** : trois failles opérationnelles
 identifiées par le propriétaire ont été traitées ici — la sauvegarde
