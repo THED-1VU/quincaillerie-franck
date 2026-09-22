@@ -389,6 +389,10 @@
         btnSup.className = "panier__sup";
         btnSup.type = "button";
         btnSup.setAttribute("aria-label", "Retirer " + l.nom);
+        // UX-8 : "title" affiche une infobulle native au survol souris —
+        // en plus du fond permanent posé dans styles.css (usage tactile),
+        // pas à la place ; n'a aucun effet sur mobile (pas de survol).
+        btnSup.title = "Retirer cette ligne du panier";
         btnSup.textContent = "×";
 
         ligne.appendChild(infos);

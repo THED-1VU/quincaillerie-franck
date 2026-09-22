@@ -230,12 +230,21 @@ a { color: var(--c-primaire); }
   border: 1px solid var(--c-bordure); border-radius: var(--r-sm);
   font-variant-numeric: tabular-nums;
 }
+/* UX-8 (UX_BASELINE.md §4 bis) : un utilisateur non formé ne trouvait pas
+   comment retirer une ligne du panier — le bouton était un « x » nu, sans
+   fond ni bordure au repos, visible seulement au survol (:hover), donc
+   invisible au doigt sur téléphone (pas d'état hover tactile). Fond et
+   bordure désormais PERMANENTS (couleur d'alerte, comme les autres
+   signaux d'erreur de l'écran) pour se lire comme un bouton, pas une
+   ponctuation ; :hover/:focus-visible inversent les couleurs (retour
+   visuel clair, clavier compris). */
 .panier__sup {
-  border: none; background: transparent; color: var(--c-alerte);
-  font-size: var(--t-md); cursor: pointer; width: var(--cible-min); height: var(--cible-min);
+  border: 1px solid var(--c-alerte); background: var(--c-alerte-clair); color: var(--c-alerte);
+  font-size: var(--t-md); font-weight: var(--poids-demi); line-height: 1; cursor: pointer;
+  width: var(--cible-min); height: var(--cible-min);
   border-radius: var(--r-sm);
 }
-.panier__sup:hover { background: var(--c-alerte-clair); }
+.panier__sup:hover, .panier__sup:focus-visible { background: var(--c-alerte); color: var(--c-texte-inverse); }
 .panier__vide { color: var(--c-texte-doux); padding: var(--e-5) 0; text-align: center; }
 
 .total-ligne {
