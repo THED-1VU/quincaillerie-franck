@@ -424,7 +424,21 @@ Sous la lecture du testeur (3ᵉ essai) : 5/7 conforme.
   calculée ≥ 16px à 360 et 390px).
 - **UX-5** — Saisir une recette depuis le téléphone prend 1 min 02, pas
   < 45 s (B5). Non traité par la piste UX ce tour-ci (hors du plan validé
-  — voir `RAPPORT AVANCEMENT/cycles/piste-ux.md`).
+  — voir `RAPPORT AVANCEMENT/cycles/piste-ux.md`). **Cycle 36 (2026-09-22)** :
+  cause probable identifiée par lecture du code — la carte « Saisie
+  rapide » était la 5e sur 7 dans `tableau-bord.html`, sous 3 listes de
+  longueur variable ; le responsable devait tout faire défiler avant
+  d'atteindre un formulaire pourtant court (3 champs). Remontée en tête
+  **uniquement sous 700px** (`order: -1` scopé à la vue mobile une
+  colonne, DOM inchangé), sans toucher le PC de caisse. Preuve par
+  exécution réelle : `verifier-cablage.mjs` 94/94 (dont les 5 contrôles
+  de non-débordement de cet écran) + relevé Playwright dédié — ordre
+  visuel des cartes à 390px = Saisie rapide **en premier** ; à 1366px,
+  ordre inchangé (Ventes du jour en premier, Saisie rapide en 5e comme
+  avant). **La cible chiffrée (< 45 s) reste à reconfirmer par un vrai
+  testeur humain sur un téléphone réel** — ce correctif supprime une
+  friction structurelle plausible, ce n'est pas une nouvelle mesure
+  humaine (même réserve que UX-3/UX-4 au cycle 24).
 - **UX-6** — Le clavier numérique ne s'ouvre pas automatiquement pour la
   saisie d'un comptage sur téléphone (B6) — laisse penser à un champ de
   saisie sans l'attribut adéquat (`inputmode`/`type="number"`), à
