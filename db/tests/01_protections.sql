@@ -286,6 +286,33 @@ SELECT t_valeur('006 · changement de taux de TVA tracé dans l''historique',
 UPDATE parametres SET valeur = '19.25' WHERE cle = 'taux_tva';
 
 -- ============================================================================
+-- 7. Régularisation d'un écart de comptage (migration 032, cycle 36)
+-- ============================================================================
+-- Le comptage « matin » de l'article 1 (section 2) porte un écart réel (-5).
+SELECT t_succes('032 · régularisation erreur_de_comptage tracée',
+  $$SELECT regulariser_ecart_comptage(
+      (SELECT id FROM comptages_stock WHERE article_id = 1 AND moment = 'matin' LIMIT 1),
+      'erreur_de_comptage', 1)$$);
+
+SELECT t_refus('032 · re-régularisation du même comptage refusée',
+  $$SELECT regulariser_ecart_comptage(
+      (SELECT id FROM comptages_stock WHERE article_id = 1 AND moment = 'matin' LIMIT 1),
+      'retrouve', 1, 'retrouvé en réserve')$$);
+
+INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_comptee)
+VALUES (2, 1, 2, 'matin', 1);  -- attendu 40 -> écart -39
+
+SELECT t_refus('032 · vol présumé sans motif refusé',
+  $$SELECT regulariser_ecart_comptage(
+      (SELECT id FROM comptages_stock WHERE article_id = 2 AND moment = 'matin' LIMIT 1),
+      'vol_presume', 1)$$);
+
+SELECT t_refus('032 · type de résolution invalide refusé',
+  $$SELECT regulariser_ecart_comptage(
+      (SELECT id FROM comptages_stock WHERE article_id = 2 AND moment = 'matin' LIMIT 1),
+      'nimporte_quoi', 1)$$);
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''

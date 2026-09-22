@@ -24,7 +24,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from ..deps import exiger_role, obtenir_bd
 from ..erreurs import erreur_metier
 from ..roles import role_pg
-from ..schemas import DemandeComptage, ReponseComptage, ReponseRegularisationEcart
+from ..schemas import (
+    DemandeComptage,
+    DemandeRegularisationComptage,
+    ReponseComptage,
+    ReponseRegularisationComptage,
+    ReponseRegularisationEcart,
+)
 from ..securite import Session
 
 routeur = APIRouter(prefix="/inventaire", tags=["inventaire"])
@@ -122,6 +128,28 @@ def enregistrer_comptage(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
     ) as conn:
         with conn.cursor() as cur:
+            # Plafond de vraisemblance (décision 2026-09-22) : tant que le
+            # paramètre est `a_decider`, AUCUN comptage n'est refusé. Dès que
+            # le propriétaire fixe une valeur, toute quantité comptée
+            # supérieure est refusée ici, avant même d'atteindre la base.
+            cur.execute(
+                "SELECT valeur, a_decider FROM parametres"
+                " WHERE cle = 'plafond_vraisemblance_comptage'"
+            )
+            plafond = cur.fetchone()
+            if (
+                plafond is not None
+                and not plafond["a_decider"]
+                and plafond["valeur"] not in (None, "a_definir")
+                and int(plafond["valeur"]) >= 0
+                and demande.quantite_comptee > int(plafond["valeur"])
+            ):
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "Quantité comptée invraisemblable (plafond : "
+                    + str(plafond["valeur"]) + ").",
+                )
+
             try:
                 cur.execute(
                     """
@@ -302,3 +330,54 @@ def regulariser_ecart_vente(
             ligne = cur.fetchone()
 
     return ReponseRegularisationEcart(ecart_id=ecart_id, regularise=ligne["regularise"])
+
+
+@routeur.post(
+    "/ecarts/{comptage_id}/regulariser",
+    response_model=ReponseRegularisationComptage,
+    status_code=status.HTTP_201_CREATED,
+)
+def regulariser_ecart_comptage(
+    comptage_id: int,
+    demande: DemandeRegularisationComptage,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Décision du responsable sur un écart de COMPTAGE (chantier C7,
+    cycle 36) — traçabilité pure, jamais d'effet sur le stock (décision
+    2026-09-22). Refusée par la base si le comptage ne porte aucun écart ou
+    si une résolution existe déjà."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT regulariser_ecart_comptage(%s, %s, %s, %s) AS regularisation_id",
+                    (comptage_id, demande.type_resolution,
+                     session.utilisateur_id, demande.motif),
+                )
+                ligne = cur.fetchone()
+            except (
+                psycopg.errors.ForeignKeyViolation,
+                psycopg.errors.CheckViolation,
+                psycopg.errors.UniqueViolation,
+            ) as exc:
+                raise erreur_metier(exc) from exc
+
+            cur.execute(
+                "SELECT comptage_id, type_resolution, motif,"
+                " date_regularisation::TEXT AS date_regularisation"
+                " FROM regularisations_ecarts_comptage WHERE id = %s",
+                (ligne["regularisation_id"],),
+            )
+            reg = cur.fetchone()
+
+    return ReponseRegularisationComptage(
+        regularisation_id=ligne["regularisation_id"],
+        comptage_id=reg["comptage_id"],
+        type_resolution=reg["type_resolution"],
+        motif=reg["motif"],
+        date_regularisation=reg["date_regularisation"],
+    )

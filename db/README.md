@@ -198,6 +198,18 @@ Pour la vérification automatisée, les variables
 décisions sont consignées dans `rapprochements_articles` et seront
 **consommées** par la migration de données du cycle 13b.
 
+### Régularisation d'un écart de comptage (chantier C7, cycle 36)
+
+Quatre types de résolution décidés par le propriétaire (2026-09-22) :
+`erreur_de_comptage`, `retrouve`, `vol_presume`, `casse_deja_enregistree` —
+motif obligatoire sauf pour `erreur_de_comptage`. La régularisation est une
+**traçabilité pure** : elle n'écrit jamais dans `stocks_sites`, toute
+correction physique passe par les fonctions C4. Seule voie d'écriture :
+`regulariser_ecart_comptage()` (migration 032, `SECURITY DEFINER`, réservée
+à `qf_responsable`). Le paramètre `plafond_vraisemblance_comptage` est
+amorcé à `a_definir` : aucun comptage n'est refusé pour vraisemblance tant
+que le propriétaire ne fixe pas de valeur.
+
 ---
 
 ## Ce que chaque migration corrige
