@@ -135,6 +135,24 @@ class ReponseComptage(BaseModel):
     quantite_comptee: int
 
 
+class DemandeRegularisationComptage(BaseModel):
+    """Décision du responsable sur un écart de comptage constaté
+    (cycle 36) : traçabilité pure, jamais d'effet sur le stock."""
+
+    type_resolution: Literal[
+        "erreur_de_comptage", "retrouve", "vol_presume", "casse_deja_enregistree"
+    ]
+    motif: Optional[str] = Field(default=None, max_length=200)
+
+
+class ReponseRegularisationComptage(BaseModel):
+    regularisation_id: int
+    comptage_id: int
+    type_resolution: str
+    motif: Optional[str] = None
+    date_regularisation: str
+
+
 class DemandeArticle(BaseModel):
     """``site_id`` n'est utilisé QUE pour un compte responsable (deux
     sites) : pour un agent stock, le site vient toujours de sa session.

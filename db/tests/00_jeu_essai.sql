@@ -65,6 +65,10 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
 ('seuil_alerte_plancher', '1', 'entier',
  'Seuil d''alerte minimal, quand 20 %% de la quantité reçue donnerait 0. '
  'Valeur proposée, à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
+('plafond_vraisemblance_comptage', 'a_definir', 'entier',
+ 'Quantité comptée maximale acceptée sur une ligne de comptage. Tant que '
+ 'cette valeur n''est pas fixée, aucun comptage n''est refusé pour '
+ 'vraisemblance (décision 2026-09-22).', TRUE, TRUE, 'à fixer par le propriétaire'),
 ('tentatives_max_connexion', '5', 'entier',
  'Nombre d''échecs consécutifs avant verrouillage du compte. Valeur proposée, '
  'à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
