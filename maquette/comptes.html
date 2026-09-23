@@ -59,6 +59,12 @@
         </select>
       </div>
       <div class="champ">
+        <label class="champ__case">
+          <input type="checkbox" id="compte-cumul">
+          Cumuler aussi l'autre rôle agent (petit effectif — décision du 2026-09-22)
+        </label>
+      </div>
+      <div class="champ">
         <label class="champ__label" for="compte-mot-de-passe">Mot de passe (8 caractères minimum)</label>
         <input class="champ__saisie" id="compte-mot-de-passe" type="password" maxlength="200" autocomplete="new-password">
       </div>
@@ -110,7 +116,9 @@
     const sous = document.createElement("span");
     sous.style.color = "var(--c-texte-doux)";
     sous.style.fontSize = "var(--t-xs)";
-    sous.textContent = libelleRole(compte.role) + " · " + libelleSite(compte.site_id);
+    const roles = (compte.roles && compte.roles.length ? compte.roles : [compte.role])
+      .map(libelleRole).join(" + ");
+    sous.textContent = roles + " · " + libelleSite(compte.site_id);
     bloc.appendChild(sous);
     li.appendChild(bloc);
 
@@ -198,13 +206,18 @@
   $("compte-valider").addEventListener("click", async () => {
     $("zone-erreur-formulaire").hidden = true;
     $("zone-succes-formulaire").hidden = true;
+    const rolePrincipal = $("compte-role").value;
     const corps = {
       nom_complet: $("compte-nom").value.trim(),
       identifiant: $("compte-identifiant").value.trim(),
       mot_de_passe: $("compte-mot-de-passe").value,
-      role: $("compte-role").value,
+      role: rolePrincipal,
       site_id: Number($("compte-site").value),
     };
+    // Cumul de rôles (cycle 41) : le rôle principal + l'autre rôle agent.
+    if ($("compte-cumul").checked) {
+      corps.roles = [rolePrincipal, rolePrincipal === "agent_stock" ? "agent_comptabilite" : "agent_stock"];
+    }
     try {
       await appelApi("/admin/comptes", { method: "POST", body: JSON.stringify(corps) });
       $("zone-succes-formulaire").textContent = "Compte créé.";

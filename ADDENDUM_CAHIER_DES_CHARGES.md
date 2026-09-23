@@ -819,6 +819,17 @@ caisse** des **recettes enregistrées**.
 > /fournisseurs` → `404`) — rien à cloisonner par site sur une donnée qui
 > n'a jamais été exposée. Le seul point réellement ouvert reste la
 > question 3 ci-dessous (périmètre exact de lecture des prix).
+>
+> **Décidé (2026-09-22), question 4 — cumul de rôles : OUI.** Un compte
+> peut porter plusieurs rôles (petit effectif). Livré au cycle 41 (C3) :
+> migration 035 `utilisateurs_roles` + `roles_utilisateur()`, jeton portant
+> la liste des rôles, `exiger_role` choisissant le rôle effectif par route
+> (SET ROLE PostgreSQL), création de compte avec rôles cumulés
+> (case « Cumuler aussi l'autre rôle agent » dans `comptes.html`).
+> **Question 3 (détail des prix ou total seul pour le caissier) : EN
+> ATTENTE, consignée le 2026-09-22** — sa mise en œuvre touche le terrain
+> vente, réservé au point f en cours ; elle sera tranchée et implémentée
+> quand ce terrain sera libre.
 
 **Contexte.** Le cahier des charges ne prévoit **pas** de rôle caissier : c'est le
 **responsable en personne** qui encaisse au comptoir. Le dossier de recette et la checklist

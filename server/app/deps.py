@@ -80,10 +80,17 @@ def exiger_role(*roles_autorises: str):
     """
 
     def dependance(session: Session = Depends(obtenir_session)) -> Session:
-        if session.role not in roles_autorises:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, "Rôle non autorisé pour cette route."
-            )
-        return session
+        # Cumul de rôles (chantier C3, cycle 41) : la session porte la liste
+        # complète (session.roles) ; ``role`` est le rôle retenu pour CETTE
+        # requête et servira au SET ROLE PostgreSQL via role_pg(session.role).
+        # On retient le premier rôle AUTORISÉ de la route, dans l'ordre de
+        # déclaration de la route (responsable en premier le plus souvent).
+        roles_effectifs = session.roles or (session.role,)
+        for role_autorise in roles_autorises:
+            if role_autorise in roles_effectifs:
+                return session.avec_role(role_autorise)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Rôle non autorisé pour cette route."
+        )
 
     return dependance

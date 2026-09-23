@@ -49,6 +49,7 @@ def test_lister_comptes_responsable_sans_hash(client):
         assert set(compte) == {
             "id", "nom_complet", "identifiant", "role", "site_id",
             "actif", "doit_changer_mot_de_passe", "date_creation",
+            "roles",
         }
 
 

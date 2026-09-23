@@ -362,6 +362,21 @@ SELECT t_valeur('034 · la quantité décimale est bien celle enregistrée, non 
 UPDATE articles SET quantite_decimale_autorisee = FALSE WHERE id = 1;
 
 -- ============================================================================
+-- 10. Cumul de rôles (migration 035, chantier C3, décision 2026-09-22)
+-- ============================================================================
+SELECT t_succes('035 · la reprise initialise un rôle au minimum',
+  $$SELECT count(*) FROM utilisateurs_roles WHERE utilisateur_id = 1$$);
+
+SELECT t_refus('035 · rôle inconnu refusé par la table de cumul',
+  $$INSERT INTO utilisateurs_roles (utilisateur_id, role) VALUES (1, 'caissier')$$);
+
+SELECT t_refus('035 · cumul pour un utilisateur inexistant refusé',
+  $$INSERT INTO utilisateurs_roles (utilisateur_id, role) VALUES (999999, 'agent_stock')$$);
+
+SELECT t_succes('035 · roles_utilisateur() restitue les rôles d''un compte',
+  $$SELECT roles_utilisateur(2)$$);
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''

@@ -95,6 +95,12 @@ INSERT INTO utilisateurs (id, nom_complet, identifiant, mot_de_passe_hash, role,
   (5, 'Dina Comptoir',    'comptoir.compta', 'hash_factice', 'agent_comptabilite', 2);
 SELECT setval('utilisateurs_id_seq', 5, TRUE);
 
+-- Cumul de rôles (migration 035, chantier C3) : le jeu d'essai ré-amorce
+-- la table à l'identique de la reprise de la migration — un rôle au minimum
+-- (le rôle principal).
+INSERT INTO utilisateurs_roles (utilisateur_id, role)
+SELECT id, role FROM utilisateurs;
+
 -- Une fiche article, un stock par site (décision 2026-09-19, migration 026).
 INSERT INTO articles (id, nom, categorie, unite, prix_achat, prix_vente, fournisseur_id) VALUES
   (1, 'Ciment CIM II 50 kg', 'Gros oeuvre', 'sac',   5000, 6500, 1),
