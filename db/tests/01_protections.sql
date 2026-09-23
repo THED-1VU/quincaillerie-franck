@@ -434,6 +434,60 @@ SELECT t_refus('036 · retour au-delà de la quantité vendue refusé',
   $$SELECT declarer_retour_client(1, 900, 1, 'echange', 'revendable', 2, 'en trop')$$);
 
 -- ============================================================================
+-- 11. Remises (migration 037, point f, décision 2026-09-22/23) — cohérence
+--     catalogue/remise/prix payé vérifiée par la base, remise à 100 %
+--     refusée (réservée au sous-chantier 4, article offert), tolérance
+--     legacy (prix_catalogue NULL) préservée.
+--     (réutilise la vente 900 de la section 4, article 1 : catalogue 6 500.)
+-- ============================================================================
+
+-- Remise cohérente (6500 - 500 = 6000) acceptée.
+SELECT t_succes('037 · ligne de vente avec remise cohérente acceptée',
+  $$INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+    VALUES (900, 1, 1, 6000, 1, 6500, 500)$$);
+
+-- Remise incohérente (le montant déclaré ne correspond pas à
+-- catalogue - payé) refusée : la base ne fait pas confiance à une
+-- remise_montant fournie sans vérifier son calcul.
+SELECT t_refus('037 · ligne de vente avec remise incohérente refusée',
+  $$INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+    VALUES (900, 1, 1, 6000, 1, 6500, 999)$$);
+
+-- Remise à 100 % (prix payé nul) refusée ICI : décision 2026-09-23, c'est
+-- le mécanisme dédié à l'article offert (sous-chantier 4) qui la couvre.
+SELECT t_refus('037 · ligne de vente à prix payé nul (remise 100 %) refusée',
+  $$INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+    VALUES (900, 1, 1, 0, 1, 6500, 6500)$$);
+
+-- Prix négocié AU-DESSUS du catalogue (upsell) : remise_montant doit être 0,
+-- jamais une valeur négative forcée par l'équation — GREATEST(...,0),
+-- pas une égalité stricte.
+SELECT t_succes('037 · prix payé au-dessus du catalogue (upsell) accepté sans remise',
+  $$INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+    VALUES (900, 1, 1, 7000, 1, 6500, 0)$$);
+
+-- remise_montant négatif refusé quel que soit le catalogue.
+SELECT t_refus('037 · remise_montant négatif refusé',
+  $$INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+    VALUES (900, 1, 1, 6500, 1, 6500, -1)$$);
+
+-- Ligne sans prix_catalogue (legacy, antérieure au cycle 42, ou écrite hors
+-- de la route applicative) : NULL toléré, aucune cohérence exigée avec
+-- remise_montant — jamais rétro-inventé.
+SELECT t_succes('037 · ligne sans prix_catalogue (legacy) tolérée',
+  $$INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id)
+    VALUES (900, 1, 1, 6500, 1)$$);
+
+-- Remise globale (vente entière) : positive acceptée, négative refusée.
+SELECT t_succes('037 · remise globale positive sur la vente acceptée',
+  $$UPDATE ventes SET remise_globale_montant = 1000 WHERE id = 900$$);
+
+SELECT t_refus('037 · remise globale négative refusée',
+  $$UPDATE ventes SET remise_globale_montant = -1 WHERE id = 900$$);
+
+UPDATE ventes SET remise_globale_montant = 0 WHERE id = 900;
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''

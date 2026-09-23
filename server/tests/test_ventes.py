@@ -249,6 +249,170 @@ def test_responsable_peut_vendre_pour_un_site_precise(client):
 
 
 # ---------------------------------------------------------------------------
+# Remises (chantier C4/C5, migration 037, addendum point f, décision
+# 2026-09-22) — Ciment CIM II 50 kg (article 1) : prix catalogue 6 500 FCFA.
+# ---------------------------------------------------------------------------
+
+def _ligne_ventes_lignes(vente_id: int, article_id: int = 1) -> dict:
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute(
+                "SELECT prix_unitaire, prix_catalogue, remise_montant FROM ventes_lignes"
+                " WHERE vente_id = %s AND article_id = %s",
+                (vente_id, article_id),
+            )
+            return cur.fetchone()
+
+
+def test_remise_montant_par_ligne_resout_le_prix_paye(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM01", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "remise_montant": 500}]},
+    )
+    assert reponse.status_code == 201, reponse.text
+    assert reponse.json()["remise_totale"] == 500.0
+    ligne = _ligne_ventes_lignes(reponse.json()["vente_id"])
+    assert float(ligne["prix_catalogue"]) == 6500.0
+    assert float(ligne["remise_montant"]) == 500.0
+    assert float(ligne["prix_unitaire"]) == 6000.0
+
+
+def test_remise_pourcentage_par_ligne_resout_le_prix_paye(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM02", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "remise_pct": 10}]},
+    )
+    assert reponse.status_code == 201, reponse.text
+    ligne = _ligne_ventes_lignes(reponse.json()["vente_id"])
+    assert float(ligne["remise_montant"]) == 650.0  # 10 % de 6 500
+    assert float(ligne["prix_unitaire"]) == 5850.0
+
+
+def test_prix_unitaire_direct_infere_la_remise_automatiquement(client):
+    """Comportement historique inchangé (point d) : taper directement le
+    prix négocié reste valable — la remise est déduite du prix catalogue
+    pour la traçabilité, sans changer la saisie."""
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM03", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6200}]},
+    )
+    assert reponse.status_code == 201, reponse.text
+    ligne = _ligne_ventes_lignes(reponse.json()["vente_id"])
+    assert float(ligne["remise_montant"]) == 300.0  # 6 500 - 6 200
+
+
+def test_prix_unitaire_au_dessus_du_catalogue_naccorde_aucune_remise(client):
+    """Un prix négocié AU-DESSUS du catalogue reste légitime (point d,
+    jamais interdit) — ce n'est pas une remise négative."""
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM04", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 7000}]},
+    )
+    assert reponse.status_code == 201, reponse.text
+    ligne = _ligne_ventes_lignes(reponse.json()["vente_id"])
+    assert float(ligne["remise_montant"]) == 0.0
+    assert float(ligne["prix_unitaire"]) == 7000.0
+
+
+def test_deux_modes_de_prix_a_la_fois_refuse(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM05", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6000, "remise_pct": 10}]},
+    )
+    assert reponse.status_code == 422
+
+
+def test_remise_a_100_pourcent_refusee(client):
+    """Décision 2026-09-23 : une remise à 100 % relève du mécanisme
+    dédié à l'article offert (sous-chantier 4), pas de celui-ci."""
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM06", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "remise_pct": 100}]},
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "article offert" in reponse.json()["detail"].lower()
+
+
+def test_remise_globale_montant_reduit_le_total(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM07", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6500}],
+              "remise_globale_montant": 1000},
+    )
+    assert reponse.status_code == 201, reponse.text
+    corps = reponse.json()
+    assert corps["total_ttc"] == 12000.0  # (6500*2) - 1000
+    assert corps["remise_totale"] == 1000.0
+
+
+def test_remise_globale_pct_et_montant_a_la_fois_refuse(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM08", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+              "remise_globale_montant": 100, "remise_globale_pct": 10},
+    )
+    assert reponse.status_code == 422
+
+
+def test_remise_globale_depassant_le_total_refusee(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM09", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+              "remise_globale_montant": 6500},
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "dépasser" in reponse.json()["detail"].lower()
+
+
+def test_recu_vente_avec_remise_affiche_catalogue_remise_et_remise_globale(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    entetes = entete_autorisation(session["jeton"])
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entetes,
+        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM10", "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": 1, "remise_montant": 500}],
+              "remise_globale_montant": 200},
+    )
+    assert reponse_vente.status_code == 201, reponse_vente.text
+    vente_id = reponse_vente.json()["vente_id"]
+
+    reponse = client.get(f"/ventes/{vente_id}/recu", headers=entetes)
+    assert reponse.status_code == 200, reponse.text
+    texte = _texte_pdf(reponse.content)
+    assert "Catalogue" in texte
+    assert "Remise" in texte
+    assert "Remise sur la vente" in texte
+
+
+# ---------------------------------------------------------------------------
 # Annulation de vente (chantier C5, cycle 17) — migration 017,
 # ``annuler_vente()``. CDC §3.3 : « responsable uniquement ».
 # ---------------------------------------------------------------------------

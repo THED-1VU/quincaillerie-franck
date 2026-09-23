@@ -183,13 +183,132 @@ def enregistrer_vente(
                 )
             utilisateur_caisse_id = ligne_resp["id"]
 
+            # Remises (addendum, point f, décision 2026-09-22) : seuil de
+            # validation responsable — 'a_definir' tant que le propriétaire
+            # n'a pas fixé de chiffre, AUCUN blocage dans ce cas (même
+            # principe que duree_session_minutes, seuil_ecart_caisse_tolere,
+            # plafond_vraisemblance_comptage).
+            cur.execute(
+                "SELECT valeur FROM parametres WHERE cle = %s", ("seuil_remise_validation_pct",)
+            )
+            ligne_seuil = cur.fetchone()
+            seuil_remise_pct = (
+                Decimal(ligne_seuil["valeur"])
+                if ligne_seuil and ligne_seuil["valeur"] != "a_definir"
+                else None
+            )
+
+            # Résout prix_unitaire/prix_catalogue/remise_montant PAR LIGNE,
+            # AVANT toute écriture — le prix catalogue est lu ici, jamais
+            # fourni par le client (qui pourrait en inventer un pour
+            # maquiller une remise). Une seule des trois entrées
+            # (prix_unitaire / remise_montant / remise_pct) est fournie par
+            # ligne, imposé par LigneVenteDemande (schemas.py).
+            lignes_resolues = []
+            for ligne in demande.lignes:
+                cur.execute("SELECT prix_vente FROM articles WHERE id = %s", (ligne.article_id,))
+                article = cur.fetchone()
+                if article is None:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        f"Article introuvable (identifiant {ligne.article_id}).",
+                    )
+                prix_catalogue = Decimal(str(article["prix_vente"]))
+
+                if ligne.prix_unitaire is not None:
+                    prix_unitaire = Decimal(str(ligne.prix_unitaire))
+                    # GREATEST(..., 0) : un prix négocié AU-DESSUS du
+                    # catalogue reste légitime (point d) — ce n'est pas une
+                    # remise négative, juste une remise nulle.
+                    remise_montant = max(prix_catalogue - prix_unitaire, Decimal("0"))
+                elif ligne.remise_montant is not None:
+                    remise_montant = Decimal(str(ligne.remise_montant))
+                    prix_unitaire = prix_catalogue - remise_montant
+                else:
+                    remise_pct = Decimal(str(ligne.remise_pct))
+                    remise_montant = (prix_catalogue * remise_pct / Decimal("100")).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                    prix_unitaire = prix_catalogue - remise_montant
+
+                # Décision 2026-09-23 : une remise à 100 % (ou plus) est
+                # REFUSÉE ici — c'est le sous-chantier « article offert »
+                # qui la couvre, un mécanisme dédié et distinct (une seule
+                # voie d'écriture par concept, même principe qu'au
+                # sous-chantier 2 pour la casse/le retour).
+                if prix_unitaire <= 0:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        "Une remise portant le prix à zéro (ou moins) est refusée pour "
+                        "l'article %d : utiliser le mécanisme dédié à l'article offert."
+                        % ligne.article_id,
+                    )
+
+                if (
+                    seuil_remise_pct is not None
+                    and session.role != "responsable"
+                    and prix_catalogue > 0
+                    and (remise_montant / prix_catalogue) * 100 > seuil_remise_pct
+                ):
+                    raise HTTPException(
+                        status.HTTP_403_FORBIDDEN,
+                        f"Remise supérieure à {seuil_remise_pct} % sur l'article "
+                        f"{ligne.article_id} : seul un compte responsable peut "
+                        "enregistrer cette vente.",
+                    )
+
+                lignes_resolues.append({
+                    "article_id": ligne.article_id, "quantite": ligne.quantite,
+                    "prix_unitaire": prix_unitaire, "prix_catalogue": prix_catalogue,
+                    "remise_montant": remise_montant,
+                })
+
             # Prix négociés TTC (point d) : on agrège d'abord le TTC de
             # chaque ligne, puis on extrait la TVA sur le TOTAL — jamais
             # ligne à ligne, pour éviter les écarts d'un franc (addendum).
-            total_ttc = sum(
-                (Decimal(str(ligne.prix_unitaire)) * ligne.quantite for ligne in demande.lignes),
+            total_ttc_brut = sum(
+                (lr["prix_unitaire"] * lr["quantite"] for lr in lignes_resolues),
                 start=Decimal("0"),
             )
+            remise_totale_lignes = sum(
+                (lr["remise_montant"] * lr["quantite"] for lr in lignes_resolues),
+                start=Decimal("0"),
+            )
+
+            # Remise de la vente ENTIÈRE (mécanisme séparé des remises par
+            # ligne, décision 2026-09-22) : au plus une des deux entrées,
+            # imposé par DemandeVente (schemas.py).
+            if demande.remise_globale_montant is not None:
+                remise_globale = Decimal(str(demande.remise_globale_montant))
+            elif demande.remise_globale_pct is not None:
+                remise_globale = (
+                    total_ttc_brut * Decimal(str(demande.remise_globale_pct)) / Decimal("100")
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            else:
+                remise_globale = Decimal("0")
+
+            if remise_globale >= total_ttc_brut:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "La remise globale ne peut pas atteindre ni dépasser le total de la vente.",
+                )
+            remise_globale_pct_reelle = (
+                (remise_globale / total_ttc_brut) * 100 if total_ttc_brut > 0 else Decimal("0")
+            )
+            if (
+                seuil_remise_pct is not None
+                and session.role != "responsable"
+                and remise_globale_pct_reelle > seuil_remise_pct
+            ):
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    f"Remise globale supérieure à {seuil_remise_pct} % : seul un compte "
+                    "responsable peut enregistrer cette vente.",
+                )
+
+            total_ttc = total_ttc_brut - remise_globale
+            remise_totale = remise_totale_lignes + remise_globale
+
             if taux_tva > 0:
                 montant_tva = (total_ttc * taux_tva / (Decimal("100") + taux_tva)).quantize(
                     Decimal("1"), rounding=ROUND_HALF_UP
@@ -205,14 +324,14 @@ def enregistrer_vente(
                         (site_id, utilisateur_id, statut, mode_paiement,
                          utilisateur_caisse_id, sous_total_ht, taux_tva,
                          montant_tva, total_ttc, date_encaissement,
-                         numero_facturier, vendeur_id)
-                    VALUES (%s, %s, 'payee', %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
+                         numero_facturier, vendeur_id, remise_globale_montant)
+                    VALUES (%s, %s, 'payee', %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s)
                     RETURNING id
                     """,
                     (
                         site_cible, session.utilisateur_id, demande.mode_paiement,
                         utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva, total_ttc,
-                        demande.numero_facturier, demande.vendeur_id,
+                        demande.numero_facturier, demande.vendeur_id, remise_globale,
                     ),
                 )
             except psycopg.errors.UniqueViolation as exc:
@@ -238,14 +357,19 @@ def enregistrer_vente(
             vente_id = cur.fetchone()["id"]
 
             ecarts: list[LigneEcartReponse] = []
-            for ligne in demande.lignes:
+            for lr in lignes_resolues:
                 try:
                     cur.execute(
                         """
-                        INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO ventes_lignes
+                            (vente_id, article_id, quantite, prix_unitaire, prix_catalogue,
+                             remise_montant, site_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         """,
-                        (vente_id, ligne.article_id, ligne.quantite, ligne.prix_unitaire, site_cible),
+                        (
+                            vente_id, lr["article_id"], lr["quantite"], lr["prix_unitaire"],
+                            lr["prix_catalogue"], lr["remise_montant"], site_cible,
+                        ),
                     )
                 except psycopg.errors.ForeignKeyViolation as exc:
                     # Article inexistant, ou sans stock sur ce site : la
@@ -254,13 +378,13 @@ def enregistrer_vente(
                     # n'y a pas de stock.
                     raise HTTPException(
                         status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        f"Article introuvable sur ce site (identifiant {ligne.article_id}).",
+                        f"Article introuvable sur ce site (identifiant {lr['article_id']}).",
                     ) from exc
 
                 cur.execute(
                     "SELECT * FROM decrementer_stock_vente(%s, %s, %s, %s, %s, %s)",
                     (
-                        ligne.article_id, site_cible, ligne.quantite,
+                        lr["article_id"], site_cible, lr["quantite"],
                         session.utilisateur_id,
                         vente_id, f"vente #{vente_id}",
                     ),
@@ -269,7 +393,7 @@ def enregistrer_vente(
                 if resultat["quantite_manquante"] > 0:
                     ecarts.append(
                         LigneEcartReponse(
-                            article_id=ligne.article_id,
+                            article_id=lr["article_id"],
                             quantite_manquante=resultat["quantite_manquante"],
                         )
                     )
@@ -295,6 +419,7 @@ def enregistrer_vente(
         taux_tva=float(taux_tva),
         montant_tva=float(montant_tva),
         total_ttc=float(total_ttc),
+        remise_totale=float(remise_totale),
         ecarts=ecarts,
     )
 
@@ -417,13 +542,35 @@ def _construire_recu_pdf(boutique: dict, vente: dict, lignes: list[dict]) -> byt
         elements.append(Paragraph(_echapper_xml(" — ".join(details)), style_normal))
     elements.append(Spacer(1, 4 * mm))
 
-    donnees = [["Article", "Qté", "Prix unitaire", "Total"]]
-    for ligne in lignes:
-        total_ligne = Decimal(str(ligne["prix_unitaire"])) * ligne["quantite"]
-        donnees.append([
-            ligne["nom"], str(ligne["quantite"]), _fcfa(ligne["prix_unitaire"]), _fcfa(total_ligne),
-        ])
-    tableau = Table(donnees, colWidths=[80 * mm, 20 * mm, 35 * mm, 35 * mm])
+    # Remise (addendum, point f, décision 2026-09-22) : « toujours visibles
+    # explicitement sur le ticket — prix normal, montant de la remise,
+    # total réellement payé, jamais une modification silencieuse du prix
+    # affiché ». Colonnes supplémentaires ajoutées SEULEMENT si une remise
+    # existe réellement (ligne ou globale) — un reçu sans aucune remise
+    # garde la mise en page historique, inchangée.
+    remise_presente = bool(vente.get("remise_globale_montant")) or any(
+        ligne.get("remise_montant") for ligne in lignes
+    )
+    if remise_presente:
+        donnees = [["Article", "Qté", "Catalogue", "Remise", "Prix payé", "Total"]]
+        for ligne in lignes:
+            total_ligne = Decimal(str(ligne["prix_unitaire"])) * ligne["quantite"]
+            catalogue = ligne.get("prix_catalogue")
+            donnees.append([
+                ligne["nom"], str(ligne["quantite"]),
+                _fcfa(catalogue) if catalogue is not None else "—",
+                _fcfa(ligne["remise_montant"]) if ligne.get("remise_montant") else "—",
+                _fcfa(ligne["prix_unitaire"]), _fcfa(total_ligne),
+            ])
+        tableau = Table(donnees, colWidths=[55 * mm, 12 * mm, 28 * mm, 25 * mm, 25 * mm, 25 * mm])
+    else:
+        donnees = [["Article", "Qté", "Prix unitaire", "Total"]]
+        for ligne in lignes:
+            total_ligne = Decimal(str(ligne["prix_unitaire"])) * ligne["quantite"]
+            donnees.append([
+                ligne["nom"], str(ligne["quantite"]), _fcfa(ligne["prix_unitaire"]), _fcfa(total_ligne),
+            ])
+        tableau = Table(donnees, colWidths=[80 * mm, 20 * mm, 35 * mm, 35 * mm])
     tableau.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
@@ -436,8 +583,10 @@ def _construire_recu_pdf(boutique: dict, vente: dict, lignes: list[dict]) -> byt
     totaux = [
         ["Sous-total HT", _fcfa(vente["sous_total_ht"])],
         [f"TVA ({vente['taux_tva']} %)", _fcfa(vente["montant_tva"])],
-        ["Total TTC", _fcfa(vente["total_ttc"])],
     ]
+    if vente.get("remise_globale_montant"):
+        totaux.append(["Remise sur la vente", "-" + _fcfa(vente["remise_globale_montant"])])
+    totaux.append(["Total TTC", _fcfa(vente["total_ttc"])])
     tableau_totaux = Table(totaux, colWidths=[135 * mm, 35 * mm])
     tableau_totaux.setStyle(TableStyle([
         ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
@@ -475,7 +624,7 @@ def recu_vente(
                 SELECT v.id, v.numero_facture, v.numero_facturier, v.mode_paiement,
                        v.statut, v.motif_annulation, v.sous_total_ht, v.taux_tva,
                        v.montant_tva, v.total_ttc, v.date_encaissement,
-                       u.nom_complet AS vendeur_nom
+                       v.remise_globale_montant, u.nom_complet AS vendeur_nom
                   FROM ventes v
                   LEFT JOIN utilisateurs u ON u.id = v.vendeur_id
                  WHERE v.id = %s
@@ -488,7 +637,7 @@ def recu_vente(
 
             cur.execute(
                 """
-                SELECT a.nom, vl.quantite, vl.prix_unitaire
+                SELECT a.nom, vl.quantite, vl.prix_unitaire, vl.prix_catalogue, vl.remise_montant
                   FROM ventes_lignes vl
                   JOIN articles a ON a.id = vl.article_id
                  WHERE vl.vente_id = %s
