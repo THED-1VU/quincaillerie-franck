@@ -247,18 +247,99 @@ class ReponseTransfert(BaseModel):
     quantite_stock_destination: float
 
 
-class DemandeCasse(BaseModel):
+# ---------------------------------------------------------------------------
+# Casse : déclaration -> validation (migration 036, point f, décision
+# 2026-09-22) — n'importe quel rôle qui touche au stock peut déclarer,
+# seul le responsable peut valider (ce qui décrémente réellement le stock).
+# ---------------------------------------------------------------------------
+
+class DemandeDeclarationCasse(BaseModel):
     article_id: int
     site_id: Optional[int] = None
     quantite: Decimal = Field(gt=0)
     motif: str = Field(min_length=1, max_length=200)
+    observation: Optional[str] = Field(default=None, max_length=500)
 
 
-class DemandeRetourClient(BaseModel):
+class ReponseDeclarationCasse(BaseModel):
+    declaration_id: int
+    statut: str
+
+
+class ReponseCasseDetail(BaseModel):
+    """Une déclaration de casse, pour la liste de celles en attente de
+    validation par le responsable."""
+
+    declaration_id: int
+    article_id: int
+    site_id: int
+    quantite: float
+    motif: str
+    observation: Optional[str] = None
+    declarant_id: int
+    date_declaration: datetime
+    statut: str
+
+
+class DemandeValidationCasse(BaseModel):
+    """Corps vide — le déclarant n'a rien à fournir de plus ; le validateur
+    vient de la session, jamais du corps de la requête."""
+
+
+class ReponseValidationCasse(BaseModel):
+    declaration_id: int
+    article_id: int
+    site_id: int
+    quantite_stock: float
+
+
+# ---------------------------------------------------------------------------
+# Retour client : déclaration -> validation (migration 036, point f,
+# décision 2026-09-22) — validation du responsable obligatoire, état de la
+# marchandise vérifié avant toute réintégration, trois issues possibles.
+# ---------------------------------------------------------------------------
+
+class DemandeDeclarationRetourClient(BaseModel):
     article_id: int
     vente_id: int
     quantite: Decimal = Field(gt=0)
+    issue: Literal["echange", "avoir_client", "remboursement_especes"]
+    etat_marchandise: Literal["revendable", "invendable"]
     motif: Optional[str] = Field(default=None, max_length=200)
+
+
+class ReponseDeclarationRetourClient(BaseModel):
+    declaration_id: int
+    statut: str
+
+
+class ReponseRetourClientDetail(BaseModel):
+    declaration_id: int
+    article_id: int
+    vente_id: int
+    site_id: int
+    quantite: float
+    issue: str
+    etat_marchandise: str
+    motif: Optional[str] = None
+    declarant_id: int
+    date_declaration: datetime
+    statut: str
+
+
+class DemandeValidationRetourClient(BaseModel):
+    """``confirmation_remboursement`` : exigé explicitement (``True``) pour
+    valider une déclaration dont l'issue est un remboursement espèces —
+    refusé sinon, quelle que soit la déclaration."""
+
+    confirmation_remboursement: bool = False
+
+
+class ReponseValidationRetourClient(BaseModel):
+    declaration_id: int
+    article_id: int
+    site_id: int
+    quantite_stock: float
 
 
 class DemandeRetourFournisseur(BaseModel):

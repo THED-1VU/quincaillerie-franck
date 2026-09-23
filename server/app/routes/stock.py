@@ -22,13 +22,21 @@ from ..deps import exiger_role, obtenir_bd
 from ..erreurs import erreur_metier as _erreur_metier
 from ..roles import role_pg
 from ..schemas import (
-    DemandeCasse,
+    DemandeDeclarationCasse,
+    DemandeDeclarationRetourClient,
     DemandeEntreeStock,
-    DemandeRetourClient,
     DemandeRetourFournisseur,
     DemandeTransfert,
+    DemandeValidationCasse,
+    DemandeValidationRetourClient,
+    ReponseCasseDetail,
+    ReponseDeclarationCasse,
+    ReponseDeclarationRetourClient,
     ReponseMouvementStock,
+    ReponseRetourClientDetail,
     ReponseTransfert,
+    ReponseValidationCasse,
+    ReponseValidationRetourClient,
 )
 from ..securite import Session
 
@@ -117,16 +125,18 @@ def transferer(
     )
 
 
-@routeur.post("/casse", response_model=ReponseMouvementStock, status_code=status.HTTP_201_CREATED)
-def enregistrer_casse(
-    demande: DemandeCasse,
+@routeur.post(
+    "/casse/declarations", response_model=ReponseDeclarationCasse, status_code=status.HTTP_201_CREATED
+)
+def declarer_casse(
+    demande: DemandeDeclarationCasse,
     request: Request,
-    session: Session = Depends(exiger_role("responsable")),
+    session: Session = Depends(exiger_role("responsable", "agent_stock")),
 ):
-    """Casse ou avarie (addendum, point f) : réservée au responsable —
-    « validée par le responsable » se lit ici comme « c'est lui qui
-    l'enregistre », faute d'un flux d'approbation en deux temps décrit par
-    le propriétaire. Cible un (article, site) explicite."""
+    """Déclaration d'une casse ou avarie (addendum, point f, décision
+    2026-09-22) : ouverte à tout rôle qui touche au stock — c'est un
+    CONSTAT, sans aucun effet sur le stock. Seule la validation (ci-dessous)
+    décrémente réellement."""
     site_cible = _site_cible(session, demande.site_id)
     bd = obtenir_bd(request)
     with bd.connexion_pour(
@@ -135,29 +145,55 @@ def enregistrer_casse(
         with conn.cursor() as cur:
             try:
                 cur.execute(
-                    "SELECT enregistrer_casse(%s, %s, %s, %s, %s) AS quantite_stock",
+                    "SELECT declarer_casse(%s, %s, %s, %s, %s, %s) AS declaration_id",
                     (demande.article_id, site_cible, demande.quantite,
-                     session.utilisateur_id, demande.motif),
+                     demande.motif, session.utilisateur_id, demande.observation),
                 )
             except (psycopg.errors.CheckViolation, psycopg.errors.ForeignKeyViolation) as exc:
                 raise _erreur_metier(exc) from exc
             ligne = cur.fetchone()
 
-    return ReponseMouvementStock(
-        article_id=demande.article_id, site_id=site_cible,
-        quantite_stock=ligne["quantite_stock"],
-    )
+    return ReponseDeclarationCasse(declaration_id=ligne["declaration_id"], statut="en_attente")
 
 
-@routeur.post("/retours-client", response_model=ReponseMouvementStock, status_code=status.HTTP_201_CREATED)
-def enregistrer_retour_client(
-    demande: DemandeRetourClient,
+@routeur.get("/casse/declarations", response_model=list[ReponseCasseDetail])
+def lister_declarations_casse(
     request: Request,
     session: Session = Depends(exiger_role("responsable", "agent_stock")),
 ):
-    """Retour client (addendum, point f) : entrée rattachée à la vente
-    d'origine — le site est celui de la vente (sans ambiguïté). Ne recalcule
-    pas le seuil d'alerte."""
+    """Déclarations de casse EN ATTENTE de validation — un responsable voit
+    les deux sites, un agent stock seulement le sien (RLS,
+    `p_declarations_casse_site`, migration 036)."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id AS declaration_id, article_id, site_id, quantite, motif, observation,"
+                " declarant_id, date_declaration, statut"
+                " FROM declarations_casse WHERE statut = 'en_attente' ORDER BY date_declaration"
+            )
+            lignes = cur.fetchall()
+
+    return lignes
+
+
+@routeur.post(
+    "/casse/declarations/{declaration_id}/valider",
+    response_model=ReponseValidationCasse,
+)
+def valider_casse(
+    declaration_id: int,
+    demande: DemandeValidationCasse,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Validation d'une casse déclarée (addendum, point f) : réservée au
+    responsable — décrémente réellement le stock. Un responsable peut
+    valider sa propre déclaration (décision 2026-09-23, pas de séparation
+    stricte déclarant/validateur)."""
+    del demande  # corps volontairement vide, voir DemandeValidationCasse
     bd = obtenir_bd(request)
     with bd.connexion_pour(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
@@ -165,28 +201,118 @@ def enregistrer_retour_client(
         with conn.cursor() as cur:
             try:
                 cur.execute(
-                    "SELECT enregistrer_retour_client(%s, %s, %s, %s, %s) AS quantite_stock",
-                    (demande.article_id, demande.vente_id, demande.quantite,
-                     session.utilisateur_id, demande.motif),
+                    "SELECT article_id, site_id FROM declarations_casse WHERE id = %s",
+                    (declaration_id,),
                 )
-                ligne = cur.fetchone()
-                # Le site est celui de la vente d'origine ; plutôt que de
-                # relire `ventes` (interdit à un agent stock), on relit le
-                # mouvement d'entrée que la fonction vient d'inscrire — la
-                # RLS de mouvements_stock le limite déjà au site de l'agent.
+                declaration = cur.fetchone()
+                if declaration is None:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "Déclaration de casse introuvable.")
                 cur.execute(
-                    "SELECT site_id FROM mouvements_stock"
-                    " WHERE vente_id = %s AND categorie = 'retour_client'"
-                    " ORDER BY id DESC LIMIT 1",
-                    (demande.vente_id,),
+                    "SELECT valider_casse(%s, %s) AS quantite_stock",
+                    (declaration_id, session.utilisateur_id),
                 )
-                vente = cur.fetchone()
+            except (psycopg.errors.CheckViolation, psycopg.errors.RestrictViolation) as exc:
+                raise _erreur_metier(exc) from exc
+            ligne = cur.fetchone()
+
+    return ReponseValidationCasse(
+        declaration_id=declaration_id, article_id=declaration["article_id"],
+        site_id=declaration["site_id"], quantite_stock=ligne["quantite_stock"],
+    )
+
+
+@routeur.post(
+    "/retours-client/declarations",
+    response_model=ReponseDeclarationRetourClient,
+    status_code=status.HTTP_201_CREATED,
+)
+def declarer_retour_client(
+    demande: DemandeDeclarationRetourClient,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable", "agent_stock")),
+):
+    """Déclaration d'un retour client (addendum, point f, décision
+    2026-09-22) : SANS effet sur le stock — la validation du responsable
+    (ci-dessous) est obligatoire avant toute réintégration."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT declarer_retour_client(%s, %s, %s, %s, %s, %s, %s) AS declaration_id",
+                    (demande.article_id, demande.vente_id, demande.quantite, demande.issue,
+                     demande.etat_marchandise, session.utilisateur_id, demande.motif),
+                )
             except (psycopg.errors.CheckViolation, psycopg.errors.ForeignKeyViolation) as exc:
                 raise _erreur_metier(exc) from exc
+            ligne = cur.fetchone()
 
-    return ReponseMouvementStock(
-        article_id=demande.article_id, site_id=vente["site_id"],
-        quantite_stock=ligne["quantite_stock"],
+    return ReponseDeclarationRetourClient(declaration_id=ligne["declaration_id"], statut="en_attente")
+
+
+@routeur.get("/retours-client/declarations", response_model=list[ReponseRetourClientDetail])
+def lister_declarations_retour_client(
+    request: Request,
+    session: Session = Depends(exiger_role("responsable", "agent_stock")),
+):
+    """Déclarations de retour client EN ATTENTE de validation — mêmes
+    règles de site que les déclarations de casse (RLS,
+    `p_declarations_retour_site`, migration 036)."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id AS declaration_id, article_id, vente_id, site_id, quantite, issue,"
+                " etat_marchandise, motif, declarant_id, date_declaration, statut"
+                " FROM declarations_retour_client WHERE statut = 'en_attente' ORDER BY date_declaration"
+            )
+            lignes = cur.fetchall()
+
+    return lignes
+
+
+@routeur.post(
+    "/retours-client/declarations/{declaration_id}/valider",
+    response_model=ReponseValidationRetourClient,
+)
+def valider_retour_client(
+    declaration_id: int,
+    demande: DemandeValidationRetourClient,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Validation d'un retour client déclaré (addendum, point f) : réservée
+    au responsable. Refuse un remboursement espèces sans
+    ``confirmation_remboursement`` explicite (règle posée par la fonction
+    elle-même, pas seulement ici)."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT article_id, site_id FROM declarations_retour_client WHERE id = %s",
+                    (declaration_id,),
+                )
+                declaration = cur.fetchone()
+                if declaration is None:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "Déclaration de retour introuvable.")
+                cur.execute(
+                    "SELECT valider_retour_client(%s, %s, %s) AS quantite_stock",
+                    (declaration_id, session.utilisateur_id, demande.confirmation_remboursement),
+                )
+            except (psycopg.errors.CheckViolation, psycopg.errors.RestrictViolation) as exc:
+                raise _erreur_metier(exc) from exc
+            ligne = cur.fetchone()
+
+    return ReponseValidationRetourClient(
+        declaration_id=declaration_id, article_id=declaration["article_id"],
+        site_id=declaration["site_id"], quantite_stock=ligne["quantite_stock"],
     )
 
 

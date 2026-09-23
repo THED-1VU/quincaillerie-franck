@@ -340,8 +340,15 @@ SELECT t_succes('033 · réinitialisation d''un agent acceptée',
 SELECT t_refus('034 · entrée de stock décimale sur un article entier-seul',
   $$SELECT enregistrer_entree_stock(1, 1, 12.5, 2, 'essai décimal refusé')$$);
 
-SELECT t_refus('034 · casse décimale sur un article entier-seul',
-  $$SELECT enregistrer_casse(1, 1, 2.5, 2, 'essai décimal refusé')$$);
+-- Depuis la migration 036 (retours enrichis), enregistrer_casse() n'existe
+-- plus : la déclaration (declarer_casse) n'écrit jamais dans stocks_sites/
+-- mouvements_stock, donc le déclencheur décimal ne s'y applique pas — SEULE
+-- la validation (valider_casse) doit être refusée.
+SELECT t_succes('034 · déclaration de casse décimale acceptée (aucun effet sur le stock)',
+  $$SELECT declarer_casse(1, 1, 2.5, 'essai décimal refusé', 2)$$);
+SELECT t_refus('034 · validation de cette casse décimale refusée sur un article entier-seul',
+  $$SELECT valider_casse(
+      (SELECT id FROM declarations_casse WHERE article_id = 1 AND quantite = 2.5 LIMIT 1), 1)$$);
 
 SELECT t_refus('034 · comptage décimal sur un article entier-seul',
   $$INSERT INTO comptages_stock (article_id, utilisateur_id, moment, quantite_comptee, site_id)
@@ -360,6 +367,71 @@ SELECT t_valeur('034 · la quantité décimale est bien celle enregistrée, non 
   '42.500');
 
 UPDATE articles SET quantite_decimale_autorisee = FALSE WHERE id = 1;
+-- Restaure aussi le STOCK ET LE SEUIL (pas seulement l'indicateur) : la
+-- réception décimale ci-dessus a aussi recalculé seuil_alerte à 2,5
+-- (20 % de 12,5) — le laisser fractionnaire avec l'indicateur remis à
+-- FALSE aurait refusé la PROCHAINE écriture sur cette ligne, quelle
+-- qu'elle soit (le déclencheur vérifie TOUTE la ligne, pas seulement la
+-- colonne visée) — trouvé par exécution en écrivant la section 10.
+UPDATE stocks_sites SET quantite_stock = 30, seuil_alerte = 6
+ WHERE article_id = 1 AND site_id = 1;
+
+-- ============================================================================
+-- 10. Retours enrichis : casse et retour client en deux temps (migration
+--     036, point f, décision 2026-09-22).
+-- ============================================================================
+
+-- --- Casse : déclaration (aucun effet) -> validation (décrémente) --------
+SELECT t_refus('036 · déclaration de casse sans motif refusée',
+  $$SELECT declarer_casse(1, 1, 1, '', 2)$$);
+
+SELECT t_succes('036 · déclaration de casse acceptée (constat, sans effet sur le stock)',
+  $$SELECT declarer_casse(1, 1, 2, 'test protections', 2)$$);
+
+SELECT t_valeur('036 · déclaration de casse : aucun effet sur le stock tant que non validée',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
+  '30.000');
+
+SELECT t_succes('036 · validation de casse décrémente réellement le stock',
+  $$SELECT valider_casse((SELECT id FROM declarations_casse WHERE motif = 'test protections' LIMIT 1), 1)$$);
+
+SELECT t_valeur('036 · stock réellement décrémenté après validation',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
+  '28.000');
+
+SELECT t_refus('036 · re-validation d''une casse déjà validée refusée',
+  $$SELECT valider_casse((SELECT id FROM declarations_casse WHERE motif = 'test protections' LIMIT 1), 1)$$);
+
+-- --- Retour client : déclaration -> validation, issue, état de la --------
+-- --- marchandise (réutilise la vente 900 de la section 4, 1 unité de     --
+-- --- l'article 1 vendue au Magasin) ---------------------------------------
+SELECT t_succes('036 · déclaration de retour client acceptée (aucun effet tant que non validée)',
+  $$SELECT declarer_retour_client(1, 900, 1, 'remboursement_especes', 'revendable', 2, 'test protections')$$);
+
+SELECT t_valeur('036 · déclaration de retour client : aucun effet sur le stock tant que non validée',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
+  '28.000');
+
+SELECT t_refus('036 · validation d''un remboursement espèces SANS confirmation refusée',
+  $$SELECT valider_retour_client(
+      (SELECT id FROM declarations_retour_client WHERE motif = 'test protections' LIMIT 1), 1, FALSE)$$);
+
+SELECT t_succes('036 · validation d''un remboursement espèces AVEC confirmation acceptée',
+  $$SELECT valider_retour_client(
+      (SELECT id FROM declarations_retour_client WHERE motif = 'test protections' LIMIT 1), 1, TRUE)$$);
+
+SELECT t_valeur('036 · stock réellement réintégré après validation (revendable)',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
+  '29.000');
+
+SELECT t_valeur('036 · remboursement espèces trace une dépense du bon montant',
+  $$SELECT montant::TEXT FROM transactions WHERE vente_id = 900 AND type = 'depense'$$,
+  '6500.00');
+
+-- Le retour ci-dessus a épuisé le 1 unité vendue dans la vente 900 : tout
+-- nouveau retour sur cette vente doit être refusé (dépassement du vendu).
+SELECT t_refus('036 · retour au-delà de la quantité vendue refusé',
+  $$SELECT declarer_retour_client(1, 900, 1, 'echange', 'revendable', 2, 'en trop')$$);
 
 -- ============================================================================
 -- Résultat
