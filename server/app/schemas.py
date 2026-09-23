@@ -6,7 +6,7 @@ from datetime import date as _date, datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DemandeConnexion(BaseModel):
@@ -44,12 +44,32 @@ class ReponseDeverrouillage(BaseModel):
 
 class LigneVenteDemande(BaseModel):
     """Une ligne telle que saisie par la comptabilité depuis le facturier
-    papier : ``prix_unitaire`` est le prix négocié TTC (addendum, point d),
-    qui peut légitimement différer du prix catalogue."""
+    papier. Trois façons d'exprimer le prix, UNE SEULE à la fois (décision
+    2026-09-22, addendum point f — remise en montant OU en pourcentage, au
+    choix) :
+      * ``prix_unitaire`` : le prix négocié TTC directement (addendum,
+        point d — comportement historique, inchangé) ;
+      * ``remise_montant`` : une remise en FCFA par unité, appliquée au
+        prix catalogue du moment ;
+      * ``remise_pct`` : une remise en pourcentage du prix catalogue.
+    Dans les deux derniers cas, le serveur résout ``prix_unitaire`` à
+    partir du prix catalogue réel de l'article — jamais une valeur
+    inventée par le client."""
 
     article_id: int
     quantite: Decimal = Field(gt=0)
-    prix_unitaire: float = Field(ge=0)
+    prix_unitaire: Optional[float] = Field(default=None, ge=0)
+    remise_montant: Optional[float] = Field(default=None, ge=0)
+    remise_pct: Optional[float] = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _un_seul_mode_de_prix(self) -> "LigneVenteDemande":
+        fournis = [v is not None for v in (self.prix_unitaire, self.remise_montant, self.remise_pct)]
+        if sum(fournis) != 1:
+            raise ValueError(
+                "Fournir exactement un des trois : prix_unitaire, remise_montant ou remise_pct."
+            )
+        return self
 
 
 class DemandeVente(BaseModel):
@@ -60,13 +80,28 @@ class DemandeVente(BaseModel):
     ``numero_facturier`` et ``vendeur_id`` sont obligatoires depuis le
     cycle 27 (addendum, point c, décidé le 2026-09-13) : référence du
     carnet papier tenu par le responsable, et personne ayant négocié le
-    prix — voir ``db/migrations/020_facturier_vendeur.sql``."""
+    prix — voir ``db/migrations/020_facturier_vendeur.sql``.
+
+    ``remise_globale_montant``/``remise_globale_pct`` (décision
+    2026-09-22, addendum point f) : remise sur la vente ENTIÈRE, mécanisme
+    séparé d'une remise par ligne — au plus un des deux, aucun n'est
+    obligatoire (pas de remise globale par défaut)."""
 
     site_id: Optional[int] = None
     mode_paiement: str = Field(min_length=1, max_length=30)
     numero_facturier: str = Field(min_length=1, max_length=30)
     vendeur_id: int
     lignes: List[LigneVenteDemande] = Field(min_length=1)
+    remise_globale_montant: Optional[float] = Field(default=None, ge=0)
+    remise_globale_pct: Optional[float] = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _au_plus_une_remise_globale(self) -> "DemandeVente":
+        if self.remise_globale_montant is not None and self.remise_globale_pct is not None:
+            raise ValueError(
+                "Fournir au plus un des deux : remise_globale_montant ou remise_globale_pct."
+            )
+        return self
 
 
 class LigneEcartReponse(BaseModel):
@@ -86,6 +121,7 @@ class ReponseVente(BaseModel):
     taux_tva: float
     montant_tva: float
     total_ttc: float
+    remise_totale: float
     ecarts: List[LigneEcartReponse]
 
 
