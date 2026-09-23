@@ -141,54 +141,146 @@ def test_agent_stock_ne_transfere_que_depuis_son_site(client):
 
 
 # ---------------------------------------------------------------------------
-# Casse (addendum, point f) — réservée au responsable
+# Casse (addendum, point f, décision 2026-09-22) — déclaration -> validation
 # ---------------------------------------------------------------------------
 
-def test_casse_reservee_au_responsable(client):
+def test_casse_declaration_ouverte_validation_reservee_au_responsable(client):
+    """La déclaration est ouverte à l'agent stock (constat, sans effet sur
+    le stock) ; seule la validation, réservée au responsable, décrémente
+    réellement."""
     session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
-    reponse = client.post(
-        "/stock/casse",
-        headers=entete_autorisation(session_agent["jeton"]),
-        json={"article_id": 1, "quantite": 1, "motif": "sac éventré"},
-    )
-    assert reponse.status_code == 403
-
-    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     avant = _seuil_et_stock(1)
-    reponse2 = client.post(
-        "/stock/casse",
-        headers=entete_autorisation(session_resp["jeton"]),
+    declaration = client.post(
+        "/stock/casse/declarations",
+        headers=entete_autorisation(session_agent["jeton"]),
         json={"article_id": 1, "site_id": 1, "quantite": 3, "motif": "sac éventré"},
     )
-    assert reponse2.status_code == 201, reponse2.text
-    assert reponse2.json()["quantite_stock"] == avant["quantite_stock"] - 3
+    assert declaration.status_code == 201, declaration.text
+    assert declaration.json()["statut"] == "en_attente"
+    declaration_id = declaration.json()["declaration_id"]
+    # Aucun effet sur le stock tant que non validée.
+    pendant = _seuil_et_stock(1)
+    assert pendant["quantite_stock"] == avant["quantite_stock"]
+
+    # L'agent qui a déclaré ne peut pas valider lui-même (réservé au responsable).
+    refus = client.post(
+        f"/stock/casse/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={},
+    )
+    assert refus.status_code == 403
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    validation = client.post(
+        f"/stock/casse/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={},
+    )
+    assert validation.status_code == 200, validation.text
+    assert validation.json()["quantite_stock"] == avant["quantite_stock"] - 3
     apres = _seuil_et_stock(1)
     assert apres["seuil_alerte"] == avant["seuil_alerte"]
 
 
+def test_casse_responsable_peut_declarer_et_valider_lui_meme(client):
+    """Décision 2026-09-23 : pas de séparation stricte déclarant/validateur
+    — un responsable peut valider sa propre déclaration."""
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    declaration = client.post(
+        "/stock/casse/declarations",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "constaté par le responsable"},
+    )
+    declaration_id = declaration.json()["declaration_id"]
+    validation = client.post(
+        f"/stock/casse/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={},
+    )
+    assert validation.status_code == 200, validation.text
+
+
+def test_casse_deja_validee_refuse_une_seconde_validation(client):
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    declaration = client.post(
+        "/stock/casse/declarations",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "x"},
+    )
+    declaration_id = declaration.json()["declaration_id"]
+    client.post(
+        f"/stock/casse/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    second = client.post(
+        f"/stock/casse/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    assert second.status_code == 422, second.text
+    assert "déjà validée" in second.json()["detail"].lower()
+
+
+def test_casse_liste_les_declarations_en_attente(client):
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    client.post(
+        "/stock/casse/declarations",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "pour la liste"},
+    )
+    liste = client.get(
+        "/stock/casse/declarations", headers=entete_autorisation(session_agent["jeton"]),
+    )
+    assert liste.status_code == 200, liste.text
+    assert any(d["motif"] == "pour la liste" and d["statut"] == "en_attente" for d in liste.json())
+
+
 # ---------------------------------------------------------------------------
-# Retour client (addendum, point f)
+# Retour client (addendum, point f, décision 2026-09-22) — déclaration ->
+# validation, avec issue et état de la marchandise
 # ---------------------------------------------------------------------------
 
-def test_retour_client_rattache_a_la_vente(client):
+def _creer_vente_test(client, numero_facturier: str, quantite: int = 2) -> int:
     session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
     reponse_vente = client.post(
         "/ventes",
         headers=entete_autorisation(session["jeton"]),
-        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK01", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6500}]},
+        json={"mode_paiement": "especes", "numero_facturier": numero_facturier, "vendeur_id": 1,
+              "lignes": [{"article_id": 1, "quantite": quantite, "prix_unitaire": 6500}]},
     )
     assert reponse_vente.status_code == 201, reponse_vente.text
-    vente_id = reponse_vente.json()["vente_id"]
+    return reponse_vente.json()["vente_id"]
 
+
+def test_retour_client_agent_ne_peut_pas_valider_seul(client):
+    """Validation du responsable obligatoire (décision 2026-09-22) — un
+    agent stock ne réintègre jamais seul, même sa propre déclaration."""
+    vente_id = _creer_vente_test(client, "MAG-TESTSTOCK01")
     session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     avant = _seuil_et_stock(1)
-    reponse = client.post(
-        "/stock/retours-client",
+    declaration = client.post(
+        "/stock/retours-client/declarations",
         headers=entete_autorisation(session_agent["jeton"]),
-        json={"article_id": 1, "vente_id": vente_id, "quantite": 1, "motif": "produit non conforme"},
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 1,
+              "issue": "echange", "etat_marchandise": "revendable", "motif": "produit non conforme"},
     )
-    assert reponse.status_code == 201, reponse.text
-    assert reponse.json()["quantite_stock"] == avant["quantite_stock"] + 1
+    assert declaration.status_code == 201, declaration.text
+    declaration_id = declaration.json()["declaration_id"]
+    pendant = _seuil_et_stock(1)
+    assert pendant["quantite_stock"] == avant["quantite_stock"], "aucun effet tant que non validée"
+
+    refus = client.post(
+        f"/stock/retours-client/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_agent["jeton"]), json={},
+    )
+    assert refus.status_code == 403
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    validation = client.post(
+        f"/stock/retours-client/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    assert validation.status_code == 200, validation.text
+    assert validation.json()["quantite_stock"] == avant["quantite_stock"] + 1
     apres = _seuil_et_stock(1)
     assert apres["seuil_alerte"] == avant["seuil_alerte"]
 
@@ -196,80 +288,130 @@ def test_retour_client_rattache_a_la_vente(client):
 def test_retour_client_vente_inexistante_refuse(client):
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.post(
-        "/stock/retours-client",
+        "/stock/retours-client/declarations",
         headers=entete_autorisation(session["jeton"]),
-        json={"article_id": 1, "vente_id": 999999, "quantite": 1},
+        json={"article_id": 1, "vente_id": 999999, "quantite": 1,
+              "issue": "echange", "etat_marchandise": "revendable"},
     )
     assert reponse.status_code == 422
     assert "introuvable" in reponse.json()["detail"].lower()
 
 
-def test_agent_stock_ne_traite_un_retour_client_que_pour_son_site(client):
-    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
-    reponse_vente = client.post(
-        "/ventes",
-        headers=entete_autorisation(session_compta["jeton"]),
-        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK02", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
-    )
-    vente_id = reponse_vente.json()["vente_id"]
-
+def test_agent_stock_ne_declare_un_retour_client_que_pour_son_site(client):
+    vente_id = _creer_vente_test(client, "MAG-TESTSTOCK02", quantite=1)
     session_comptoir = se_connecter(client, "comptoir.stock", MOT_DE_PASSE_AGENT_STOCK_COMPTOIR)
     reponse = client.post(
-        "/stock/retours-client",
+        "/stock/retours-client/declarations",
         headers=entete_autorisation(session_comptoir["jeton"]),
-        json={"article_id": 1, "vente_id": vente_id, "quantite": 1},
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 1,
+              "issue": "echange", "etat_marchandise": "revendable"},
     )
     assert reponse.status_code == 403
 
 
 def test_retour_client_article_non_vendu_dans_la_vente_refuse(client):
-    """Migration 016 (constat n°2, contrôle de boucle après le cycle 9) :
-    l'article 2 (Fer) n'a jamais été vendu dans cette vente, qui ne porte
-    que sur l'article 1 (Ciment)."""
-    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
-    reponse_vente = client.post(
-        "/ventes",
-        headers=entete_autorisation(session_compta["jeton"]),
-        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK03", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}]},
-    )
-    vente_id = reponse_vente.json()["vente_id"]
-
+    """Migration 016 (constat n°2) : l'article 2 (Fer) n'a jamais été vendu
+    dans cette vente, qui ne porte que sur l'article 1 (Ciment)."""
+    vente_id = _creer_vente_test(client, "MAG-TESTSTOCK03", quantite=1)
     session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.post(
-        "/stock/retours-client",
+        "/stock/retours-client/declarations",
         headers=entete_autorisation(session_agent["jeton"]),
-        json={"article_id": 2, "vente_id": vente_id, "quantite": 1},
+        json={"article_id": 2, "vente_id": vente_id, "quantite": 1,
+              "issue": "echange", "etat_marchandise": "revendable"},
     )
     assert reponse.status_code == 422, reponse.text
     assert "ne fait pas partie" in reponse.json()["detail"].lower()
 
 
 def test_retour_client_quantite_cumulee_depassee_refuse(client):
-    """Migration 016 : deux unités vendues, un premier retour de deux passe,
-    un second retour de une de plus (cumul 3 > 2) est refusé."""
-    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
-    reponse_vente = client.post(
-        "/ventes",
-        headers=entete_autorisation(session_compta["jeton"]),
-        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTSTOCK04", "vendeur_id": 1, "lignes": [{"article_id": 1, "quantite": 2, "prix_unitaire": 6500}]},
-    )
-    vente_id = reponse_vente.json()["vente_id"]
-
+    """Deux unités vendues, un premier retour VALIDÉ de deux passe, un
+    second retour de une de plus (cumul 3 > 2) est refusé dès la
+    déclaration."""
+    vente_id = _creer_vente_test(client, "MAG-TESTSTOCK04", quantite=2)
     session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
-    premier = client.post(
-        "/stock/retours-client",
+    premiere = client.post(
+        "/stock/retours-client/declarations",
         headers=entete_autorisation(session_agent["jeton"]),
-        json={"article_id": 1, "vente_id": vente_id, "quantite": 2},
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 2,
+              "issue": "echange", "etat_marchandise": "revendable"},
     )
-    assert premier.status_code == 201, premier.text
+    assert premiere.status_code == 201, premiere.text
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    client.post(
+        f"/stock/retours-client/declarations/{premiere.json()['declaration_id']}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
 
-    second = client.post(
-        "/stock/retours-client",
+    seconde = client.post(
+        "/stock/retours-client/declarations",
         headers=entete_autorisation(session_agent["jeton"]),
-        json={"article_id": 1, "vente_id": vente_id, "quantite": 1},
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 1,
+              "issue": "echange", "etat_marchandise": "revendable"},
     )
-    assert second.status_code == 422, second.text
-    assert "dépasserait" in second.json()["detail"].lower()
+    assert seconde.status_code == 422, seconde.text
+    assert "dépasserait" in seconde.json()["detail"].lower()
+
+
+def test_retour_client_remboursement_especes_exige_confirmation_explicite(client):
+    vente_id = _creer_vente_test(client, "MAG-TESTSTOCK05", quantite=1)
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    declaration = client.post(
+        "/stock/retours-client/declarations",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 1,
+              "issue": "remboursement_especes", "etat_marchandise": "revendable"},
+    )
+    declaration_id = declaration.json()["declaration_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    sans_confirmation = client.post(
+        f"/stock/retours-client/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    assert sans_confirmation.status_code == 422, sans_confirmation.text
+    assert "confirmation" in sans_confirmation.json()["detail"].lower()
+
+    with_confirmation = client.post(
+        f"/stock/retours-client/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"confirmation_remboursement": True},
+    )
+    assert with_confirmation.status_code == 200, with_confirmation.text
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute(
+                "SELECT montant FROM transactions WHERE vente_id = %s AND type = 'depense'",
+                (vente_id,),
+            )
+            depense = cur.fetchone()
+    assert depense is not None and float(depense["montant"]) == 6500.0
+
+
+def test_retour_client_invendable_ne_reintegre_jamais_le_stock(client):
+    """Cas limite documenté dans l'addendum : marchandise reprise
+    invendable -> pas de remise en stock, tracée comme une perte."""
+    vente_id = _creer_vente_test(client, "MAG-TESTSTOCK06", quantite=1)
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    avant = _seuil_et_stock(1)
+    declaration = client.post(
+        "/stock/retours-client/declarations",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 1,
+              "issue": "avoir_client", "etat_marchandise": "invendable", "motif": "cassé au retour"},
+    )
+    declaration_id = declaration.json()["declaration_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    validation = client.post(
+        f"/stock/retours-client/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    assert validation.status_code == 200, validation.text
+    assert validation.json()["quantite_stock"] == avant["quantite_stock"], "jamais réintégré"
+    apres = _seuil_et_stock(1)
+    assert apres["quantite_stock"] == avant["quantite_stock"]
 
 
 # ---------------------------------------------------------------------------
