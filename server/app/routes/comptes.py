@@ -58,7 +58,21 @@ def _profil(cur, compte_id: int):
     ligne = cur.fetchone()
     if ligne is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable.")
+    ligne["roles"] = _roles_de(cur, compte_id)
     return ligne
+
+
+def _roles_de(cur, compte_id: int) -> list:
+    """Rôles cumulés d'un compte (chantier C3, cycle 41) — sous le rôle
+    responsable, qui a reçu un GRANT SELECT sur utilisateurs_roles
+    (migration 035)."""
+    cur.execute(
+        "SELECT role FROM utilisateurs_roles WHERE utilisateur_id = %s "
+        "ORDER BY CASE role WHEN 'responsable' THEN 1 "
+        "WHEN 'agent_comptabilite' THEN 2 ELSE 3 END",
+        (compte_id,),
+    )
+    return [ligne["role"] for ligne in cur.fetchall()]
 
 
 @routeur.get("")
@@ -70,10 +84,18 @@ def lister_comptes(
     with bd.connexion_pour(role_pg(session.role), utilisateur_id=session.utilisateur_id) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"SELECT {_COLONNES_PROFIL} FROM utilisateurs "
-                "ORDER BY role, identifiant"
+                f"SELECT u.id, u.nom_complet, u.identifiant, u.role, u.site_id, "
+                "u.actif, u.doit_changer_mot_de_passe, u.date_creation, "
+                "COALESCE(array_agg(ur.role ORDER BY CASE ur.role "
+                "WHEN 'responsable' THEN 1 WHEN 'agent_comptabilite' THEN 2 "
+                "ELSE 3 END) FILTER (WHERE ur.role IS NOT NULL), '{}') AS roles "
+                "FROM utilisateurs u "
+                "LEFT JOIN utilisateurs_roles ur ON ur.utilisateur_id = u.id "
+                "GROUP BY u.id ORDER BY u.role, u.identifiant"
             )
             lignes = cur.fetchall()
+            for ligne in lignes:
+                ligne["roles"] = list(ligne["roles"])
     return {"comptes": lignes}
 
 
@@ -86,6 +108,16 @@ def creer_compte(
     identifiant = demande.identifiant.strip()
     if not identifiant:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "L'identifiant est obligatoire.")
+
+    # Cumul de rôles (chantier C3, cycle 41) : ``role`` = rôle principal,
+    # ``roles`` = liste complète. Le rôle principal doit appartenir à la
+    # liste ; à défaut de liste, le compte porte son rôle principal seul.
+    roles = demande.roles or [demande.role]
+    if demande.role not in roles:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Le rôle principal doit appartenir à la liste des rôles.",
+        )
 
     hash_mdp = securite.hacher_mot_de_passe(demande.mot_de_passe)
 
@@ -134,6 +166,16 @@ def creer_compte(
                 """,
                 (compte_id, session.utilisateur_id),
             )
+
+            # Cumul de rôles : chaque rôle effectif du nouveau compte est
+            # écrit dans utilisateurs_roles (le rôle principal vient d'être
+            # posé sur utilisateurs.role).
+            for role in dict.fromkeys(roles):
+                cur.execute(
+                    "INSERT INTO utilisateurs_roles (utilisateur_id, role) "
+                    "VALUES (%s, %s)",
+                    (compte_id, role),
+                )
             profil = _profil(cur, compte_id)
 
     return ReponseCompte(**profil)

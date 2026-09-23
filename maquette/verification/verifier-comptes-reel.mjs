@@ -154,6 +154,26 @@ for (const largeur of [360, 390, 768, 1366, 1920]) {
     "le nouveau compte apparaît dans la liste"
   );
 
+  // Cumul de rôles (cycle 41, C3) : case cochée -> le compte porte les deux
+  // rôles agent, affichés « Agent stock + Agent comptabilité » dans la liste.
+  await page.fill("#compte-nom", "Agent Cumulé");
+  await page.fill("#compte-identifiant", "c2.cumul");
+  await page.selectOption("#compte-role", "agent_stock");
+  await page.fill("#compte-mot-de-passe", NOUVEAU_MDP_RESET);
+  await page.check("#compte-cumul");
+  const [reponseCumul] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/admin/comptes") && r.request().method() === "POST", { timeout: 10000 }),
+    page.click("#compte-valider"),
+  ]);
+  verifier(reponseCumul.ok(), "POST /admin/comptes réussi pour un compte à rôles cumulés");
+  await page.waitForLoadState("networkidle");
+  const ligneCumul = page.locator("li", { hasText: "c2.cumul" });
+  const texteCumul = await ligneCumul.textContent();
+  verifier(
+    texteCumul.includes("Agent stock") && texteCumul.includes("Agent comptabilité"),
+    "la liste affiche les deux rôles cumulés"
+  );
+
   // Désactivation depuis l'écran.
   const ligne = page.locator("li", { hasText: NOUVEAU_IDENTIFIANT });
   const [reponseDesactivation] = await Promise.all([

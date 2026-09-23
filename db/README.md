@@ -227,6 +227,18 @@ tentatives échouées à zéro, trace dans `journal_comptes`
 (action `reinitialisation_mot_de_passe`), et refuse de viser un compte
 responsable.
 
+### Cumul de rôles sur un même compte (chantier C3, cycle 41)
+
+Décidé le 2026-09-22 (addendum point h, question 4) : un compte peut porter
+plusieurs rôles (petit effectif). `utilisateurs.role` reste le rôle
+PRINCIPAL (site, écran d'accueil, jeton) ; `utilisateurs_roles`
+(migration 035) porte tous les rôles effectifs, lus par
+`roles_utilisateur()` (`SECURITY DEFINER`, fenêtre minimale pour `qf_app` et
+`qf_responsable`). Le jeton de session porte la liste `roles` ; `exiger_role`
+choisit le rôle effectif de la requête pour le `SET ROLE` PostgreSQL.
+Question 3 du point h (détail des prix vs total seul) : **en attente**,
+terrain vente réservé au point f.
+
 ---
 
 ## Ce que chaque migration corrige

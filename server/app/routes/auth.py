@@ -65,6 +65,7 @@ def connexion(demande: DemandeConnexion, request: Request):
             # 033) — le config.ini ne sert que de repli si la base ne répond
             # pas. Une seule source de vérité, la base sauvegardée.
             duree_minutes = config.api.duree_session_minutes
+            roles = [ligne["role"]]
             if ligne["ok"]:
                 try:
                     cur.execute("SELECT duree_session_minutes_decidee() AS minutes")
@@ -73,6 +74,18 @@ def connexion(demande: DemandeConnexion, request: Request):
                         duree_minutes = int(valeur)
                 except Exception:  # noqa: BLE001 - repli volontaire, jamais bloquant
                     duree_minutes = config.api.duree_session_minutes
+                # Cumul de rôles (chantier C3, cycle 41) : la liste complète
+                # des rôles effectifs accompagne le rôle principal dans le
+                # jeton. Si la table n'existe pas encore (migration 035 non
+                # appliquée), le rôle principal seul est conservé.
+                try:
+                    cur.execute(
+                        "SELECT role FROM roles_utilisateur(%s)",
+                        (ligne["utilisateur_id"],),
+                    )
+                    roles = [r["role"] for r in cur.fetchall()] or [ligne["role"]]
+                except Exception:  # noqa: BLE001 - repli volontaire
+                    roles = [ligne["role"]]
         conn.commit()
 
     if not ligne["ok"]:
@@ -92,6 +105,7 @@ def connexion(demande: DemandeConnexion, request: Request):
         nom_complet=ligne["nom_complet"],
         doit_changer_mot_de_passe=ligne["doit_changer_mot_de_passe"],
         duree_minutes=duree_minutes,
+        roles=roles,
     )
     return ReponseConnexion(
         jeton=jeton,

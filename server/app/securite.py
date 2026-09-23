@@ -60,6 +60,16 @@ class Session:
     emis_a: int
     expire_a: int
     jti: str
+    roles: tuple = ()
+
+    def avec_role(self, role_effectif: str) -> "Session":
+        """Session identique, mais avec ``role`` remplacé par le rôle retenu
+        pour CETTE requête (chantier C3, cumul de rôles) : le rôle effectif
+        sert au ``SET ROLE`` PostgreSQL, tandis que ``roles`` conserve la
+        liste complète pour les contrôles d'habilitation."""
+        from dataclasses import replace
+
+        return replace(self, role=role_effectif)
 
 
 def _b64_encoder(donnees: bytes) -> bytes:
@@ -84,6 +94,7 @@ class GestionnaireSessions:
         nom_complet: str,
         doit_changer_mot_de_passe: bool,
         duree_minutes: int | None = None,
+        roles: list | None = None,
     ) -> str:
         maintenant = int(time.time())
         duree_secondes = (
@@ -92,6 +103,9 @@ class GestionnaireSessions:
         charge = {
             "uid": utilisateur_id,
             "role": role,
+            # Cumul de rôles (chantier C3, cycle 41) : liste complète des
+            # rôles effectifs. Absente des jetons antérieurs -> (role,).
+            "roles": roles if roles is not None else [role],
             "site": site_id,
             "nom": nom_complet,
             "chg": doit_changer_mot_de_passe,
@@ -147,6 +161,9 @@ class GestionnaireSessions:
             # révocable a posteriori (aucune régression : il ne l'était pas
             # non plus avant ce cycle).
             jti=charge.get("jti", ""),
+            # Cumul de rôles (chantier C3, cycle 41) : un jeton antérieur n'a
+            # pas de "roles" — il retombe sur son rôle principal seul.
+            roles=tuple(charge.get("roles") or [charge["role"]]),
         )
 
 

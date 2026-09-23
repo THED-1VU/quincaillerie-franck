@@ -525,13 +525,17 @@ class ReponseClotureCaisse(BaseModel):
 class DemandeCompte(BaseModel):
     """Création d'un compte agent par le responsable. ``mot_de_passe`` est le
     mot de passe EN CLAIR envoyé une seule fois ; le serveur le hache en
-    bcrypt (``securite.hacher_mot_de_passe``) et ne le restitue jamais."""
+    bcrypt (``securite.hacher_mot_de_passe``) et ne le restitue jamais.
+    ``role`` reste le rôle PRINCIPAL ; ``roles`` (optionnel, cycle 41) porte
+    la liste complète des rôles cumulés — petit effectif, addendum point h
+    question 4, décidée le 2026-09-22."""
 
     nom_complet: str = Field(min_length=1, max_length=150)
     identifiant: str = Field(min_length=1, max_length=50)
     mot_de_passe: str = Field(min_length=8, max_length=200)
     role: Literal["agent_stock", "agent_comptabilite"]
     site_id: int
+    roles: list[Literal["agent_stock", "agent_comptabilite"]] = []
 
 
 class ReponseCompte(BaseModel):
@@ -545,6 +549,7 @@ class ReponseCompte(BaseModel):
     actif: bool
     doit_changer_mot_de_passe: bool
     date_creation: datetime
+    roles: list[str] = []
 
 
 class DemandeReinitialisationMotDePasse(BaseModel):
