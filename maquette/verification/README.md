@@ -109,3 +109,36 @@ node verifier-rapports-reel.mjs
 ```
 
 Détail complet des deux dans `DERNIER_RESULTAT.md`.
+
+## `verifier-routes-appelees.mjs` (chantier A, point f)
+
+Contrôle **statique** (aucun serveur, aucune base, aucun navigateur — juste
+de la lecture de fichiers) : ajouté après avoir constaté que les boutons
+« Casse » et « Retour client » de `stock.html` pointaient vers des routes
+supprimées depuis le sous-chantier 2 (404 en production), sans qu'aucune
+des 94 suites `verifier-cablage.mjs` ne le voie — aucune d'elles ne
+cliquait sur ces deux boutons précis.
+
+Construit deux listes puis les compare :
+1. les routes RÉELLES, lues dans `server/app/routes/*.py` (préfixe du
+   routeur déduit dynamiquement, jamais codé en dur) ;
+2. les routes APPELÉES, lues dans `maquette/*.html` et `maquette/api.js`
+   (`appelApi`, `telechargerFichier`, `fetch`, `.src = "/..."`) — en
+   suivant les enveloppes locales (ex. `appeler(chemin, methode, ...)`
+   dans `stock.html`/`rh.html`), sans quoi les appels qui PASSENT PAR
+   elles seraient invisibles.
+
+Échoue dès qu'un écran appelle une route qui n'existe pas ; affiche aussi,
+en simple constat (jamais un échec), les routes réelles qu'aucun écran
+n'appelle — une route sans écran n'est pas forcément un bug.
+
+```
+node verifier-routes-appelees.mjs
+```
+
+**Limite assumée** : preuve que rien n'appelle un 404 garanti, pas une
+navigation réelle (ça reste le rôle des scripts Playwright ci-dessus). Un
+appel construit de façon trop dynamique pour être reconnu par les motifs
+du script (aucun cas de ce genre dans la maquette au moment où il a été
+écrit) resterait invisible — à surveiller si un écran futur change de
+style d'appel.
