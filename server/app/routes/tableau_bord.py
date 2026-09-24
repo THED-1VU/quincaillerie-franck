@@ -51,3 +51,35 @@ def alertes_stock(
             lignes = cur.fetchall()
 
     return {"alertes": lignes}
+
+
+@routeur.get("/articles-offerts-en-attente")
+def articles_offerts_en_attente(
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Déclarations d'article offert EN ATTENTE de validation, tous sites
+    (chantier C4/C5, point f, décision 2026-09-24) — décision du
+    propriétaire : « une déclaration qui traîne depuis une semaine est un
+    signal, pas un oubli administratif ». ``date_declaration`` est renvoyée
+    telle quelle ; l'ancienneté se calcule côté écran, à partir de l'heure
+    du navigateur, pour éviter tout écart de fuseau entre le serveur et
+    l'affichage."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(role_pg(session.role), utilisateur_id=session.utilisateur_id) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT d.id AS declaration_id, a.nom AS article_nom, d.site_id, d.quantite,
+                       d.valeur_normale, d.vente_id, d.client_nom, e.nom_complet AS employe_nom,
+                       d.motif, d.date_declaration
+                  FROM declarations_article_offert d
+                  JOIN articles a ON a.id = d.article_id
+                  JOIN employes e ON e.id = d.employe_id
+                 WHERE d.statut = 'en_attente'
+                 ORDER BY d.date_declaration
+                """
+            )
+            lignes = cur.fetchall()
+
+    return {"declarations": lignes}

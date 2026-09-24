@@ -7,6 +7,7 @@ Alertes de stock faible (dernière carte encore simulée de
 from __future__ import annotations
 
 from conftest import (
+    MOT_DE_PASSE_AGENT_COMPTA,
     MOT_DE_PASSE_AGENT_STOCK,
     MOT_DE_PASSE_RESPONSABLE,
     entete_autorisation,
@@ -34,6 +35,51 @@ def test_alertes_stock_narticle_au_dessus_du_seuil_absent(client):
 def test_alertes_stock_reservee_au_responsable(client):
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.get("/tableau-bord/alertes-stock", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 403, reponse.text
+
+
+def test_articles_offerts_en_attente_visibles_sur_le_tableau_de_bord(client):
+    """Décision 2026-09-24 (point f) : « une déclaration qui traîne depuis
+    une semaine est un signal, pas un oubli administratif » — les
+    déclarations en attente doivent être visibles sur le tableau de bord du
+    responsable, avec de quoi calculer leur ancienneté."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    declaration = client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "geste commercial",
+              "employe_id": 1, "client_nom": "Client fidèle"},
+    )
+    assert declaration.status_code == 201, declaration.text
+    declaration_id = declaration.json()["declaration_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get(
+        "/tableau-bord/articles-offerts-en-attente", headers=entete_autorisation(session_resp["jeton"]),
+    )
+    assert reponse.status_code == 200, reponse.text
+    ligne = next(d for d in reponse.json()["declarations"] if d["declaration_id"] == declaration_id)
+    assert ligne["article_nom"] == "Ciment CIM II 50 kg"
+    assert ligne["employe_nom"] == "Employé Essai"
+    assert ligne["client_nom"] == "Client fidèle"
+    assert ligne["date_declaration"] is not None
+
+    # Une fois validée, elle disparaît de la liste des déclarations en attente.
+    client.post(
+        f"/stock/articles-offerts/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    apres = client.get(
+        "/tableau-bord/articles-offerts-en-attente", headers=entete_autorisation(session_resp["jeton"]),
+    )
+    assert all(d["declaration_id"] != declaration_id for d in apres.json()["declarations"])
+
+
+def test_articles_offerts_en_attente_reserve_au_responsable(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.get(
+        "/tableau-bord/articles-offerts-en-attente", headers=entete_autorisation(session["jeton"]),
+    )
     assert reponse.status_code == 403, reponse.text
 
 

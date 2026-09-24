@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<div class="simu">Écran câblé (cycles 7, 8, 16 et 17) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour », « Écarts de stock (ventes) » (avec régularisation) et « Saisie rapide » (recette/dépense) sont toutes réelles.</div>
+<div class="simu">Écran câblé (cycles 7, 8, 16, 17 et 45) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour », « Articles offerts en attente de validation », « Écarts de stock (ventes) » (avec régularisation) et « Saisie rapide » (recette/dépense) sont toutes réelles.</div>
 <div class="page">
   <header class="bandeau">
     <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
@@ -91,6 +91,13 @@
         <div id="zone-erreur-ecarts" class="erreur-champ" hidden></div>
         <ul class="liste-nue" id="liste-ecarts"></ul>
         <p class="champ__aide">Le comptage est fait à l'aveugle par l'agent stock, qui ne voit jamais ces écarts.</p>
+      </section>
+
+      <section class="carte">
+        <h2>Articles offerts en attente de validation</h2>
+        <div id="zone-erreur-offerts" class="erreur-champ" hidden></div>
+        <ul class="liste-nue" id="liste-offerts"></ul>
+        <p class="champ__aide">Sans effet sur le stock tant que non validée (chantier C4/C5, point f) — une déclaration ancienne est un signal, pas un oubli.</p>
       </section>
 
       <section class="carte">
@@ -184,7 +191,7 @@
   // garde ses données BRUTES (non filtrées) en mémoire et se redessine
   // entièrement à chaque changement de site sélectionné.
   const filtreSite = $("filtre-site");
-  const donneesBrutes = { ventes: [], alertes: [], ecarts: [], ecartsVentes: [] };
+  const donneesBrutes = { ventes: [], alertes: [], ecarts: [], ecartsVentes: [], offerts: [] };
 
   function siteSelectionne() {
     const v = filtreSite.value;
@@ -250,6 +257,29 @@
           "écart " + signe,
           "pastille--alerte"
         );
+        // Point f (décision 2026-09-24) : un article offert DÉCLARÉ mais
+        // pas encore VALIDÉ n'a aucun effet sur le stock — un comptage fait
+        // dans cet intervalle voit un écart sans explication. On signale
+        // ici les déclarations en attente portant sur le même article/site,
+        // pour que le responsable ne cherche pas un vol là où il y a un
+        // cadeau non validé.
+        if (e.declarations_offert_en_attente && e.declarations_offert_en_attente.length > 0) {
+          const note = document.createElement("p");
+          note.style.margin = "var(--e-1) 0 0";
+          note.style.fontSize = "var(--t-xs)";
+          note.style.color = "var(--c-alerte)";
+          const total = e.declarations_offert_en_attente.reduce((s, d) => s + Number(d.quantite), 0);
+          note.textContent = "⚠ " + e.declarations_offert_en_attente.length +
+            " déclaration(s) d'article offert en attente sur cet article (total " + total +
+            ") — cadeau non validé, pas forcément un vol.";
+          // Ajouté DANS la colonne principale (spanPrincipal, premier
+          // enfant de li), jamais comme sibling flex direct de li : li
+          // {display:flex} répartit l'espace entre ses enfants directs, et
+          // un enfant de plus (en plus de spanAside et du bouton
+          // "Régulariser") écraserait spanPrincipal — trouvé par exécution
+          // (le nom de l'article s'affichait alors une lettre par ligne).
+          li.firstChild.appendChild(note);
+        }
         const bouton = document.createElement("button");
         bouton.type = "button";
         bouton.className = "btn btn--fantome";
@@ -339,11 +369,40 @@
     }
   }
 
+  // --- Articles offerts en attente de validation (point f, décision
+  // 2026-09-24) : « une déclaration qui traîne depuis une semaine est un
+  // signal, pas un oubli administratif » — l'ancienneté se calcule ICI,
+  // depuis l'heure du navigateur, pour ne pas dépendre du fuseau serveur.
+  function rendreOffertsEnAttente() {
+    const lignes = filtrerParSite(donneesBrutes.offerts);
+    const ulO = $("liste-offerts");
+    ulO.innerHTML = "";
+    if (lignes.length === 0) {
+      ulO.innerHTML = "<li><span>Aucune déclaration en attente.</span></li>";
+      return;
+    }
+    lignes.forEach((d) => {
+      const jours = Math.max(0, Math.floor((Date.now() - new Date(d.date_declaration)) / 86400000));
+      const anciennete = jours === 0 ? "aujourd'hui" : jours === 1 ? "depuis 1 jour" : "depuis " + jours + " jours";
+      let sousTexte = (LIBELLE_SITE[d.site_id] || "Site " + d.site_id) + " · " + d.employe_nom;
+      if (d.client_nom) sousTexte += " · pour " + d.client_nom;
+      sousTexte += " · " + d.motif;
+      const li = creerLigneListe(
+        d.article_nom + " (" + d.quantite + ")",
+        sousTexte,
+        anciennete,
+        jours >= 7 ? "pastille--alerte" : "pastille--info"
+      );
+      ulO.appendChild(li);
+    });
+  }
+
   function rendreTout() {
     rendreVentes();
     rendreAlertes();
     rendreEcarts();
     rendreEcartsVentes();
+    rendreOffertsEnAttente();
   }
   filtreSite.addEventListener("change", rendreTout);
 
@@ -396,6 +455,21 @@
     }
   }
   await chargerEcartsVentes();
+
+  // --- Articles offerts en attente de validation : RÉEL, via
+  // /tableau-bord/articles-offerts-en-attente (point f, décision
+  // 2026-09-24) — voir server/app/routes/tableau_bord.py.
+  async function chargerOffertsEnAttente() {
+    $("zone-erreur-offerts").hidden = true;
+    try {
+      const donnees = await appelApi("/tableau-bord/articles-offerts-en-attente");
+      donneesBrutes.offerts = donnees.declarations;
+      rendreOffertsEnAttente();
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-offerts", erreur);
+    }
+  }
+  await chargerOffertsEnAttente();
 
   // --- Saisie rapide (recette/dépense hors vente) : RÉEL, via POST /transactions ---
   // (chantier C6, cycle 16 ; la clôture de caisse — addendum point g —

@@ -525,6 +525,94 @@ SELECT t_succes('038 · de nouveau autorisée après réinitialisation',
   $$SELECT tentative_autorisee('test_038', 3, 60)$$);
 
 -- ============================================================================
+-- 12. Article offert (migration 039, point f, décision 2026-09-22/24) —
+--     déclaration -> validation (même schéma que la casse), employé
+--     obligatoire (fiche RH, actif, même site), vente_id optionnel.
+-- ============================================================================
+
+-- Baseline capturée ICI (pas de valeur codée en dur) : les sections
+-- précédentes (remises, cumul de rôles, limiteur de débit) ne touchent pas
+-- stocks_sites, mais dépendre d'une valeur absolue aurait été fragile.
+SELECT quantite_stock AS stock_avant_offert
+  FROM stocks_sites WHERE article_id = 1 AND site_id = 1 \gset
+
+-- Employé inactif refusé.
+UPDATE employes SET actif = FALSE WHERE id = 1;
+SELECT t_refus('039 · déclaration avec un employé inactif refusée',
+  $$SELECT declarer_article_offert(1, 1, 1, 'test employé inactif', 1, 2)$$);
+UPDATE employes SET actif = TRUE WHERE id = 1;
+
+-- Employé d'un autre site refusé (article 3, stocké uniquement au
+-- Comptoir/site 2 ; l'employé 1 du jeu d'essai est au Magasin/site 1).
+SELECT t_refus('039 · déclaration avec un employé d''un autre site refusée',
+  $$SELECT declarer_article_offert(3, 2, 1, 'test mauvais site', 1, 2)$$);
+
+-- Quantité nulle ou négative refusée.
+SELECT t_refus('039 · déclaration de quantité nulle refusée',
+  $$SELECT declarer_article_offert(1, 1, 0, 'quantité nulle', 1, 2)$$);
+
+-- Déclaration valide : AUCUN effet sur le stock tant que non validée.
+SELECT t_succes('039 · déclaration acceptée (constat, sans effet sur le stock)',
+  $$SELECT declarer_article_offert(1, 1, 2, 'test protections', 1, 2)$$);
+
+SELECT t_valeur('039 · déclaration : aucun effet sur le stock tant que non validée',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
+  :'stock_avant_offert');
+
+-- valeur_normale figée depuis articles.prix_vente (6500) × quantité (2).
+SELECT t_valeur('039 · valeur_normale figée depuis le prix catalogue',
+  $$SELECT valeur_normale::TEXT FROM declarations_article_offert WHERE motif = 'test protections' LIMIT 1$$,
+  '13000.00');
+
+-- Validation : décrémente réellement le stock.
+SELECT t_succes('039 · validation décrémente réellement le stock',
+  $$SELECT valider_article_offert((SELECT id FROM declarations_article_offert WHERE motif = 'test protections' LIMIT 1), 1)$$);
+
+SELECT t_valeur('039 · mouvement de stock catégorisé article_offert',
+  $$SELECT categorie FROM mouvements_stock
+     WHERE id = (SELECT mouvement_id FROM declarations_article_offert WHERE motif = 'test protections' LIMIT 1)$$,
+  'article_offert');
+
+-- Re-validation d'une déclaration déjà validée refusée.
+SELECT t_refus('039 · re-validation d''une déclaration déjà validée refusée',
+  $$SELECT valider_article_offert((SELECT id FROM declarations_article_offert WHERE motif = 'test protections' LIMIT 1), 1)$$);
+
+-- Rattachement optionnel à une vente réelle (vente 900, site 1) : accepté,
+-- et le mouvement de stock résultant porte bien vente_id — contrainte
+-- chk_mouvements_vente_id_coherent élargie par cette migration (trouvé par
+-- exécution : la version initiale de 039, basée sur la migration 014,
+-- refusait vente_id pour la catégorie article_offert).
+SELECT t_succes('039 · déclaration rattachée à une vente réelle acceptée',
+  $$SELECT declarer_article_offert(1, 1, 1, 'rattaché à une vente', 1, 2, 900)$$);
+
+SELECT t_succes('039 · validation d''une déclaration rattachée à une vente acceptée',
+  $$SELECT valider_article_offert((SELECT id FROM declarations_article_offert WHERE motif = 'rattaché à une vente' LIMIT 1), 1)$$);
+
+SELECT t_valeur('039 · le mouvement de stock porte bien vente_id',
+  $$SELECT vente_id::TEXT FROM mouvements_stock
+     WHERE id = (SELECT mouvement_id FROM declarations_article_offert WHERE motif = 'rattaché à une vente' LIMIT 1)$$,
+  '900');
+
+-- Non-régression (migration 017, chantier C5) : catégorie 'annulation_vente'
+-- toujours acceptée — une première version de cette migration avait
+-- réécrit chk_mouvements_categorie depuis la migration 014 (qui ne
+-- connaissait pas encore 'annulation_vente'), faisant régresser
+-- test_annulation_vente_regularise_automatiquement_lecart ; corrigé avant
+-- tout commit, reconfirmé ici au niveau SQL directement.
+SELECT t_succes('039 · non-régression : catégorie annulation_vente toujours acceptée',
+  $$INSERT INTO mouvements_stock (article_id, site_id, type, categorie, quantite, motif, utilisateur_id, vente_id)
+    VALUES (1, 1, 'entree', 'annulation_vente', 1, 'test non-régression 039', 2, 900)$$);
+
+-- Stock final attendu : baseline - 2 (déclaration validée) - 1 (rattachée à
+-- la vente, validée) = baseline - 3. L'INSERT direct ci-dessus (non-
+-- régression annulation_vente) ne touche PAS stocks_sites — seules les
+-- fonctions SECURITY DEFINER (valider_article_offert...) le font, jamais
+-- une écriture brute dans mouvements_stock.
+SELECT t_valeur('039 · stock final cohérent avec les mouvements ci-dessus',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
+  (SELECT (:'stock_avant_offert'::NUMERIC - 3)::TEXT));
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''

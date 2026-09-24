@@ -415,6 +415,165 @@ def test_retour_client_invendable_ne_reintegre_jamais_le_stock(client):
 
 
 # ---------------------------------------------------------------------------
+# Article offert (addendum, point f, décision 2026-09-22/24) — déclaration
+# -> validation, distinct d'une remise à 100 % (migration 037, refusée).
+# ---------------------------------------------------------------------------
+
+def test_article_offert_declaration_ouverte_agent_comptabilite_validation_responsable(client):
+    """Déclaration ouverte à qui vend (agent comptabilité), aucun effet sur
+    le stock ; seule la validation, réservée au responsable, décrémente
+    réellement — même schéma que la casse."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    avant = _seuil_et_stock(1)
+    declaration = client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "fidélité client",
+              "employe_id": 1},
+    )
+    assert declaration.status_code == 201, declaration.text
+    assert declaration.json()["statut"] == "en_attente"
+    declaration_id = declaration.json()["declaration_id"]
+    # Aucun effet sur le stock tant que non validée.
+    pendant = _seuil_et_stock(1)
+    assert pendant["quantite_stock"] == avant["quantite_stock"]
+
+    # Le déclarant ne peut pas valider lui-même (réservé au responsable).
+    refus = client.post(
+        f"/stock/articles-offerts/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_compta["jeton"]), json={},
+    )
+    assert refus.status_code == 403
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    validation = client.post(
+        f"/stock/articles-offerts/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    assert validation.status_code == 200, validation.text
+    assert validation.json()["quantite_stock"] == avant["quantite_stock"] - 1
+
+
+def test_article_offert_agent_stock_ne_peut_pas_declarer(client):
+    """Contrairement à la casse, la déclaration n'est PAS ouverte à l'agent
+    stock — seulement à qui vend (agent comptabilité, responsable)."""
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "x", "employe_id": 1},
+    )
+    assert reponse.status_code == 403
+
+
+def test_article_offert_employe_dun_autre_site_refuse(client):
+    """« Un article offert est le geste le plus facile à détourner »
+    (décision 2026-09-24) : l'employé doit appartenir au site concerné.
+    Article 3 n'a de stock qu'au Comptoir (site 2), l'employé 1 est au
+    Magasin (site 1)."""
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"article_id": 3, "site_id": 2, "quantite": 1, "motif": "mauvais site",
+              "employe_id": 1},
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "n'appartient pas au site" in reponse.json()["detail"].lower()
+
+
+def test_article_offert_rattache_a_une_vente_optionnelle(client):
+    """vente_id est optionnel (décision 2026-09-24) : un article offert peut
+    accompagner un achat réel ou être une opération autonome. Ici, rattaché
+    à une vente réelle — valeur_normale figée depuis le prix catalogue,
+    mouvement de stock relié à la vente."""
+    vente_id = _creer_vente_test(client, "MAG-TESTOFFERT01", quantite=1)
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    declaration = client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "10 achetés, 1 offert",
+              "employe_id": 1, "vente_id": vente_id, "client_nom": "Client fidèle"},
+    )
+    assert declaration.status_code == 201, declaration.text
+    declaration_id = declaration.json()["declaration_id"]
+
+    liste = client.get(
+        "/stock/articles-offerts/declarations", headers=entete_autorisation(session_compta["jeton"]),
+    )
+    ligne = next(d for d in liste.json() if d["declaration_id"] == declaration_id)
+    assert ligne["vente_id"] == vente_id
+    assert ligne["client_nom"] == "Client fidèle"
+    assert ligne["valeur_normale"] == 6500.0  # prix catalogue de l'article 1
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    validation = client.post(
+        f"/stock/articles-offerts/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    assert validation.status_code == 200, validation.text
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute(
+                "SELECT categorie, vente_id FROM mouvements_stock"
+                " WHERE id = (SELECT mouvement_id FROM declarations_article_offert WHERE id = %s)",
+                (declaration_id,),
+            )
+            mouvement = cur.fetchone()
+    assert mouvement["categorie"] == "article_offert"
+    assert mouvement["vente_id"] == vente_id
+
+
+def test_article_offert_vente_id_absent_reste_valide(client):
+    """Un pur geste commercial, sans achat associé, reste accepté."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    declaration = client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "cadeau commercial",
+              "employe_id": 1},
+    )
+    assert declaration.status_code == 201, declaration.text
+
+
+def test_article_offert_deja_valide_refuse_seconde_validation(client):
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    declaration = client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "x", "employe_id": 1},
+    )
+    declaration_id = declaration.json()["declaration_id"]
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    client.post(
+        f"/stock/articles-offerts/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    second = client.post(
+        f"/stock/articles-offerts/declarations/{declaration_id}/valider",
+        headers=entete_autorisation(session_resp["jeton"]), json={},
+    )
+    assert second.status_code == 422, second.text
+    assert "déjà validée" in second.json()["detail"].lower()
+
+
+def test_article_offert_liste_les_declarations_en_attente(client):
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 1, "motif": "pour la liste",
+              "employe_id": 1},
+    )
+    liste = client.get(
+        "/stock/articles-offerts/declarations", headers=entete_autorisation(session_compta["jeton"]),
+    )
+    assert liste.status_code == 200, liste.text
+    assert any(d["motif"] == "pour la liste" and d["statut"] == "en_attente" for d in liste.json())
+
+
+# ---------------------------------------------------------------------------
 # Retour fournisseur (addendum, point f)
 # ---------------------------------------------------------------------------
 
