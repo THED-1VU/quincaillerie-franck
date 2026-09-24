@@ -5,99 +5,88 @@ déployée aux **Ets Quincaillerie Franck** (Batouri, région de l'Est, Cameroun
 Akuma est le nom de la gamme logicielle (éditeur) ; « Ets Quincaillerie Franck »
 reste le nom du client — voir `ADDENDUM_CAHIER_DES_CHARGES.md`.
 
-> **État : reconstruction, cycle 4 fusionné.** L'application d'origine a été livrée
-> uniquement en exécutables Windows ; le code source est introuvable. Le dépôt a
-> commencé par une phase de cadrage (rétro-spécifications, addendum), puis les
-> cycles de finalisation.
+> **État : cycle 44 fusionné (2026-09-24), moyenne indicative ≈ 71 %**
+> sur les 15 chantiers C0–C14 — détail, scores et journal dans
+> [`RAPPORT AVANCEMENT/loop-state.md`](RAPPORT%20AVANCEMENT/loop-state.md).
 >
-> **Architecture actée :** un seul code applicatif **web**, mais **livré et exécuté
-> comme une application Windows (`.exe`)** sur les postes de la boutique —
-> l'exécutable embarque le serveur local et ouvre l'interface en plein écran, sans
-> installation de Python. Les **téléphones Android / iPhone** ouvrent la **même**
-> application dans un navigateur, pour l'**usage** et le **suivi**, via le réseau
-> local ou un tunnel. Pas d'interface de bureau PyQt6.
+> **Architecture actée :** un seul code applicatif **web**, mais **livré et
+> exécuté comme une application Windows (`.exe`)** sur les postes de la
+> boutique — l'exécutable embarque le serveur local et ouvre l'interface,
+> sans installation de Python. Les **téléphones Android / iPhone** ouvrent la
+> **même** application dans un navigateur via le réseau local. Pas
+> d'interface de bureau PyQt6.
 
-## Documents de cadrage
+## Livrables du cahier des charges §7 (point l de l'addendum)
+
+| Exigence CDC §7 | Où elle est livrée |
+|---|---|
+| **Code source complet** (application, API, schéma, scripts, tests) | Ce dépôt Git (`main`), livré en continu ; propriété et accès formalisés dans [`OWNERSHIP.md`](OWNERSHIP.md) |
+| **Schéma de base + migrations** | [`QuincaillerieFranck_Test/creation_base_donnees.sql`](QuincaillerieFranck_Test/creation_base_donnees.sql) (schéma d'origine) + [`db/migrations/`](db/migrations/) (000–038 + inverses, appliquées par [`db/outils/migrer.sh`](db/outils/migrer.sh)) |
+| **Scripts de fabrication des exécutables** | [`server/fabrication/`](server/fabrication/) : `construire.ps1` (script humain), `quincaillerie_franck.spec` (PyInstaller), `lanceur.py` ; trace de la dernière construction dans [`server/fabrication/DERNIER_RESULTAT.md`](server/fabrication/DERNIER_RESULTAT.md) |
+| **Scripts + guide de sauvegarde/restauration** | [`db/outils/sauvegarder.ps1`](db/outils/sauvegarder.ps1), [`restaurer.ps1`](db/outils/restaurer.ps1), [`planifier_sauvegarde.ps1`](db/outils/planifier_sauvegarde.ps1) + [`db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`](db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md) (RPO 1 h, RTO 2 h, chiffrement AES-256) |
+| **Jeux de tests** | [`server/tests/`](server/tests/) (pytest, 248 tests, vraie base PostgreSQL), [`db/tests/`](db/tests/) (protections, habilitations, concurrence, réversibilité, volume réaliste), [`maquette/verification/`](maquette/verification/) (suites Playwright) |
+| **Intégration continue** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — service `postgres:17`, migrations + jeu d'essai + pytest sur chaque push/PR vers `main` |
+| **Documentation d'installation et d'exploitation** | Ce README, [`db/README.md`](db/README.md), [`db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`](db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md), guides testeur et dossier de recette (références dans [`PERIMETRE_LIVRE.md`](PERIMETRE_LIVRE.md)) |
+| **Rétro-spécifications et décisions** | [`MODELE_DONNEES.md`](MODELE_DONNEES.md), [`PERIMETRE_LIVRE.md`](PERIMETRE_LIVRE.md), [`ADDENDUM_CAHIER_DES_CHARGES.md`](ADDENDUM_CAHIER_DES_CHARGES.md), [`VISION_PRODUIT.md`](VISION_PRODUIT.md), [`UX_BASELINE.md`](UX_BASELINE.md) |
+
+**N'est JAMAIS dans le dépôt** : `config.ini` réel, mots de passe, clés
+secrètes, sauvegardes de données réelles, exécutables compilés (voir
+`.gitignore` et l'audit documenté dans `OWNERSHIP.md`).
+
+## Documents de cadrage et de suivi
 
 | Fichier | Contenu |
 |---|---|
-| [`MODELE_DONNEES.md`](MODELE_DONNEES.md) | Rétro-spécification du schéma PostgreSQL existant + évaluation critique (intégrité, audit, risques). |
+| [`ADDENDUM_CAHIER_DES_CHARGES.md`](ADDENDUM_CAHIER_DES_CHARGES.md) | Points ouverts ou contradictoires du cahier des charges : règle proposée, cas limites, décisions du propriétaire (points a–l). |
+| [`MODELE_DONNEES.md`](MODELE_DONNEES.md) | Rétro-spécification du schéma PostgreSQL + évaluation critique. |
 | [`PERIMETRE_LIVRE.md`](PERIMETRE_LIVRE.md) | Rétro-spécification fonctionnelle : écrans et fonctions déduits des guides et du dossier de recette. |
-| [`ADDENDUM_CAHIER_DES_CHARGES.md`](ADDENDUM_CAHIER_DES_CHARGES.md) | Points ouverts ou contradictoires du cahier des charges : règle proposée, cas limites, question au propriétaire. |
-| [`RAPPORT AVANCEMENT/loop-state.md`](RAPPORT%20AVANCEMENT/loop-state.md) | État des 15 chantiers `C0`–`C14` et journal des cycles de finalisation. |
-| [`RAPPORT AVANCEMENT/COMPARAISON_ARCHITECTURE.md`](RAPPORT%20AVANCEMENT/COMPARAISON_ARCHITECTURE.md) | Comparaison des deux architectures cibles (bureau+web vs web unique). |
-| [`.agents/skills/finalisation-loop/SKILL.md`](.agents/skills/finalisation-loop/SKILL.md) | Le cycle de finalisation en 5 phases utilisé sur ce projet. |
+| [`VISION_PRODUIT.md`](VISION_PRODUIT.md) | Décisions produit datées (cycles et candidats). |
+| [`UX_BASELINE.md`](UX_BASELINE.md) | Protocole de mesure d'ergonomie à exécuter par un testeur humain. |
+| [`OWNERSHIP.md`](OWNERSHIP.md) | Propriété du code, accès au dépôt, audit des secrets (point l). |
+| [`RAPPORT AVANCEMENT/loop-state.md`](RAPPORT%20AVANCEMENT/loop-state.md) | État des 15 chantiers `C0`–`C14` + journal des cycles. |
+| [`.agents/skills/finalisation-loop/SKILL.md`](.agents/skills/finalisation-loop/SKILL.md) | La boucle de finalisation utilisée sur ce projet. |
 
-## Cycle 4 — fabrication de l'exécutable Windows (chantier C0)
+## Architecture du dépôt
 
-| Élément | Contenu |
-|---|---|
-| [`server/fabrication/`](server/fabrication/) | `lanceur.py` (démarre le serveur + ouvre un navigateur), `quincaillerie_franck.spec` (PyInstaller), `construire.ps1` (script humain). |
-| [`server/fabrication/DERNIER_RESULTAT.md`](server/fabrication/DERNIER_RESULTAT.md) | Trace de la dernière construction : exécutable testé depuis un dossier **totalement isolé** du dépôt — démarrage, base de données, bcrypt, tout fonctionne sans Python installé. |
+```
+QuincaillerieFranck_Test/
+├── creation_base_donnees.sql   Schéma PostgreSQL d'origine (versionné, sans données)
+├── server/                     Serveur FastAPI : app/, tests/, fabrication/ (exe)
+│   ├── app/                    Config, accès base (bascule de rôle), sécurité, routes
+│   ├── tests/                  Suite pytest (aucun mock, vraie base)
+│   └── fabrication/            construire.ps1 + .spec PyInstaller + lanceur.py
+├── db/
+│   ├── migrations/             000–038 + inverses (appliquées/annulées par migrer.sh)
+│   ├── outils/                 migrer.sh, sauvegarde/restauration, générateur de volume,
+│   │                           premier compte responsable, rapprochement d'articles, etc.
+│   └── tests/                  Vérification PAR EXÉCUTION (protections, habilitations,
+│                               concurrence, réversibilité, volume réaliste)
+├── maquette/                   Interface web (HTML/CSS/JS) + suites Playwright + captures
+├── .github/workflows/ci.yml    CI GitHub Actions (pytest sur postgres:17)
+└── RAPPORT AVANCEMENT/         loop-state.md (scores + journal) et documents de suivi
+```
 
-`.\server\fabrication\construire.ps1` produit
-`server\fabrication\dist\Akuma.exe` (17,9 Mo, autonome — renommé au cycle 28,
-voir `server/fabrication/quincaillerie_franck.spec`). Le
-navigateur ouvert par le lanceur pointe pour l'instant sur `/docs`
-(placeholder documenté) : le câblage de l'interface réelle est le travail
-des chantiers C9/C10, à venir.
+## Reconstruire et vérifier (résumé opérationnel)
 
-## Cycle 3 — noyau serveur : authentification et habilitations (chantiers C2, C3, C11)
-
-| Élément | Contenu |
-|---|---|
-| [`server/README.md`](server/README.md) | Serveur FastAPI : authentification, habilitations au niveau des requêtes SQL, sécurité applicative. Aucun écran, aucune règle métier de vente/stock. |
-| [`server/app/`](server/app/) | Config (refuse `postgres` et les clés d'exemple), accès base (**seul** point de bascule de rôle PostgreSQL), sécurité (hachage `$2a$`, jetons signés, limiteur de débit), routes (`auth`, `demonstration`). |
-| [`server/tests/`](server/tests/) | Suite pytest, exécutée contre la vraie base PostgreSQL (aucun mock). |
-| [`server/tests/DERNIER_RESULTAT.md`](server/tests/DERNIER_RESULTAT.md) | Trace de la dernière exécution : **36/36**, plus preuve RLS en SQL direct hors API. |
-| [`db/migrations/009_authentification.sql`](db/migrations/009_authentification.sql) | `verifier_connexion()` — seule fonction à lire un hachage de mot de passe, ne le restitue jamais. |
-| [`db/migrations/010_correction_usage_qf_app.sql`](db/migrations/010_correction_usage_qf_app.sql) | Corrige un oubli de la migration 008 (`qf_app` sans accès au schéma). |
-
-Preuve la plus forte du cloisonnement par site : en SQL direct, **hors de
-toute route**, sous le rôle d'un agent avec son site positionné, une requête
-qui demande explicitement les données de l'*autre* site renvoie zéro ligne —
-la protection est dans PostgreSQL (RLS), pas dans le code applicatif.
-
-## Cycle 2 — base de données durcie (chantier C1)
-
-| Élément | Contenu |
-|---|---|
-| [`db/README.md`](db/README.md) | Mode d'emploi des migrations et **tableau complet des droits** : qui peut lire et écrire quoi, colonne par colonne. |
-| [`db/migrations/`](db/migrations/) | 9 migrations numérotées + leurs 9 inverses. Le schéma d'origine est corrigé, jamais remplacé. |
-| [`db/outils/`](db/outils/) | `migrer.sh` (appliquer / annuler / état), `prevol.sql` (ce qui bloquerait sur une base contenant des données), `definir_mot_de_passe_app.sql`. |
-| [`db/tests/`](db/tests/) | Vérification **par exécution** : 44 protections, 52 habilitations, 4 contrôles de concurrence, aller-retour des migrations. |
-| [`db/tests/DERNIER_RESULTAT.md`](db/tests/DERNIER_RESULTAT.md) | Trace de la dernière exécution : **100 contrôles, 0 échec**, avec l'avant/après. |
-
-L'écart d'inventaire est désormais **calculé par la base** et la quantité
-attendue y est figée par déclencheur : ni l'un ni l'autre ne peut être forgé par
-un programme client. L'application ne se connecte plus en superutilisateur.
-
-## Cycle 1 — maquette d'ergonomie (chantier C9)
-
-| Élément | Contenu |
-|---|---|
-| [`maquette/`](maquette/) | Maquette **non câblée** des 4 écrans clés (connexion, vente PC de caisse, tableau de bord mobile, comptage à l'aveugle). HTML/CSS/JS, sans build. Lancer : `cd maquette && py -m http.server 8080`. |
-| [`maquette/verification/`](maquette/verification/) | Scripts qui exécutent la maquette et vérifient débordement, erreurs console, cibles tactiles et parcours clés. |
-| [`maquette/captures/`](maquette/captures/) | 20 captures (4 écrans × 360/390/768/1366/1920 px). |
-| [`UX_BASELINE.md`](UX_BASELINE.md) | Protocole de mesure d'ergonomie à exécuter par un testeur humain. Tant que son tableau §4 n'est pas rempli, **C9 ≤ 60 %**. |
-
-## Source de référence (hors dépôt)
-
-Restent sur le disque, **non versionnés** (voir `.gitignore`) — ils servent de référence :
-
-- `QuincaillerieFranck.exe`, `CreerCompteResponsable.exe` — application livrée ;
-- `config.ini` réel — jamais commité.
-
-`QuincaillerieFranck_Test/creation_base_donnees.sql` (le **schéma**, sans données) est
-versionné. Les sauvegardes `.sql` **contenant des données** sont exclues.
+- **Base de test** : `bash db/tests/executer_tests.sh` (avec `PSQL`/`PG_DUMP`/
+  `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD` positionnés) — recrée la base,
+  applique 000–038, rejoue protections/habilitations/concurrence, puis les
+  inverses et compare le schéma.
+- **Serveur** : `server/.venv/Scripts/python.exe -m uvicorn app.main:app
+  --app-dir server` (config dans `server/config.ini`, jamais versionnée).
+- **Tests applicatifs** : `server/.venv/Scripts/python.exe -m pytest server/tests`.
+- **Exécutable** : `.\\server\\fabrication\\construire.ps1` → `Akuma.exe`.
+- **Sauvegarde/restauration** : voir
+  [`db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`](db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md).
 
 ## Contexte métier (résumé)
 
-Deux sites (magasin de stock, comptoir de vente). Trois rôles : **responsable**
+Deux sites (magasin de stock, comptoir de vente). Trois rôles — **responsable**
 (les deux sites, prix, RH, comptes, encaissement, annulation), **agent stock**
 (un site, articles et comptage, ne voit aucun montant), **agent comptabilité**
-(un site, saisie a posteriori des ventes payées d'après le facturier papier, ne voit
-aucune quantité de stock). Réseau local, PostgreSQL sur un poste serveur, jusqu'à 5 postes.
+(un site, saisie des ventes d'après le facturier papier, ne voit aucune quantité
+de stock) — cumulables sur un même compte depuis le cycle 43. Réseau local,
+PostgreSQL sur un poste serveur, jusqu'à 5 postes.
 
-Priorités du propriétaire : **1.** ergonomie / responsivité — **2.** usage téléphone
-(suivi **et** saisie) — **3.** fiabilité métier.
+Priorités du propriétaire : **1.** ergonomie / responsivité — **2.** usage
+téléphone (suivi **et** saisie) — **3.** fiabilité métier.
