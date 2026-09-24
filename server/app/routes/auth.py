@@ -44,11 +44,6 @@ _MESSAGES_PUBLICS = {
 def connexion(demande: DemandeConnexion, request: Request):
     limiteur: securite.LimiteurDebit = request.app.state.limiteur_connexion
     cle_limite = demande.identifiant.strip().lower()
-    if not limiteur.autorise(cle_limite):
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            "Trop de tentatives de connexion. Réessayez dans une minute.",
-        )
 
     bd: BaseDeDonnees = obtenir_bd(request)
     adresse_ip = request.client.host if request.client else None
@@ -56,6 +51,26 @@ def connexion(demande: DemandeConnexion, request: Request):
 
     with bd.connexion_anonyme() as conn:
         with conn.cursor() as cur:
+            # Limiteur de débit PARTAGÉ entre processus (chantier C11,
+            # cycle 44) : le compteur vit en base (migration 038), pas en
+            # mémoire. Repli volontaire sur le limiteur en mémoire si la
+            # base ne répond pas — la limitation ne doit jamais bloquer la
+            # connexion elle-même.
+            autorise = True
+            try:
+                cur.execute(
+                    "SELECT tentative_autorisee(%s, %s, %s) AS autorise",
+                    (cle_limite, limiteur.max_essais, limiteur.fenetre_secondes),
+                )
+                autorise = bool(cur.fetchone()["autorise"])
+            except Exception:  # noqa: BLE001 - repli en mémoire, jamais bloquant
+                autorise = limiteur.autorise(cle_limite)
+            if not autorise:
+                raise HTTPException(
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    "Trop de tentatives de connexion. Réessayez dans une minute.",
+                )
+
             cur.execute(
                 "SELECT * FROM verifier_connexion(%s, %s, %s, %s)",
                 (demande.identifiant, demande.mot_de_passe, adresse_ip, "api"),
@@ -86,16 +101,20 @@ def connexion(demande: DemandeConnexion, request: Request):
                     roles = [r["role"] for r in cur.fetchall()] or [ligne["role"]]
                 except Exception:  # noqa: BLE001 - repli volontaire
                     roles = [ligne["role"]]
+                # Une connexion réussie efface le compteur du limiteur : ce
+                # n'est pas parce qu'on a tâtonné avant de trouver le bon mot
+                # de passe qu'on doit rester bridé après coup.
+                try:
+                    cur.execute(
+                        "SELECT reinitialiser_limitation(%s)", (cle_limite,)
+                    )
+                except Exception:  # noqa: BLE001 - repli en mémoire
+                    limiteur.reinitialiser(cle_limite)
         conn.commit()
 
     if not ligne["ok"]:
         message = _MESSAGES_PUBLICS.get(ligne["motif"], "Connexion refusée.")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, message)
-
-    # Une connexion réussie efface le compteur de la limitation de débit :
-    # ce n'est pas parce qu'on a tâtonné avant de trouver le bon mot de passe
-    # qu'on doit rester bridé après coup.
-    limiteur.reinitialiser(cle_limite)
 
     gestionnaire: securite.GestionnaireSessions = request.app.state.gestionnaire_sessions
     jeton = gestionnaire.emettre(
