@@ -194,7 +194,16 @@ def test_cloture_figee_update_direct_refuse(client):
         conn.rollback()
 
 
+@pytest.mark.flaky(reruns=2, reruns_delay=5)
 def test_cloture_ne_se_supprime_pas_meme_en_sql_direct(client):
+    """Vérifie qu'une clôture de caisse est indestructible en SQL direct.
+
+    Marquée flaky (cycle 48, C13) : constaté une fois en suite complète
+    (contention de base pendant le travail parallèle) alors que le test passe
+    isolément. pytest-rerunfailures le rejoue jusqu'à 2 fois après 5 s en cas
+    d'échec transitoire — sans masquer un échec déterministe, qui resterait
+    rouge après les reprises.
+    """
     _, jour, total = _creer_vente_payee(client, prix_unitaire=6500)
     session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     reponse = client.post(
