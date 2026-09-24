@@ -22,7 +22,9 @@ responsable restent des chantiers C0 séparés, non traités ici.
 
 from __future__ import annotations
 
+import shutil
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -111,17 +113,72 @@ def _choisir_port() -> int:
         return s.getsockname()[1]
 
 
+_CHEMINS_NAVIGATEURS_KIOSQUE = (
+    # Edge d'abord (livré avec Windows 10/11, donc présent sans rien
+    # installer), puis Chrome. Chemins standard 64 et 32 bits.
+    ("msedge", (
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    )),
+    ("chrome", (
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    )),
+)
+
+
+def _navigateur_kiosque() -> tuple[str, str] | None:
+    """Trouve Edge ou Chrome pour le mode kiosque (chantier C0, cycle 46).
+
+    Retourne (exécutable, type) avec ``type`` valant ``"edge"`` ou
+    ``"chrome"``, ou ``None`` si aucun des deux n'est installé (le repli
+    est alors le navigateur par défaut, via ``webbrowser.open``).
+    """
+    for type_navigateur, chemins in _CHEMINS_NAVIGATEURS_KIOSQUE:
+        trouve = shutil.which(type_navigateur)
+        if trouve:
+            return trouve, type_navigateur
+        for chemin in chemins:
+            if Path(chemin).is_file():
+                return chemin, type_navigateur
+    return None
+
+
 def _ouvrir_navigateur_apres_demarrage(url: str) -> None:
-    """Attend que le serveur réponde avant d'ouvrir le navigateur — sinon
+    """Attend que le serveur réponde avant d'ouvrir l'interface — sinon
     l'utilisateur voit une page « ce site est inaccessible » pendant les
-    quelques dizaines de millisecondes que prend le démarrage."""
+    quelques dizaines de millisecondes que prend le démarrage.
+
+    Mode kiosque (cycle 46, décision du propriétaire) : Edge ou Chrome est
+    lancé en ``--kiosk`` (plein écran, sans barre d'adresse), sans session
+    ni onglets résiduels d'une utilisation précédente. Si aucun de ces deux
+    navigateurs n'existe, repli sur le navigateur par défaut (comportement
+    antérieur), jamais bloquant.
+    """
     for _ in range(100):  # jusqu'à 10 s
         try:
             with socket.create_connection((HOTE, _PORT_COURANT[0]), timeout=0.2):
                 break
         except OSError:
             time.sleep(0.1)
-    webbrowser.open(url)
+
+    navigateur = _navigateur_kiosque()
+    if navigateur is None:
+        webbrowser.open(url)
+        return
+    executable, type_navigateur = navigateur
+    arguments = [
+        executable,
+        "--kiosk",
+        url,
+        "--no-first-run",
+        "--no-default-browser-check",
+    ]
+    if type_navigateur == "edge":
+        # Fenêtre kiosque véritablement plein écran sur Edge (le seul des
+        # deux à accepter cette option dédiée).
+        arguments.append("--edge-kiosk-type=fullscreen")
+    subprocess.Popen(arguments)
 
 
 _PORT_COURANT = [PORT_PAR_DEFAUT]
