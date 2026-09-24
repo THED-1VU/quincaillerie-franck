@@ -197,6 +197,40 @@ def test_ecarts_du_jour_reserves_au_responsable(client):
     assert ecarts[0]["ecart"] == -8
 
 
+def test_ecarts_du_jour_signale_une_declaration_offert_en_attente(client):
+    """Décision 2026-09-24 (point f) : un article offert DÉCLARÉ mais pas
+    encore VALIDÉ n'a aucun effet sur le stock, alors que la marchandise est
+    physiquement partie — un comptage fait dans cet intervalle verrait un
+    écart sans explication. L'écran des écarts doit signaler la déclaration
+    en attente portant sur le même article/site, pour que le responsable ne
+    cherche pas un vol là où il y a un cadeau non validé."""
+    session_compta = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    declaration = client.post(
+        "/stock/articles-offerts/declarations",
+        headers=entete_autorisation(session_compta["jeton"]),
+        json={"article_id": 1, "site_id": 1, "quantite": 2, "motif": "geste commercial",
+              "employe_id": 1},
+    )
+    assert declaration.status_code == 201, declaration.text
+    declaration_id = declaration.json()["declaration_id"]
+
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    client.post(
+        "/inventaire/comptages",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "moment": "matin", "quantite_comptee": 28},  # 30 - 2 non validés
+    )
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get("/inventaire/ecarts", headers=entete_autorisation(session_resp["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    ecart = next(e for e in reponse.json()["ecarts"] if e["article_nom"] == "Ciment CIM II 50 kg")
+    declarations = ecart["declarations_offert_en_attente"]
+    assert len(declarations) == 1
+    assert declarations[0]["declaration_id"] == declaration_id
+    assert declarations[0]["quantite"] == 2
+
+
 def test_ecarts_ventes_du_jour_relie_c5_et_c7(client):
     """Une vente à découvert de stock (chantier C5, addendum point e) doit
     apparaître dans les écarts de C7 — les deux chantiers partagent le même

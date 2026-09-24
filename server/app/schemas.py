@@ -378,6 +378,59 @@ class ReponseValidationRetourClient(BaseModel):
     quantite_stock: float
 
 
+# ---------------------------------------------------------------------------
+# Article offert : déclaration -> validation (migration 039, point f,
+# décision 2026-09-22/24) — distinct d'une remise à 100 % (migration 037,
+# qui la refuse). employe_id : qui a physiquement offert l'article (fiche
+# RH), distinct du compte qui saisit la déclaration — exigence du
+# 2026-09-24 (« le geste le plus facile à détourner »).
+# ---------------------------------------------------------------------------
+
+class DemandeDeclarationArticleOffert(BaseModel):
+    article_id: int
+    site_id: Optional[int] = None
+    quantite: Decimal = Field(gt=0)
+    motif: str = Field(min_length=1, max_length=200)
+    employe_id: int
+    vente_id: Optional[int] = None
+    client_nom: Optional[str] = Field(default=None, max_length=150)
+
+
+class ReponseDeclarationArticleOffert(BaseModel):
+    declaration_id: int
+    statut: str
+
+
+class ReponseArticleOffertDetail(BaseModel):
+    """Une déclaration d'article offert, pour la liste de celles en attente
+    de validation par le responsable."""
+
+    declaration_id: int
+    article_id: int
+    site_id: int
+    quantite: float
+    valeur_normale: float
+    vente_id: Optional[int] = None
+    client_nom: Optional[str] = None
+    employe_id: int
+    motif: str
+    declarant_id: int
+    date_declaration: datetime
+    statut: str
+
+
+class DemandeValidationArticleOffert(BaseModel):
+    """Corps vide — le déclarant n'a rien à fournir de plus ; le validateur
+    vient de la session, jamais du corps de la requête."""
+
+
+class ReponseValidationArticleOffert(BaseModel):
+    declaration_id: int
+    article_id: int
+    site_id: int
+    quantite_stock: float
+
+
 class DemandeRetourFournisseur(BaseModel):
     mouvement_origine_id: int
     quantite: Decimal = Field(gt=0)

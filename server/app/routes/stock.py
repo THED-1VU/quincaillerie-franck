@@ -22,19 +22,24 @@ from ..deps import exiger_role, obtenir_bd
 from ..erreurs import erreur_metier as _erreur_metier
 from ..roles import role_pg
 from ..schemas import (
+    DemandeDeclarationArticleOffert,
     DemandeDeclarationCasse,
     DemandeDeclarationRetourClient,
     DemandeEntreeStock,
     DemandeRetourFournisseur,
     DemandeTransfert,
+    DemandeValidationArticleOffert,
     DemandeValidationCasse,
     DemandeValidationRetourClient,
+    ReponseArticleOffertDetail,
     ReponseCasseDetail,
+    ReponseDeclarationArticleOffert,
     ReponseDeclarationCasse,
     ReponseDeclarationRetourClient,
     ReponseMouvementStock,
     ReponseRetourClientDetail,
     ReponseTransfert,
+    ReponseValidationArticleOffert,
     ReponseValidationCasse,
     ReponseValidationRetourClient,
 )
@@ -311,6 +316,104 @@ def valider_retour_client(
             ligne = cur.fetchone()
 
     return ReponseValidationRetourClient(
+        declaration_id=declaration_id, article_id=declaration["article_id"],
+        site_id=declaration["site_id"], quantite_stock=ligne["quantite_stock"],
+    )
+
+
+@routeur.post(
+    "/articles-offerts/declarations",
+    response_model=ReponseDeclarationArticleOffert,
+    status_code=status.HTTP_201_CREATED,
+)
+def declarer_article_offert(
+    demande: DemandeDeclarationArticleOffert,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
+):
+    """Déclaration d'un article offert (addendum, point f, décision
+    2026-09-22/24) : SANS effet sur le stock — la validation du responsable
+    (ci-dessous) est obligatoire avant toute sortie réelle. Ouverte à qui
+    vend (agent comptabilité, responsable), jamais à l'agent stock — à la
+    différence de la casse."""
+    site_cible = _site_cible(session, demande.site_id)
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT declarer_article_offert(%s, %s, %s, %s, %s, %s, %s, %s) AS declaration_id",
+                    (demande.article_id, site_cible, demande.quantite, demande.motif,
+                     demande.employe_id, session.utilisateur_id, demande.vente_id, demande.client_nom),
+                )
+            except (psycopg.errors.CheckViolation, psycopg.errors.ForeignKeyViolation,
+                    psycopg.errors.InsufficientPrivilege) as exc:
+                raise _erreur_metier(exc) from exc
+            ligne = cur.fetchone()
+
+    return ReponseDeclarationArticleOffert(declaration_id=ligne["declaration_id"], statut="en_attente")
+
+
+@routeur.get("/articles-offerts/declarations", response_model=list[ReponseArticleOffertDetail])
+def lister_declarations_article_offert(
+    request: Request,
+    session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
+):
+    """Déclarations d'article offert EN ATTENTE de validation — mêmes règles
+    de site que les déclarations de casse/retour (RLS,
+    `p_declarations_offert_site`, migration 039)."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id AS declaration_id, article_id, site_id, quantite, valeur_normale,"
+                " vente_id, client_nom, employe_id, motif, declarant_id, date_declaration, statut"
+                " FROM declarations_article_offert WHERE statut = 'en_attente' ORDER BY date_declaration"
+            )
+            lignes = cur.fetchall()
+
+    return lignes
+
+
+@routeur.post(
+    "/articles-offerts/declarations/{declaration_id}/valider",
+    response_model=ReponseValidationArticleOffert,
+)
+def valider_article_offert(
+    declaration_id: int,
+    demande: DemandeValidationArticleOffert,
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Validation d'un article offert déclaré (addendum, point f) : réservée
+    au responsable — décrémente réellement le stock."""
+    del demande  # corps volontairement vide, voir DemandeValidationArticleOffert
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    "SELECT article_id, site_id FROM declarations_article_offert WHERE id = %s",
+                    (declaration_id,),
+                )
+                declaration = cur.fetchone()
+                if declaration is None:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, "Déclaration d'article offert introuvable.")
+                cur.execute(
+                    "SELECT valider_article_offert(%s, %s) AS quantite_stock",
+                    (declaration_id, session.utilisateur_id),
+                )
+            except (psycopg.errors.CheckViolation, psycopg.errors.RestrictViolation) as exc:
+                raise _erreur_metier(exc) from exc
+            ligne = cur.fetchone()
+
+    return ReponseValidationArticleOffert(
         declaration_id=declaration_id, article_id=declaration["article_id"],
         site_id=declaration["site_id"], quantite_stock=ligne["quantite_stock"],
     )

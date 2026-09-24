@@ -191,7 +191,15 @@ def ecarts_du_jour(
     """Écarts de comptage du jour, réservés au responsable. Un agent stock
     n'a de toute façon plus le droit de lire ``ecart``/``quantite_attendue``
     (migration 012) — cette route ne fait que refléter, au niveau
-    applicatif, ce que la base impose déjà."""
+    applicatif, ce que la base impose déjà.
+
+    ``declarations_offert_en_attente`` (migration 039, point f, décision
+    2026-09-24) : un article offert DÉCLARÉ mais pas encore VALIDÉ n'a
+    aucun effet sur le stock — la marchandise est pourtant physiquement
+    partie. Un comptage fait dans cet intervalle verrait un écart sans
+    explication ; ce champ signale les déclarations en attente portant sur
+    le même article/site, pour que le responsable ne cherche pas un vol là
+    où il y a un cadeau non encore validé."""
     bd = obtenir_bd(request)
     with bd.connexion_pour(
         role_pg(session.role), utilisateur_id=session.utilisateur_id
@@ -200,7 +208,17 @@ def ecarts_du_jour(
             cur.execute(
                 """
                 SELECT c.id, a.nom AS article_nom, c.site_id, c.moment,
-                       c.quantite_comptee, c.quantite_attendue, c.ecart, c.date_comptage
+                       c.quantite_comptee, c.quantite_attendue, c.ecart, c.date_comptage,
+                       COALESCE(
+                         (SELECT json_agg(json_build_object(
+                                   'declaration_id', d.id, 'quantite', d.quantite,
+                                   'motif', d.motif, 'date_declaration', d.date_declaration))
+                            FROM declarations_article_offert d
+                           WHERE d.statut = 'en_attente'
+                             AND d.article_id = c.article_id
+                             AND d.site_id = c.site_id),
+                         '[]'::json
+                       ) AS declarations_offert_en_attente
                   FROM comptages_stock c
                   JOIN articles a ON a.id = c.article_id
                   LEFT JOIN regularisations_ecarts_comptage r ON r.comptage_id = c.id
