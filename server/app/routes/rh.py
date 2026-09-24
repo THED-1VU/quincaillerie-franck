@@ -1,8 +1,9 @@
 """Ressources humaines (chantier C6, cycle 16) — réservé au responsable,
 comme le dit le cahier des charges (§3.5) : un agent comptabilité peut
-seulement LIRE un employé par son nom pour y rattacher une dépense
-(``routes/transactions.py``), jamais gérer les fiches, absences ou
-avances lui-même.
+seulement LIRE la liste des employés actifs de son site, avec un jeu de
+colonnes restreint (``GET /employes``, chantier A, point f — choisir
+l'employé qui a offert un article), jamais créer/modifier une fiche, une
+absence ou une avance.
 
 Hors périmètre, volontairement : clôture de caisse (addendum, point g,
 non tranché) — sans rapport avec la RH, mais rappelé ici pour mémoire, ce
@@ -66,19 +67,38 @@ def creer_employe(
 @routeur.get("/employes")
 def lister_employes(
     request: Request,
-    session: Session = Depends(exiger_role("responsable")),
+    session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
 ):
+    """Élargie à l'agent comptabilité (chantier A, écran de déclaration
+    d'un article offert, point f) : il doit pouvoir choisir, dans une liste,
+    l'employé qui a physiquement offert l'article (migration 039,
+    ``employe_id`` obligatoire). La base l'y autorise déjà depuis la
+    migration 008 (``GRANT SELECT (id, nom_complet, poste, site_id, actif)
+    ON employes TO qf_agent_comptabilite``) — colonnes SANS
+    ``salaire_mensuel``/``telephone``/``type_contrat``/``date_embauche``,
+    réservées au responsable (§3.5 du CDC : « jamais gérer les fiches »).
+    Restreint aussi aux employés ACTIFS de son propre site — une saisie
+    rapide n'a pas besoin de voir l'ensemble du personnel, contrairement à
+    l'écran RH complet (responsable seul)."""
+    colonnes_responsable = (
+        "id AS employe_id, nom_complet, poste, telephone, type_contrat, "
+        "salaire_mensuel, site_id, actif"
+    )
+    colonnes_agent_comptabilite = "id AS employe_id, nom_complet, poste, site_id, actif"
+
     bd = obtenir_bd(request)
     with bd.connexion_pour(role_pg(session.role), utilisateur_id=session.utilisateur_id) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id AS employe_id, nom_complet, poste, telephone, type_contrat,
-                       salaire_mensuel, site_id, actif
-                  FROM employes
-                 ORDER BY nom_complet
-                """
-            )
+            if session.role == "responsable":
+                cur.execute(
+                    f"SELECT {colonnes_responsable} FROM employes ORDER BY nom_complet"
+                )
+            else:
+                cur.execute(
+                    f"SELECT {colonnes_agent_comptabilite} FROM employes"
+                    " WHERE actif = TRUE AND site_id = %s ORDER BY nom_complet",
+                    (session.site_id,),
+                )
             lignes = cur.fetchall()
 
     return {"employes": lignes}

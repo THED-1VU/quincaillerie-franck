@@ -308,11 +308,13 @@ class ReponseCasseDetail(BaseModel):
 
     declaration_id: int
     article_id: int
+    article_nom: str
     site_id: int
     quantite: float
     motif: str
     observation: Optional[str] = None
     declarant_id: int
+    declarant_nom: str
     date_declaration: datetime
     statut: str
 
@@ -352,6 +354,7 @@ class ReponseDeclarationRetourClient(BaseModel):
 class ReponseRetourClientDetail(BaseModel):
     declaration_id: int
     article_id: int
+    article_nom: str
     vente_id: int
     site_id: int
     quantite: float
@@ -359,6 +362,7 @@ class ReponseRetourClientDetail(BaseModel):
     etat_marchandise: str
     motif: Optional[str] = None
     declarant_id: int
+    declarant_nom: str
     date_declaration: datetime
     statut: str
 
@@ -407,14 +411,17 @@ class ReponseArticleOffertDetail(BaseModel):
 
     declaration_id: int
     article_id: int
+    article_nom: str
     site_id: int
     quantite: float
     valeur_normale: float
     vente_id: Optional[int] = None
     client_nom: Optional[str] = None
     employe_id: int
+    employe_nom: str
     motif: str
     declarant_id: int
+    declarant_nom: str
     date_declaration: datetime
     statut: str
 

@@ -9,12 +9,13 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Écran câblé (cycle 11) : création, modification, réception, transfert, casse et retours sont réels (<code>server/app/routes/articles.py</code>, <code>stock.py</code>). La reprise d'un stock initial (point j) et la sélection d'une réception d'origine par une liste (plutôt qu'un identifiant) restent hors périmètre.</div>
+<div class="simu">Écran câblé (cycles 11 et chantier A, point f) : création, modification, réception, transfert sont réels ; casse et retour client sont désormais des <strong>déclarations</strong> (aucun effet sur le stock tant que le responsable ne les a pas validées sur l'écran dédié, <code>declarations.html</code>) — corrigé au chantier A, les boutons pointaient vers des routes supprimées depuis le sous-chantier 2. La reprise d'un stock initial (point j) et la sélection d'une réception d'origine par une liste (plutôt qu'un identifiant) restent hors périmètre.</div>
 <div class="page">
   <header class="bandeau">
     <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
     <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
     <a class="btn btn--fantome" id="lien-retour" href="#">Retour</a>
+    <a class="btn btn--fantome" href="declarations.html" id="lien-declarations" hidden>Déclarations en attente</a>
     <a class="btn btn--fantome" href="rapports.html">Rapports</a>
     <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
   </header>
@@ -60,6 +61,7 @@
   $("bouton-deconnexion").addEventListener("click", deconnecter);
   afficherLogoBoutiqueDansBandeau();
   $("lien-retour").href = estResponsable ? "tableau-bord.html" : "inventaire.html";
+  $("lien-declarations").hidden = !estResponsable;
 
   let articles = [];
 
@@ -130,7 +132,7 @@
       actions.appendChild(bouton("Modifier", "modifier"));
       actions.appendChild(bouton("+ Réception", "reception"));
       actions.appendChild(bouton("Transférer", "transfert"));
-      if (estResponsable) actions.appendChild(bouton("Casse", "casse"));
+      actions.appendChild(bouton("Casse", "casse"));
       actions.appendChild(bouton("Retour client", "retour-client"));
       actions.appendChild(bouton("Retour fournisseur", "retour-fournisseur"));
       li.appendChild(actions);
@@ -175,6 +177,27 @@
       }
       contenu.appendChild(div);
       return input;
+    };
+
+    // Liste déroulante à options fixes (issue/état de la marchandise d'un
+    // retour client) — même structure que champ() ci-dessus, un <select>
+    // au lieu d'un <input>.
+    const champSelect = (id, libelle, options) => {
+      const div = document.createElement("div");
+      div.className = "champ";
+      const label = document.createElement("label");
+      label.className = "champ__label";
+      label.htmlFor = id;
+      label.textContent = libelle;
+      const select = document.createElement("select");
+      select.className = "champ__select";
+      select.id = id;
+      select.innerHTML = '<option value="">— Choisir —</option>' +
+        options.map((o) => `<option value="${o.valeur}">${o.libelle}</option>`).join("");
+      div.appendChild(label);
+      div.appendChild(select);
+      contenu.appendChild(div);
+      return select;
     };
 
     const boutonValider = document.createElement("button");
@@ -282,27 +305,50 @@
     }
 
     if (action === "casse") {
+      // Sous-chantier 2 (point f, migration 036) : la déclaration est un
+      // simple constat, SANS effet sur le stock — seule la validation par
+      // le responsable (écran declarations.html) décrémente réellement.
+      // Ouverte à l'agent stock ET au responsable (pas réservée, comme
+      // avant ce correctif).
       $("panneau-titre").textContent = "Casse / avarie — " + article.nom;
       const quantite = champ("f-quantite", "Quantité", "number");
       const motif = champ("f-motif", "Motif (obligatoire)");
-      boutonValider.textContent = "Enregistrer la casse";
+      boutonValider.textContent = "Déclarer la casse";
       boutonValider.addEventListener("click", async () => {
         const corps = { article_id: article.id, quantite: Number(quantite.value), motif: motif.value.trim() };
         if (article.site_id) corps.site_id = article.site_id;
-        await appeler("/stock/casse", "POST", corps, "Casse enregistrée.");
+        await appeler("/stock/casse/declarations", "POST", corps,
+          "Casse déclarée — en attente de validation par le responsable.");
       });
     }
 
     if (action === "retour-client") {
+      // Sous-chantier 2 (point f, migration 036) : déclaration SANS effet
+      // sur le stock ; issue et état de la marchandise obligatoires depuis
+      // ce cycle (absents de l'ancien formulaire, à l'origine de son
+      // dysfonctionnement — voir diagnostic du chantier A).
       $("panneau-titre").textContent = "Retour client — " + article.nom;
       const quantite = champ("f-quantite", "Quantité rendue", "number");
       const venteId = champ("f-vente-id", "Numéro de la vente d'origine", "number");
+      const issue = champSelect("f-issue", "Ce que devient le client", [
+        { valeur: "echange", libelle: "Échange contre un autre article" },
+        { valeur: "avoir_client", libelle: "Avoir (prochain achat)" },
+        { valeur: "remboursement_especes", libelle: "Remboursement en espèces" },
+      ]);
+      const etat = champSelect("f-etat", "État de la marchandise reprise", [
+        { valeur: "revendable", libelle: "Revendable (remise en stock)" },
+        { valeur: "invendable", libelle: "Invendable (perte, jamais remise en stock)" },
+      ]);
       const motif = champ("f-motif", "Motif (optionnel)");
-      boutonValider.textContent = "Enregistrer le retour";
+      boutonValider.textContent = "Déclarer le retour";
       boutonValider.addEventListener("click", async () => {
-        const corps = { article_id: article.id, vente_id: Number(venteId.value), quantite: Number(quantite.value) };
+        const corps = {
+          article_id: article.id, vente_id: Number(venteId.value), quantite: Number(quantite.value),
+          issue: issue.value, etat_marchandise: etat.value,
+        };
         if (motif.value.trim()) corps.motif = motif.value.trim();
-        await appeler("/stock/retours-client", "POST", corps, "Retour client enregistré.");
+        await appeler("/stock/retours-client/declarations", "POST", corps,
+          "Retour déclaré — en attente de validation par le responsable.");
       });
     }
 

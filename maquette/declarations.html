@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Déclarations en attente — Akuma</title>
+<link rel="icon" href="favicon.ico">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Écran câblé (chantier A, point f) : validation réelle des trois types de déclaration (casse, retour client, article offert — migrations 036 et 039). Réservé au responsable, seul rôle autorisé à valider. La déclaration elle-même se fait sur <code>stock.html</code> (casse, retour client) ou <code>vente.html</code> (article offert).</div>
+<div class="page">
+  <header class="bandeau">
+    <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <a class="btn btn--fantome" href="tableau-bord.html">Retour</a>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
+  </header>
+
+  <main class="contenu">
+    <h1>Déclarations en attente</h1>
+    <p style="color:var(--c-texte-doux); margin-top:calc(-1 * var(--e-2));">Une déclaration n'a aucun effet sur le stock tant qu'elle n'est pas validée ici — une déclaration ancienne est un signal, pas un oubli.</p>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <h2>Casse / avaries</h2>
+      <div id="zone-erreur-casse" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-casse"></ul>
+    </div>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <h2>Retours clients</h2>
+      <div id="zone-erreur-retours" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-retours"></ul>
+    </div>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <h2>Articles offerts</h2>
+      <div id="zone-erreur-offerts" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-offerts"></ul>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+(async function () {
+  "use strict";
+
+  const session = await exigerSession(["responsable"]);
+  if (!session) return;
+
+  const $ = (id) => document.getElementById(id);
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
+
+  const LIBELLE_ISSUE = {
+    echange: "Échange", avoir_client: "Avoir client", remboursement_especes: "Remboursement espèces",
+  };
+  const LIBELLE_ETAT = { revendable: "Revendable", invendable: "Invendable" };
+
+  function anciennete(dateDeclaration) {
+    const jours = Math.max(0, Math.floor((Date.now() - new Date(dateDeclaration)) / 86400000));
+    if (jours === 0) return "aujourd'hui";
+    if (jours === 1) return "depuis 1 jour";
+    return "depuis " + jours + " jours";
+  }
+
+  // --- Casse ---------------------------------------------------------------
+  async function chargerCasse() {
+    $("zone-erreur-casse").hidden = true;
+    try {
+      const declarations = await appelApi("/stock/casse/declarations");
+      const ul = $("liste-casse");
+      ul.innerHTML = "";
+      if (declarations.length === 0) {
+        ul.innerHTML = "<li><span>Aucune déclaration en attente.</span></li>";
+        return;
+      }
+      declarations.forEach((d) => {
+        const jours = Math.max(0, Math.floor((Date.now() - new Date(d.date_declaration)) / 86400000));
+        const li = creerLigneListe(
+          d.article_nom + " (" + d.quantite + ")",
+          (LIBELLE_SITE[d.site_id] || "Site " + d.site_id) + " · " + d.motif +
+            " · déclaré par " + d.declarant_nom,
+          anciennete(d.date_declaration),
+          jours >= 7 ? "pastille--alerte" : "pastille--info"
+        );
+        const bouton = document.createElement("button");
+        bouton.type = "button";
+        bouton.className = "btn btn--primaire";
+        bouton.style.marginLeft = "var(--e-2)";
+        bouton.textContent = "Valider";
+        bouton.addEventListener("click", async () => {
+          bouton.disabled = true;
+          try {
+            await appelApi("/stock/casse/declarations/" + d.declaration_id + "/valider", { method: "POST", body: "{}" });
+            await chargerCasse();
+          } catch (erreur) {
+            bouton.disabled = false;
+            afficherErreurServeur("zone-erreur-casse", erreur);
+          }
+        });
+        li.appendChild(bouton);
+        ul.appendChild(li);
+      });
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-casse", erreur);
+    }
+  }
+
+  // --- Retours clients -------------------------------------------------------
+  async function chargerRetours() {
+    $("zone-erreur-retours").hidden = true;
+    try {
+      const declarations = await appelApi("/stock/retours-client/declarations");
+      const ul = $("liste-retours");
+      ul.innerHTML = "";
+      if (declarations.length === 0) {
+        ul.innerHTML = "<li><span>Aucune déclaration en attente.</span></li>";
+        return;
+      }
+      declarations.forEach((d) => {
+        const li = creerLigneListe(
+          d.article_nom + " (" + d.quantite + ") — vente n°" + d.vente_id,
+          (LIBELLE_SITE[d.site_id] || "Site " + d.site_id) + " · " + LIBELLE_ISSUE[d.issue] +
+            " · " + LIBELLE_ETAT[d.etat_marchandise] +
+            (d.motif ? " · " + d.motif : "") +
+            " · déclaré par " + d.declarant_nom,
+          anciennete(d.date_declaration),
+          "pastille--info"
+        );
+
+        const zoneAction = document.createElement("div");
+        zoneAction.style.marginLeft = "var(--e-2)";
+
+        const bouton = document.createElement("button");
+        bouton.type = "button";
+        bouton.className = "btn btn--primaire";
+        bouton.textContent = "Valider";
+
+        const validerReellement = async (confirmationRemboursement) => {
+          bouton.disabled = true;
+          try {
+            await appelApi("/stock/retours-client/declarations/" + d.declaration_id + "/valider", {
+              method: "POST",
+              body: JSON.stringify({ confirmation_remboursement: confirmationRemboursement }),
+            });
+            await chargerRetours();
+          } catch (erreur) {
+            bouton.disabled = false;
+            afficherErreurServeur("zone-erreur-retours", erreur);
+          }
+        };
+
+        bouton.addEventListener("click", () => {
+          if (d.issue !== "remboursement_especes") {
+            validerReellement(false);
+            return;
+          }
+          // Confirmation explicite supplémentaire, exigée par l'API
+          // elle-même (migration 036) — jamais silencieuse pour un
+          // remboursement en espèces.
+          zoneAction.innerHTML = "";
+          const avertissement = document.createElement("p");
+          avertissement.style.color = "var(--c-alerte)";
+          avertissement.style.fontSize = "var(--t-xs)";
+          avertissement.textContent = "Confirmer le remboursement en espèces (crée une dépense) ?";
+          const confirmer = document.createElement("button");
+          confirmer.type = "button";
+          confirmer.className = "btn btn--primaire";
+          confirmer.textContent = "Oui, rembourser";
+          confirmer.addEventListener("click", () => validerReellement(true));
+          zoneAction.appendChild(avertissement);
+          zoneAction.appendChild(confirmer);
+        });
+
+        zoneAction.appendChild(bouton);
+        li.appendChild(zoneAction);
+        ul.appendChild(li);
+      });
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-retours", erreur);
+    }
+  }
+
+  // --- Articles offerts --------------------------------------------------
+  async function chargerOfferts() {
+    $("zone-erreur-offerts").hidden = true;
+    try {
+      const declarations = await appelApi("/stock/articles-offerts/declarations");
+      const ul = $("liste-offerts");
+      ul.innerHTML = "";
+      if (declarations.length === 0) {
+        ul.innerHTML = "<li><span>Aucune déclaration en attente.</span></li>";
+        return;
+      }
+      declarations.forEach((d) => {
+        let sousTexte = (LIBELLE_SITE[d.site_id] || "Site " + d.site_id) + " · offert par " + d.employe_nom;
+        if (d.vente_id) sousTexte += " · vente n°" + d.vente_id;
+        if (d.client_nom) sousTexte += " · pour " + d.client_nom;
+        sousTexte += " · " + d.motif + " · déclaré par " + d.declarant_nom + " · " + anciennete(d.date_declaration);
+        const li = creerLigneListe(
+          d.article_nom + " (" + d.quantite + ")",
+          sousTexte,
+          fcfa(d.valeur_normale),
+          "pastille--info"
+        );
+        const bouton = document.createElement("button");
+        bouton.type = "button";
+        bouton.className = "btn btn--primaire";
+        bouton.style.marginLeft = "var(--e-2)";
+        bouton.textContent = "Valider";
+        bouton.addEventListener("click", async () => {
+          bouton.disabled = true;
+          try {
+            await appelApi("/stock/articles-offerts/declarations/" + d.declaration_id + "/valider", { method: "POST", body: "{}" });
+            await chargerOfferts();
+          } catch (erreur) {
+            bouton.disabled = false;
+            afficherErreurServeur("zone-erreur-offerts", erreur);
+          }
+        });
+        li.appendChild(bouton);
+        ul.appendChild(li);
+      });
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-offerts", erreur);
+    }
+  }
+
+  await chargerCasse();
+  await chargerRetours();
+  await chargerOfferts();
+})();
+</script>
+</body>
+</html>

@@ -21,7 +21,7 @@
 </style>
 </head>
 <body>
-<div class="simu">Écran câblé (cycles 6 et 27) : catalogue, prix, TVA, numéro de facturier et vendeur <strong>sont tous réels et obligatoires</strong> (<code>POST /ventes</code>, addendum point c, décidé le 2026-09-13).</div>
+<div class="simu">Écran câblé (cycles 6, 27 et chantier A) : catalogue, prix, TVA, numéro de facturier et vendeur <strong>sont tous réels et obligatoires</strong> (<code>POST /ventes</code>, addendum point c, décidé le 2026-09-13). « Offrir un article » (point f) est une <strong>déclaration</strong>, sans effet sur le stock tant que le responsable ne l'a pas validée.</div>
 <div class="page">
   <header class="bandeau bandeau--vente">
     <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
@@ -52,6 +52,49 @@
         <div class="carte">
           <h2>Dernier ajout</h2>
           <p id="dernier-ajout" style="color:var(--c-texte-doux);">Aucun article ajouté pour le moment.</p>
+        </div>
+
+        <!-- Article offert (chantier A, point f, migration 039) : SANS
+             effet sur le stock tant que non validée par le responsable ;
+             distinct du panier — ce n'est pas une vente. -->
+        <div class="carte">
+          <div class="carte__titre">
+            <h2>Offrir un article</h2>
+            <button class="btn btn--secondaire" id="btn-ouvrir-offert" type="button">+ Offrir</button>
+          </div>
+          <p class="champ__aide">Sortie commerciale gratuite, distincte d'une remise — l'article est bien déduit du stock, sans effet immédiat (validation du responsable requise).</p>
+          <div id="bloc-offert" hidden style="margin-top:var(--e-4);">
+            <div class="champ">
+              <label class="champ__label" for="offert-article">Article</label>
+              <select class="champ__select" id="offert-article"><option value="">— Choisir —</option></select>
+            </div>
+            <div class="champ">
+              <label class="champ__label" for="offert-quantite">Quantité</label>
+              <input class="champ__saisie" id="offert-quantite" type="number" min="1" step="1" value="1">
+            </div>
+            <div class="champ">
+              <label class="champ__label" for="offert-employe">Employé qui l'offre</label>
+              <select class="champ__select" id="offert-employe"><option value="">— Choisir —</option></select>
+              <p class="champ__aide">Distinct de qui saisit la déclaration — obligatoire, même si c'est vous.</p>
+            </div>
+            <div class="champ">
+              <label class="champ__label" for="offert-motif">Motif</label>
+              <input class="champ__saisie" id="offert-motif" type="text" placeholder="ex. fidélité, compensation, démonstration">
+            </div>
+            <div class="champ">
+              <label class="champ__label" for="offert-vente">Vente liée (optionnel)</label>
+              <input class="champ__saisie" id="offert-vente" type="number" min="1" placeholder="ex. 42">
+              <p class="champ__aide">Le numéro de vente affiché après validation (« Vente n°42 enregistrée ») — laisser vide si ce n'est pas lié à un achat.</p>
+            </div>
+            <div class="champ">
+              <label class="champ__label" for="offert-client">Client (optionnel)</label>
+              <input class="champ__saisie" id="offert-client" type="text" placeholder="Nom du client, si connu">
+            </div>
+            <button class="btn btn--primaire" id="offert-valider" type="button">Déclarer</button>
+          </div>
+          <div id="zone-erreur-offert" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+          <div id="zone-succes-offert" class="erreur-champ" hidden
+               style="margin-top:var(--e-3); background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
         </div>
       </section>
 
@@ -242,6 +285,74 @@
   } catch (erreur) {
     afficherErreurServeur("zone-erreur-catalogue", erreur);
   }
+
+  // --- Article offert (chantier A, point f, migration 039) : SANS effet
+  // sur le stock, distinct du panier. ---
+  const offertArticleEl = $("offert-article");
+  const offertEmployeEl = $("offert-employe");
+  [...catalogue].sort((a, b) => a.nom.localeCompare(b.nom, "fr")).forEach((a) => {
+    const opt = document.createElement("option");
+    opt.value = String(a.id);
+    opt.textContent = a.nom;
+    offertArticleEl.appendChild(opt);
+  });
+
+  // L'employé qui offre (RH, actif) — GET /rh/employes élargie à l'agent
+  // comptabilité (chantier A) : le serveur filtre déjà par site ET par
+  // actif=TRUE pour lui ; pour un responsable (deux sites), le filtrage par
+  // site se fait ICI, côté écran, une fois le site de la vente connu.
+  async function rafraichirEmployesOfferts() {
+    offertEmployeEl.innerHTML = '<option value="">— Choisir —</option>';
+    try {
+      const donnees = await appelApi("/rh/employes");
+      const site = siteVenteActuel();
+      donnees.employes
+        .filter((e) => e.actif && (!site || e.site_id === site))
+        .sort((a, b) => a.nom_complet.localeCompare(b.nom_complet, "fr"))
+        .forEach((e) => {
+          const opt = document.createElement("option");
+          opt.value = String(e.employe_id);
+          opt.textContent = e.nom_complet;
+          offertEmployeEl.appendChild(opt);
+        });
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-offert", erreur);
+    }
+  }
+  await rafraichirEmployesOfferts();
+  siteVenteEl.addEventListener("change", rafraichirEmployesOfferts);
+
+  $("btn-ouvrir-offert").addEventListener("click", () => {
+    $("bloc-offert").hidden = !$("bloc-offert").hidden;
+    $("zone-erreur-offert").hidden = true;
+    $("zone-succes-offert").hidden = true;
+  });
+
+  $("offert-valider").addEventListener("click", async () => {
+    $("zone-erreur-offert").hidden = true;
+    $("zone-succes-offert").hidden = true;
+    const site = siteVenteActuel();
+    const corps = {
+      article_id: Number(offertArticleEl.value),
+      quantite: Number($("offert-quantite").value),
+      motif: $("offert-motif").value.trim(),
+      employe_id: Number(offertEmployeEl.value),
+    };
+    if (site) corps.site_id = site;
+    const venteLiee = $("offert-vente").value.trim();
+    if (venteLiee) corps.vente_id = Number(venteLiee);
+    const client = $("offert-client").value.trim();
+    if (client) corps.client_nom = client;
+    try {
+      await appelApi("/stock/articles-offerts/declarations", { method: "POST", body: JSON.stringify(corps) });
+      $("zone-succes-offert").hidden = false;
+      $("zone-succes-offert").textContent = "Article offert déclaré — en attente de validation par le responsable.";
+      offertArticleEl.value = ""; $("offert-quantite").value = "1"; offertEmployeEl.value = "";
+      $("offert-motif").value = ""; $("offert-vente").value = ""; $("offert-client").value = "";
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-offert", erreur);
+    }
+  });
 
   // --- Recherche + suggestions ---
 

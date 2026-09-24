@@ -231,7 +231,11 @@ def test_casse_liste_les_declarations_en_attente(client):
         "/stock/casse/declarations", headers=entete_autorisation(session_agent["jeton"]),
     )
     assert liste.status_code == 200, liste.text
-    assert any(d["motif"] == "pour la liste" and d["statut"] == "en_attente" for d in liste.json())
+    ligne = next(d for d in liste.json() if d["motif"] == "pour la liste" and d["statut"] == "en_attente")
+    # Chantier A (écran de validation) : noms lisibles, pas seulement des
+    # identifiants — sans quoi la liste serait inutilisable à l'écran.
+    assert ligne["article_nom"] == "Ciment CIM II 50 kg"
+    assert ligne["declarant_nom"]
 
 
 # ---------------------------------------------------------------------------
@@ -570,7 +574,28 @@ def test_article_offert_liste_les_declarations_en_attente(client):
         "/stock/articles-offerts/declarations", headers=entete_autorisation(session_compta["jeton"]),
     )
     assert liste.status_code == 200, liste.text
-    assert any(d["motif"] == "pour la liste" and d["statut"] == "en_attente" for d in liste.json())
+    ligne = next(d for d in liste.json() if d["motif"] == "pour la liste" and d["statut"] == "en_attente")
+    assert ligne["article_nom"] == "Ciment CIM II 50 kg"
+    assert ligne["employe_nom"] == "Employé Essai"
+    assert ligne["declarant_nom"]
+
+
+def test_retour_client_liste_les_declarations_en_attente(client):
+    vente_id = _creer_vente_test(client, "MAG-TESTLISTE01", quantite=1)
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    client.post(
+        "/stock/retours-client/declarations",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 1,
+              "issue": "echange", "etat_marchandise": "revendable", "motif": "pour la liste"},
+    )
+    liste = client.get(
+        "/stock/retours-client/declarations", headers=entete_autorisation(session_agent["jeton"]),
+    )
+    assert liste.status_code == 200, liste.text
+    ligne = next(d for d in liste.json() if d["motif"] == "pour la liste" and d["statut"] == "en_attente")
+    assert ligne["article_nom"] == "Ciment CIM II 50 kg"
+    assert ligne["declarant_nom"]
 
 
 # ---------------------------------------------------------------------------
