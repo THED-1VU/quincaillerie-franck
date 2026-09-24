@@ -179,15 +179,15 @@ class GestionnaireSessions:
 
 class LimiteurDebit:
     def __init__(self, max_essais: int, fenetre_secondes: int = 60) -> None:
-        self._max = max_essais
-        self._fenetre = fenetre_secondes
+        self.max_essais = max_essais
+        self.fenetre_secondes = fenetre_secondes
         self._historique: dict[str, list[float]] = {}
 
     def autorise(self, cle: str) -> bool:
         maintenant = time.monotonic()
         essais = self._historique.setdefault(cle, [])
-        essais[:] = [t for t in essais if maintenant - t < self._fenetre]
-        if len(essais) >= self._max:
+        essais[:] = [t for t in essais if maintenant - t < self.fenetre_secondes]
+        if len(essais) >= self.max_essais:
             return False
         essais.append(maintenant)
         return True

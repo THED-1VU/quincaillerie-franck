@@ -34,6 +34,7 @@ TRUNCATE TABLE
     avances_salaire, absences_conges, employes,
     stocks_sites, articles, fournisseurs,
     historique_parametres, parametres,
+    limitations_debit,
     utilisateurs
 RESTART IDENTITY CASCADE;
 

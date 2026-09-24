@@ -503,6 +503,28 @@ SELECT t_succes('035 · roles_utilisateur() restitue les rôles d''un compte',
   $$SELECT roles_utilisateur(2)$$);
 
 -- ============================================================================
+-- 11. Limiteur de débit PARTAGÉ (migration 038, chantier C11, cycle 44)
+-- ============================================================================
+SELECT t_succes('038 · première tentative autorisée',
+  $$SELECT tentative_autorisee('test_038', 3, 60)$$);
+
+SELECT t_succes('038 · deuxième tentative autorisée',
+  $$SELECT tentative_autorisee('test_038', 3, 60)$$);
+
+SELECT t_succes('038 · troisième tentative autorisée (seuil 3)',
+  $$SELECT tentative_autorisee('test_038', 3, 60)$$);
+
+SELECT t_valeur('038 · quatrième tentative refusée (compteur partagé)',
+  $$SELECT tentative_autorisee('test_038', 3, 60)::TEXT$$,
+  'false');
+
+SELECT t_succes('038 · réinitialisation du compteur',
+  $$SELECT reinitialiser_limitation('test_038')$$);
+
+SELECT t_succes('038 · de nouveau autorisée après réinitialisation',
+  $$SELECT tentative_autorisee('test_038', 3, 60)$$);
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''
