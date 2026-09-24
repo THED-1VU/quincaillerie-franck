@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<div class="simu">Écran câblé (cycles 7, 8, 16, 17 et 45) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour », « Articles offerts en attente de validation », « Écarts de stock (ventes) » (avec régularisation) et « Saisie rapide » (recette/dépense) sont toutes réelles.</div>
+<div class="simu">Écran câblé (cycles 7, 8, 16, 17, 45 et chantier A) : « Ventes du jour », « Alertes de stock faible », « Écarts d'inventaire du jour », « Articles offerts en attente de validation » (résumé, la liste complète et la validation vivent sur <code>declarations.html</code>), « Écarts de stock (ventes) » (avec régularisation) et « Saisie rapide » (recette/dépense) sont toutes réelles.</div>
 <div class="page">
   <header class="bandeau">
     <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
@@ -50,6 +50,7 @@
     <a class="btn btn--fantome" href="rh.html">Ressources humaines</a>
     <a class="btn btn--fantome" href="comptes.html">Comptes</a>
     <a class="btn btn--fantome" href="cloture-caisse.html">Clôture de caisse</a>
+    <a class="btn btn--fantome" href="declarations.html">Déclarations</a>
     <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
   </header>
 
@@ -96,8 +97,9 @@
       <section class="carte">
         <h2>Articles offerts en attente de validation</h2>
         <div id="zone-erreur-offerts" class="erreur-champ" hidden></div>
-        <ul class="liste-nue" id="liste-offerts"></ul>
-        <p class="champ__aide">Sans effet sur le stock tant que non validée (chantier C4/C5, point f) — une déclaration ancienne est un signal, pas un oubli.</p>
+        <p id="resume-offerts">Chargement…</p>
+        <a class="btn btn--secondaire" href="declarations.html">Voir et valider</a>
+        <p class="champ__aide">Sans effet sur le stock tant que non validée (chantier C4/C5, point f) — une déclaration ancienne est un signal, pas un oubli. Casse et retours clients en attente : sur le même écran dédié.</p>
       </section>
 
       <section class="carte">
@@ -374,27 +376,21 @@
   // signal, pas un oubli administratif » — l'ancienneté se calcule ICI,
   // depuis l'heure du navigateur, pour ne pas dépendre du fuseau serveur.
   function rendreOffertsEnAttente() {
+    // Résumé seulement : la liste complète, avec validation, vit sur
+    // declarations.html (chantier A) — éviter deux sources de vérité pour
+    // « en attente ». Ce résumé reste un signal rapide, cohérent avec le
+    // rôle de coup d'œil quotidien de cet écran.
     const lignes = filtrerParSite(donneesBrutes.offerts);
-    const ulO = $("liste-offerts");
-    ulO.innerHTML = "";
+    const p = $("resume-offerts");
     if (lignes.length === 0) {
-      ulO.innerHTML = "<li><span>Aucune déclaration en attente.</span></li>";
+      p.textContent = "Aucune déclaration en attente.";
       return;
     }
-    lignes.forEach((d) => {
-      const jours = Math.max(0, Math.floor((Date.now() - new Date(d.date_declaration)) / 86400000));
-      const anciennete = jours === 0 ? "aujourd'hui" : jours === 1 ? "depuis 1 jour" : "depuis " + jours + " jours";
-      let sousTexte = (LIBELLE_SITE[d.site_id] || "Site " + d.site_id) + " · " + d.employe_nom;
-      if (d.client_nom) sousTexte += " · pour " + d.client_nom;
-      sousTexte += " · " + d.motif;
-      const li = creerLigneListe(
-        d.article_nom + " (" + d.quantite + ")",
-        sousTexte,
-        anciennete,
-        jours >= 7 ? "pastille--alerte" : "pastille--info"
-      );
-      ulO.appendChild(li);
-    });
+    const joursMax = Math.max(...lignes.map((d) =>
+      Math.max(0, Math.floor((Date.now() - new Date(d.date_declaration)) / 86400000))
+    ));
+    const ancienneteTexte = joursMax === 0 ? "aujourd'hui" : joursMax === 1 ? "depuis 1 jour" : "depuis " + joursMax + " jours";
+    p.textContent = lignes.length + " déclaration(s) en attente — la plus ancienne : " + ancienneteTexte + ".";
   }
 
   function rendreTout() {

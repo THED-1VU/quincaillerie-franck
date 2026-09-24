@@ -37,10 +37,46 @@ def test_agent_comptabilite_ne_peut_pas_creer_employe(client):
     assert reponse.status_code == 403
 
 
-def test_lister_employes_reserve_au_responsable(client):
+def test_lister_employes_refuse_a_lagent_stock(client):
+    """L'agent stock n'a jamais eu besoin de choisir un employé (aucune
+    déclaration ne le lui demande) — reste refusé, contrairement à l'agent
+    comptabilité depuis le chantier A."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.get("/rh/employes", headers=entete_autorisation(session["jeton"]))
     assert reponse.status_code == 403
+
+
+def test_responsable_liste_tous_les_employes_toutes_colonnes(client):
+    """Comportement inchangé (cycle 16) : tous les sites, toutes les
+    colonnes, actifs ou non."""
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get("/rh/employes", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    employes = reponse.json()["employes"]
+    assert len(employes) >= 1
+    ligne = employes[0]
+    assert "salaire_mensuel" in ligne
+    assert "telephone" in ligne
+    assert "type_contrat" in ligne
+
+
+def test_agent_comptabilite_liste_les_employes_actifs_de_son_site_colonnes_restreintes(client):
+    """Chantier A (point f) : nécessaire pour choisir l'employé qui a
+    offert un article — jamais le salaire ni le téléphone (§3.5 du CDC,
+    « jamais gérer les fiches »), jamais un employé inactif ou d'un autre
+    site (la déclaration l'aurait de toute façon refusé, migration 039)."""
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.get("/rh/employes", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    employes = reponse.json()["employes"]
+    assert len(employes) >= 1
+    for ligne in employes:
+        assert ligne["site_id"] == 1
+        assert ligne["actif"] is True
+        assert "salaire_mensuel" not in ligne
+        assert "telephone" not in ligne
+        assert "type_contrat" not in ligne
+        assert "date_embauche" not in ligne
 
 
 def test_responsable_cree_une_absence_conge(client):

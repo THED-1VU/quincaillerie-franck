@@ -175,9 +175,13 @@ def lister_declarations_casse(
     ) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id AS declaration_id, article_id, site_id, quantite, motif, observation,"
-                " declarant_id, date_declaration, statut"
-                " FROM declarations_casse WHERE statut = 'en_attente' ORDER BY date_declaration"
+                "SELECT c.id AS declaration_id, c.article_id, a.nom AS article_nom, c.site_id,"
+                " c.quantite, c.motif, c.observation, c.declarant_id, u.nom_complet AS declarant_nom,"
+                " c.date_declaration, c.statut"
+                " FROM declarations_casse c"
+                " JOIN articles a ON a.id = c.article_id"
+                " JOIN utilisateurs u ON u.id = c.declarant_id"
+                " WHERE c.statut = 'en_attente' ORDER BY c.date_declaration"
             )
             lignes = cur.fetchall()
 
@@ -271,9 +275,13 @@ def lister_declarations_retour_client(
     ) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id AS declaration_id, article_id, vente_id, site_id, quantite, issue,"
-                " etat_marchandise, motif, declarant_id, date_declaration, statut"
-                " FROM declarations_retour_client WHERE statut = 'en_attente' ORDER BY date_declaration"
+                "SELECT r.id AS declaration_id, r.article_id, a.nom AS article_nom, r.vente_id,"
+                " r.site_id, r.quantite, r.issue, r.etat_marchandise, r.motif, r.declarant_id,"
+                " u.nom_complet AS declarant_nom, r.date_declaration, r.statut"
+                " FROM declarations_retour_client r"
+                " JOIN articles a ON a.id = r.article_id"
+                " JOIN utilisateurs u ON u.id = r.declarant_id"
+                " WHERE r.statut = 'en_attente' ORDER BY r.date_declaration"
             )
             lignes = cur.fetchall()
 
@@ -370,9 +378,15 @@ def lister_declarations_article_offert(
     ) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id AS declaration_id, article_id, site_id, quantite, valeur_normale,"
-                " vente_id, client_nom, employe_id, motif, declarant_id, date_declaration, statut"
-                " FROM declarations_article_offert WHERE statut = 'en_attente' ORDER BY date_declaration"
+                "SELECT d.id AS declaration_id, d.article_id, a.nom AS article_nom, d.site_id,"
+                " d.quantite, d.valeur_normale, d.vente_id, d.client_nom, d.employe_id,"
+                " e.nom_complet AS employe_nom, d.motif, d.declarant_id, u.nom_complet AS declarant_nom,"
+                " d.date_declaration, d.statut"
+                " FROM declarations_article_offert d"
+                " JOIN articles a ON a.id = d.article_id"
+                " JOIN employes e ON e.id = d.employe_id"
+                " JOIN utilisateurs u ON u.id = d.declarant_id"
+                " WHERE d.statut = 'en_attente' ORDER BY d.date_declaration"
             )
             lignes = cur.fetchall()
 
