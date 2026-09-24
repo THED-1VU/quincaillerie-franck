@@ -8,6 +8,10 @@ bcrypt==4.2.1
 pytest==8.3.5
 httpx==0.28.1
 
+# Chantier C13 (cycle 48) : reprise automatique du seul test flaky identifié
+# (test_caisse), sans masquer un échec déterministe.
+pytest-rerunfailures==16.0
+
 # Chantier C11 (cycle 47) : python-multipart monté à 0.0.31 après l'audit
 # pip-audit du 2026-09-24 (PYSEC-2026-1852/3036/3037/3038/3039/3040).
 python-multipart==0.0.31
