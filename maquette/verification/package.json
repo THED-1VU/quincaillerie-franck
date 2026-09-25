@@ -11,6 +11,7 @@
     "inventaire": "node verifier-inventaire-reel.mjs",
     "echappement": "node verifier-echappement-html.mjs",
     "stock": "node verifier-stock-reel.mjs",
+    "exploitation": "node verifier-exploitation-reel.mjs",
     "rapports": "node verifier-rapports-reel.mjs",
     "rh": "node verifier-rh-reel.mjs",
     "comptes": "node verifier-comptes-reel.mjs",

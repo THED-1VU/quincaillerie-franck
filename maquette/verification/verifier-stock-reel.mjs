@@ -1,15 +1,27 @@
-/* Vérifie, PAR EXÉCUTION RÉELLE, l'écran stock.html (cycle 11) : donne une
-   interface aux 6 opérations d'articles et de stock du cycle 9 (création,
-   modification, réception, transfert, casse, retours), ainsi qu'à la
-   fonction de sélection inter-site du cycle 11 (migration 015).
+/* Vérifie, PAR EXÉCUTION RÉELLE, l'écran stock.html (cycle 11) ET l'écran
+   declarations.html (chantier A, point f) : création, modification,
+   réception, transfert, retour fournisseur — et, depuis le sous-chantier 2
+   (point f, migration 036), les DÉCLARATIONS de casse et de retour client
+   (aucun effet sur le stock tant que le responsable ne valide pas sur
+   declarations.html), plus la validation d'un article offert.
+
+   RÉÉCRIT AU CYCLE 51 (chantier C13, 2026-09-25) : l'ancienne version
+   testait la casse et le retour client à un seul temps (stock décrémenté
+   immédiatement) et affirmait que l'agent stock n'a pas de bouton « Casse »
+   — les trois contredisaient le comportement livré par le point f et le
+   chantier A ; la suite était rouge sans que personne ne le voie (la CI
+   n'exécute que pytest).
 
    1. Un agent stock (Magasin) crée un article, en fait la réception, le
-      transfère au Comptoir, fait un retour client et un retour fournisseur
-      — jamais de bouton « Casse » pour lui.
-   2. Le responsable modifie le prix d'un article et enregistre une casse.
+      transfère au Comptoir, DÉCLARE un retour client (issue + état) et une
+      casse, fait un retour fournisseur — le stock ne bouge que pour la
+      réception, le transfert et le retour fournisseur.
+   2. Le responsable modifie le prix d'un article, puis valide sur
+      declarations.html : la casse (décrémente), le retour client revendable
+      (réintègre) et un article offert (décrémente) — effets vérifiés en
+      base à chaque étape.
    3. AUCUN montant FCFA, AUCUN champ de prix n'atteint la page ni les
-      réponses réseau vues par l'agent stock — prouvé par capture ET par
-      inspection du DOM et du réseau, pas seulement par lecture du code.
+      réponses réseau vues par l'agent stock.
    4. Layout aux 5 largeurs (360/390/768/1366/1920), cibles ≥ 44 px.
 
    Prérequis : serveur démarré sur SERVEUR_URL, servant /app (cycle 5).
@@ -55,6 +67,16 @@ function psqlValeur(sql) {
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } }).toString().trim();
 }
 
+// Stock du Ciment (article 1) au Magasin (site 1).
+function stockCiment() {
+  return Number(psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;"));
+}
+
+// Nombre de déclarations EN ATTENTE d'une table de déclaration.
+function nbEnAttente(table) {
+  return psqlValeur(`SELECT count(*) FROM ${table} WHERE statut = 'en_attente';`);
+}
+
 console.log("== Préparation de la base (jeu d'essai + comptes de test) ==");
 execFileSync(PSQL, [
   "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
@@ -64,7 +86,7 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_RESPONSABLE}', gen_salt('bf', 12)) WHERE identifiant='resp';`);
 
 // Une vente réelle du Magasin (site 1) portant sur « Ciment CIM II 50 kg »
-// (article 1), pour tester le retour client contre une vente réelle.
+// (article 1), pour tester la déclaration de retour client contre une vente.
 psql(`INSERT INTO ventes (id, site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc, utilisateur_caisse_id, mode_paiement, date_encaissement)
        VALUES (900, 1, 4, 'payee', 6500, 0, 0, 6500, 1, 'especes', NOW());`);
 psql(`INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id) VALUES (900, 1, 2, 6500, 1);`);
@@ -120,7 +142,7 @@ async function validerPanneau(page) {
 const LARGEURS = [360, 390, 768, 1366, 1920];
 
 // ============================================================================
-// 1. Agent stock (Magasin) : les 5 opérations qui lui sont ouvertes
+// 1. Agent stock (Magasin) : opérations ouvertes + DÉCLARATIONS sans effet
 // ============================================================================
 {
   const { page } = await nouvellePage(390, 844);
@@ -154,11 +176,10 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   // --- Réception sur « Ciment » ---
   await ouvrirArticle(page, "Ciment", "+ Réception");
   await page.fill("#f-quantite", "10");
-  await page.fill("#f-motif", "Livraison test cycle 11");
+  await page.fill("#f-motif", "Livraison test cycle 51");
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresReception = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;");
-  verifier(stockApresReception === "40", `agent stock : réception réelle (stock Ciment = ${stockApresReception}, attendu 40)`);
+  verifier(stockCiment() === 40, `agent stock : réception réelle (stock Ciment = ${stockCiment()}, attendu 40)`);
 
   // --- Transfert de « Ciment » vers le Comptoir ---
   await ouvrirArticle(page, "Ciment", "Transférer");
@@ -167,20 +188,22 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   verifier(optionsDestination.some((t) => t.includes("Comptoir")), "agent stock : sélecteur de transfert propose le site de destination Comptoir");
   await page.selectOption("#panneau-contenu select", { label: optionsDestination.find((t) => t.includes("Comptoir")) });
   await page.fill("#f-quantite", "5");
-  await page.fill("#f-motif", "Réappro comptoir, test cycle 11");
+  await page.fill("#f-motif", "Réappro comptoir, test cycle 51");
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresTransfert = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;");
-  verifier(stockApresTransfert === "35", `agent stock : transfert réel (stock Ciment = ${stockApresTransfert}, attendu 35)`);
+  verifier(stockCiment() === 35, `agent stock : transfert réel (stock Ciment = ${stockCiment()}, attendu 35)`);
 
-  // --- Retour client sur « Ciment », contre la vraie vente n°900 ---
+  // --- DÉCLARATION de retour client sur « Ciment », contre la vente n°900 ---
+  // Sous-chantier 2 (point f) : déclaration SANS effet sur le stock.
   await ouvrirArticle(page, "Ciment", "Retour client");
   await page.fill("#f-quantite", "1");
   await page.fill("#f-vente-id", VENTE_ID);
+  await page.selectOption("#f-issue", "echange");
+  await page.selectOption("#f-etat", "revendable");
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresRetourClient = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;");
-  verifier(stockApresRetourClient === "36", `agent stock : retour client réel (stock Ciment = ${stockApresRetourClient}, attendu 36)`);
+  verifier(stockCiment() === 35, `agent stock : déclaration de retour client SANS effet stock (stock Ciment = ${stockCiment()}, attendu 35)`);
+  verifier(nbEnAttente("declarations_retour_client") === "1", "agent stock : la déclaration de retour client est en attente en base");
 
   // --- Retour fournisseur, contre la réception faite plus haut ---
   const idReception = psqlValeur(
@@ -191,14 +214,17 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await page.fill("#f-mouvement-id", idReception);
   await validerPanneau(page);
   await attendreSucces(page);
-  const stockApresRetourFournisseur = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 1 AND site_id = 1;");
-  verifier(stockApresRetourFournisseur === "34", `agent stock : retour fournisseur réel (stock Ciment = ${stockApresRetourFournisseur}, attendu 34)`);
+  verifier(stockCiment() === 33, `agent stock : retour fournisseur réel (stock Ciment = ${stockCiment()}, attendu 33)`);
 
-  // --- Pas de bouton Casse pour un agent stock ---
-  await page.fill("#recherche", "Ciment");
-  const ligneCiment = page.locator("#liste-articles li", { hasText: "Ciment" }).first();
-  verifier(await ligneCiment.getByRole("button", { name: "Casse", exact: true }).count() === 0,
-    "agent stock : aucun bouton « Casse » (réservée au responsable)");
+  // --- DÉCLARATION de casse par l'agent stock (ouverte depuis le
+  // sous-chantier 2), sans effet sur le stock ---
+  await ouvrirArticle(page, "Ciment", "Casse");
+  await page.fill("#f-quantite", "1");
+  await page.fill("#f-motif", "Sac déchiré, essai cycle 51");
+  await validerPanneau(page);
+  await attendreSucces(page);
+  verifier(stockCiment() === 33, `agent stock : déclaration de casse SANS effet stock (stock Ciment = ${stockCiment()}, attendu 33)`);
+  verifier(nbEnAttente("declarations_casse") === "1", "agent stock : la déclaration de casse est en attente en base");
 
   // --- FCFA toujours absent après toutes ces opérations ---
   const texteDomFinal = await page.evaluate(() => document.body.innerText);
@@ -223,7 +249,9 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
 }
 
 // ============================================================================
-// 2. Responsable : modification (prix) et casse
+// 2. Responsable : modification de prix, puis validation des déclarations
+//    sur declarations.html (casse -> décrémente, retour revendable ->
+//    réintègre, article offert -> décrémente)
 // ============================================================================
 {
   const { page } = await nouvellePage();
@@ -242,13 +270,56 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   );
   verifier(traceModif === "1", "responsable : modification de prix tracée dans historique_prix_articles");
 
-  await ouvrirArticle(page, "Fer", "Casse");
-  await page.fill("#f-quantite", "1");
-  await page.fill("#f-motif", "Barre pliée, essai cycle 11");
-  await validerPanneau(page);
-  await attendreSucces(page);
-  const stockApresCasse = psqlValeur("SELECT quantite_stock FROM stocks_sites WHERE article_id = 2 AND site_id = 1;");
-  verifier(stockApresCasse === "39", `responsable : casse réelle (stock Fer = ${stockApresCasse}, attendu 39)`);
+  // --- Déclaration d'un article offert (créée ici par l'API : la
+  // déclaration n'a pas encore d'écran dédié côté vente) ---
+  const declarationOfferte = await page.evaluate(async () => {
+    const session = JSON.parse(sessionStorage.getItem("qf_session"));
+    const reponse = await fetch("/stock/articles-offerts/declarations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.jeton },
+      body: JSON.stringify({
+        article_id: 1, site_id: 1, quantite: 1,
+        motif: "Geste commercial, essai cycle 51", employe_id: 1,
+      }),
+    });
+    return { statut: reponse.status, corps: await reponse.json() };
+  });
+  verifier(declarationOfferte.statut === 201, "responsable : déclaration d'article offert créée (API)");
+
+  // --- declarations.html : la casse en attente est validée et décrémente ---
+  await page.goto(`${SERVEUR_URL}/app/declarations.html`, { waitUntil: "networkidle" });
+  verifier(page.url().endsWith("declarations.html"), "responsable : accès à declarations.html");
+  const ligneCasse = page.locator("#liste-casse li", { hasText: "Ciment" }).first();
+  verifier(await ligneCasse.count() > 0, "declarations : la casse déclarée par l'agent apparaît en attente");
+  const [reponseValidationCasse] = await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/stock/casse/declarations/") && r.request().method() === "POST", { timeout: 10000 }),
+    ligneCasse.getByRole("button", { name: "Valider" }).click(),
+  ]);
+  verifier(reponseValidationCasse.ok(), "declarations : validation de la casse acceptée par le serveur");
+  await page.waitForFunction(() => document.querySelectorAll("#liste-casse li").length === 1, { timeout: 5000 });
+  verifier(stockCiment() === 32, `responsable : validation de la casse décrémente réellement (stock Ciment = ${stockCiment()}, attendu 32)`);
+
+  // --- declarations.html : retour client revendable validé -> réintègre ---
+  const ligneRetour = page.locator("#liste-retours li", { hasText: "vente n°900" }).first();
+  verifier(await ligneRetour.count() > 0, "declarations : le retour client déclaré par l'agent apparaît en attente");
+  const [reponseValidationRetour] = await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/stock/retours-client/declarations/") && r.request().method() === "POST", { timeout: 10000 }),
+    ligneRetour.getByRole("button", { name: "Valider" }).click(),
+  ]);
+  verifier(reponseValidationRetour.ok(), "declarations : validation du retour client acceptée par le serveur");
+  await page.waitForFunction(() => document.querySelectorAll("#liste-retours li").length === 1, { timeout: 5000 });
+  verifier(stockCiment() === 33, `responsable : retour revendable réintégré (stock Ciment = ${stockCiment()}, attendu 33)`);
+
+  // --- declarations.html : article offert validé -> décrémente ---
+  const ligneOffert = page.locator("#liste-offerts li", { hasText: "Fer" }).first();
+  verifier(await ligneOffert.count() > 0, "declarations : l'article offert déclaré apparaît en attente");
+  const [reponseValidationOffert] = await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/stock/articles-offerts/declarations/") && r.request().method() === "POST", { timeout: 10000 }),
+    ligneOffert.getByRole("button", { name: "Valider" }).click(),
+  ]);
+  verifier(reponseValidationOffert.ok(), "declarations : validation de l'article offert acceptée par le serveur");
+  await page.waitForFunction(() => document.querySelectorAll("#liste-offerts li").length === 1, { timeout: 5000 });
+  verifier(stockCiment() === 32, `responsable : article offert décrémenté (stock Ciment = ${stockCiment()}, attendu 32)`);
 
   for (const largeur of LARGEURS) {
     await page.setViewportSize({ width: largeur, height: largeur < 700 ? 780 : largeur < 1400 ? 800 : 960 });
