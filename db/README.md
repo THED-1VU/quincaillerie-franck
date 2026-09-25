@@ -239,6 +239,45 @@ choisit le rôle effectif de la requête pour le `SET ROLE` PostgreSQL.
 Question 3 du point h (détail des prix vs total seul) : **en attente**,
 terrain vente réservé au point f.
 
+### Chargement du stock initial réel (point j, migration 041)
+
+Décision du propriétaire (2026-09-19, addendum point j ; convention du seuil
+validée le 2026-09-25) : le chargement initial du stock réel est un
+mouvement `inventaire_initial` daté, tracé, **jamais confondu** avec une
+réception fournisseur — seule voie d'écriture : `enregistrer_inventaire_initial()`
+(migration 041, `SECURITY DEFINER`, réservée à `qf_responsable`), seuil
+d'alerte recalculé à 20 % de la quantité (même convention que
+`enregistrer_entree_stock()`), arrondi à l'entier pour un article
+n'autorisant pas les quantités décimales. Périmètre de ce cycle : le STOCK
+seul (le crédit client, point b, n'est pas construit — chantier séparé).
+
+Outil console (même schéma que `rapprocher_articles.ps1` ci-dessus, mais en
+Python — `openpyxl`/`psycopg` sont déjà des dépendances serveur) :
+
+```bash
+# TOUJOURS une simulation d'abord (par défaut, aucune écriture — le ROLLBACK
+# est systématique, y compris en cas d'erreur) :
+python db/outils/importer_stock_initial.py --fichier stock.xlsx --utilisateur-id 1
+
+# Puis, seulement après relecture du rapport, l'exécution réelle :
+python db/outils/importer_stock_initial.py --fichier stock.xlsx --utilisateur-id 1 --executer
+```
+
+Colonnes attendues (première ligne = en-têtes) : `nom, categorie, zone,
+unite, site, fournisseur, prix_achat, prix_vente, quantite`. Un fournisseur
+absent du référentiel n'est **jamais créé silencieusement** — il faut
+`--confirmer-fournisseurs`. Modèle "une fiche, N stocks de site" (cycle 35) :
+un `nom` déjà présent au catalogue réutilise la fiche existante (nouveau
+site), ce n'est pas un homonyme à rapprocher. Idempotence : rejouer le même
+fichier ne recharge jamais deux fois la même ligne (identifiant = nom du
+fichier + numéro de ligne, porté dans le motif du mouvement) ; un même
+article/site peut en revanche recevoir plusieurs chargements réellement
+distincts (zones différentes) — c'est voulu, additif.
+
+**Aucune annulation possible après un chargement réel** (l'historique n'est
+jamais effacé, comme partout ailleurs dans ce projet) — la simulation est le
+seul filet de sécurité, à ne jamais sauter.
+
 ---
 
 ## Ce que chaque migration corrige
