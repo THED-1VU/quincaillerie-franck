@@ -207,7 +207,7 @@ def test_export_ventes_agent_comptabilite_limite_a_son_site(client):
             "site_id": 2,
             "mode_paiement": "especes",
             "numero_facturier": "CPT-TEST0002",
-            "vendeur_id": 1,
+            "vendeur_id": 2,  # « Employée Comptoir » — l'employé 1 est du Magasin, site 1
             "lignes": [{"article_id": 3, "quantite": 1, "prix_unitaire": 800}],
         },
     )

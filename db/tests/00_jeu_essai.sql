@@ -116,6 +116,10 @@ INSERT INTO stocks_sites (article_id, site_id, quantite_stock, seuil_alerte) VAL
   (3, 2, 100, 20),
   (4, 1,   1, 1);
 
+-- Un employé par site (chantier B, point c : le vendeur d'une vente est une
+-- fiche employé, migration 040) — sans le second, aucun employé valide
+-- n'existe pour une vente au Comptoir.
 INSERT INTO employes (id, nom_complet, poste, type_contrat, salaire_mensuel, site_id, date_embauche) VALUES
-  (1, 'Employé Essai', 'Manutentionnaire', 'permanent', 60000, 1, '2026-01-15');
-SELECT setval('employes_id_seq', 1, TRUE);
+  (1, 'Employé Essai', 'Manutentionnaire', 'permanent', 60000, 1, '2026-01-15'),
+  (2, 'Employée Comptoir', 'Vendeuse', 'permanent', 55000, 2, '2026-02-01');
+SELECT setval('employes_id_seq', 2, TRUE);

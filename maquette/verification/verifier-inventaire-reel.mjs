@@ -172,9 +172,11 @@ const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\
   await pageCompta.waitForFunction(() => document.getElementById("panier").textContent.includes("rare"), { timeout: 5000 });
   await pageCompta.fill(".panier__ligne input.panier__mini", "3");
   await pageCompta.locator(".panier__ligne input.panier__mini").first().dispatchEvent("input");
-  // N° facturier obligatoire (addendum point c, cycle 27) — le vendeur est
-  // déjà présélectionné.
+  // N° facturier obligatoire (addendum point c, cycle 27). Vendeur = une
+  // fiche employé depuis le chantier B (migration 040), plus jamais
+  // présélectionné — choix manuel explicite ici.
   await pageCompta.fill("#numero-facturier", "MAG-INV01");
+  await pageCompta.selectOption("#vendeur", "1");
   await pageCompta.keyboard.press("F9");
   await pageCompta.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
   await Promise.all([

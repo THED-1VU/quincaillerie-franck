@@ -77,12 +77,12 @@ async function connexionApi(identifiant, motDePasse) {
   return corps.jeton;
 }
 
-async function creerVente(jeton, articleId, prixUnitaire, numeroFacturier) {
+async function creerVente(jeton, articleId, prixUnitaire, numeroFacturier, vendeurId) {
   const r = await fetch(`${SERVEUR_URL}/ventes`, {
     method: "POST",
     headers: { Authorization: `Bearer ${jeton}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      mode_paiement: "especes", numero_facturier: numeroFacturier, vendeur_id: 1,
+      mode_paiement: "especes", numero_facturier: numeroFacturier, vendeur_id: vendeurId,
       lignes: [{ article_id: articleId, quantite: 1, prix_unitaire: prixUnitaire }],
     }),
   });
@@ -94,12 +94,14 @@ async function creerVente(jeton, articleId, prixUnitaire, numeroFacturier) {
 // Article 1 (Ciment) appartient au Magasin (site 1), article 3 (Clou) au
 // Comptoir (site 2) — voir db/tests/00_jeu_essai.sql. Numéro de facturier
 // et vendeur réels et obligatoires depuis le cycle 27 (addendum point c).
+// vendeur_id référence désormais un EMPLOYÉ, pas un compte (chantier B,
+// migration 040) — employé 1 au Magasin, employé 2 au Comptoir.
 const jetonComptaMagasin = await connexionApi("magasin.compta", MDP_AGENT_COMPTA);
-const venteMagasin = await creerVente(jetonComptaMagasin, 1, 6500, "MAG-CAISSE01");
+const venteMagasin = await creerVente(jetonComptaMagasin, 1, 6500, "MAG-CAISSE01", 1);
 const jourMagasin = psqlValeur(`SELECT date_encaissement::date FROM ventes WHERE id = ${venteMagasin.vente_id};`);
 
 const jetonComptaComptoir = await connexionApi("comptoir.compta", MDP_AGENT_COMPTA_COMPTOIR);
-const venteComptoir = await creerVente(jetonComptaComptoir, 3, 3200, "CPT-CAISSE01");
+const venteComptoir = await creerVente(jetonComptaComptoir, 3, 3200, "CPT-CAISSE01", 2);
 const jourComptoir = psqlValeur(`SELECT date_encaissement::date FROM ventes WHERE id = ${venteComptoir.vente_id};`);
 
 console.log(`Vente Magasin (site 1) : ${venteMagasin.total_ttc} FCFA le ${jourMagasin}`);

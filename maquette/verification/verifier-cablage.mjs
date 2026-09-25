@@ -298,11 +298,11 @@ for (const largeur of LARGEURS) {
   );
 
   // Numéro de facturier + vendeur, réels et obligatoires depuis le cycle 27
-  // (addendum point c) : le vendeur est déjà présélectionné (l'agent
-  // comptabilité connecté figure dans sa propre liste), seul le numéro
-  // reste à saisir, comme un vrai comptable le ferait depuis le carnet
-  // papier.
+  // (addendum point c). Vendeur = une fiche employé depuis le chantier B
+  // (migration 040), plus jamais présélectionné (choix manuel toujours,
+  // décision du 2026-09-25) — "1" (Employé Essai, Magasin/site 1).
   await page.fill("#numero-facturier", "MAG-CABLAGE01");
+  await page.selectOption("#vendeur", "1");
 
   // Validation RÉELLE depuis le cycle 6 (chantier C5, POST /ventes) : plus de
   // mention SIMULATION, un vrai numéro de vente apparaît. Le contrôle détaillé

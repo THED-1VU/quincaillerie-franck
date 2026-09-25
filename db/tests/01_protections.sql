@@ -613,6 +613,34 @@ SELECT t_valeur('039 · stock final cohérent avec les mouvements ci-dessus',
   (SELECT (:'stock_avant_offert'::NUMERIC - 3)::TEXT));
 
 -- ============================================================================
+-- 13. Vendeur = fiche employé, pas un compte utilisateur (migration 040,
+--     addendum point c, question 3 tranchée le 2026-09-19, livrée le
+--     2026-09-25). La règle « même site ou actif » est vérifiée côté
+--     Python (server/app/routes/ventes.py, pas de fonction SECURITY
+--     DEFINER pour l'enregistrement d'une vente) — seule la contrainte de
+--     clé étrangère elle-même relève de ce niveau SQL direct.
+-- ============================================================================
+
+-- vendeur_id doit référencer un employé RÉEL — un identifiant inexistant
+-- est refusé par la seule contrainte de clé étrangère, sans avoir besoin
+-- de l'API.
+SELECT t_refus('040 · vente avec un vendeur (employé) inexistant refusée',
+  $$UPDATE ventes SET vendeur_id = 999999 WHERE id = 900$$);
+
+-- Démontre le changement de sémantique lui-même : un ancien identifiant de
+-- COMPTE utilisateur (ex. 4, agent comptabilité du jeu d'essai) n'est plus
+-- un vendeur valide, puisque employes n'a que les id 1 et 2.
+SELECT t_refus('040 · un identifiant de compte utilisateur nest plus un vendeur valide',
+  $$UPDATE ventes SET vendeur_id = 4 WHERE id = 900$$);
+
+-- Un employé réel (id 1, jeu d'essai) est accepté par la contrainte —
+-- aucune vérification de site ici, elle est côté Python.
+SELECT t_succes('040 · vente avec un vendeur (employé) réel acceptée',
+  $$UPDATE ventes SET vendeur_id = 1 WHERE id = 900$$);
+
+UPDATE ventes SET vendeur_id = NULL WHERE id = 900;
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''

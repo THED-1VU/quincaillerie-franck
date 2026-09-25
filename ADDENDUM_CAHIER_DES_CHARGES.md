@@ -396,6 +396,21 @@ rapprochement de caisse.
 > **chaque soir qui a vendu quoi et à quel prix** : c'est le rapport par
 > employé mentionné ci-dessus qui répond à ce besoin, une fois le chantier
 > mené.
+>
+> **Livré (chantier B, 2026-09-25, migration 040).** `ventes.vendeur_id`
+> référence désormais `employes(id)`, plus `utilisateurs(id)` ;
+> `GET /ventes/vendeurs` interroge `employes` (actifs, du site — ou
+> `site_id` NULL, couvre les deux, même convention que
+> `declarations_article_offert.employe_id`, migration 039).
+> Confirmé le même jour : le projet est encore avant son premier
+> lancement réel (point j non traité), aucune vente réelle à reprendre —
+> la « reprise des lignes déjà saisies » anticipée ci-dessus ne s'est pas
+> posée. **Le lien structurel « un compte appartient toujours à un
+> employé » reste NON construit**, volontairement laissé hors du
+> périmètre de ce chantier (la présélection automatique du vendeur, qui
+> l'aurait exploité, est abandonnée — choix manuel désormais systématique) ;
+> le rapport « écarts de prix par vendeur »/« par employé » reste
+> également non construit (question 5 du seuil, ci-dessus, non ré-ouverte).
 
 **Contexte.** La saisie des ventes est faite **a posteriori** par le comptable, d'après le
 **facturier papier** tenu par le responsable après négociation. Le schéma ne stocke ni la
@@ -1165,7 +1180,7 @@ prestataire et **incapable de reconstruire, corriger ou reprendre** l'outil.
 |---|---|---|
 | a | **Modèle de transfert inter-sites** | **Décidé cycle 9** (questions 2-3) : opération atomique sortie+entrée, sans recalcul de seuil — questions 1, 4, 5 restent ouvertes, sans effet bloquant |
 | b | Créance client / vente à crédit | Statu quo confirmé cycle 6 : **désactivé**, C5/C6 attendent toujours les 6 questions |
-| c | **Numéro facturier + vendeur obligatoires** | **Décidé 2026-09-13** : un facturier par site (préfixe MAG-/CPT-) — questions 2-5 (format exact, vendeurs sans compte, blocage vs. alerte, seuil de validation) ouvertes, sans effet bloquant sur le principe |
+| c | **Numéro facturier + vendeur obligatoires** | **Décidé 2026-09-13** : un facturier par site (préfixe MAG-/CPT-). **Question 3 décidée 2026-09-19, livrée 2026-09-25 (chantier B, migration 040)** : le vendeur est une fiche employé, pas un compte — questions 2, 4, 5 (format exact, blocage vs. alerte, seuil de validation) ouvertes, sans effet bloquant sur le principe |
 | d | **Régime fiscal / taux de TVA** | **Décidé cycle 6** : réel, 19,25 %, TTC, arrondi arithmétique sur le total |
 | e | **Saisie a posteriori vs blocage anti-survente** | **Décidé cycle 6** (question 1) : jamais de blocage, écart consigné — questions 2-5 ouvertes |
 | f | **Retours / casse** / remises / unités | **Décidé cycle 9**, volet retours et casse seulement : trois opérations distinctes, tracées — remises et conversion d'unités restent entièrement ouvertes |

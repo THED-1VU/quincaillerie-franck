@@ -24,9 +24,12 @@ db/migrations/011_ventes_fiscalite_anti_survente.sql) :
     ``numero_facturier`` (référence du carnet PAPIER, transcrite par le
     comptable — jamais générée par ce logiciel) et ``vendeur_id`` (qui a
     négocié le prix) sont obligatoires sur toute nouvelle vente, avec
-    préfixe vérifié par site (``MAG-``/``CPT-``). Le rapport « écarts de
-    prix par vendeur » et le seuil de validation d'un écart (questions 5)
-    ne sont PAS construits ce cycle — non tranchés.
+    préfixe vérifié par site (``MAG-``/``CPT-``). ``vendeur_id`` référence
+    une fiche employé (module RH), PAS un compte utilisateur, depuis le
+    chantier B (question 3, tranchée le 2026-09-25, migration 040) — un
+    vendeur peut n'avoir jamais eu de compte. Le rapport « écarts de prix
+    par vendeur » et le seuil de validation d'un écart (question 5) ne
+    sont toujours PAS construits — non tranchés.
 
 Une vente saisie ici est immédiatement ``payee`` : il n'existe pas d'étape
 ``en_attente`` pour ce que cette route couvre (saisie a posteriori d'un
@@ -94,13 +97,16 @@ def lister_vendeurs(
     site_id: int | None = None,
     session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
 ):
-    """Comptes utilisables comme ``vendeur_id`` (addendum, point c) — pour
-    remplir le menu déroulant de l'écran de vente.
+    """Employés utilisables comme ``vendeur_id`` (addendum, point c, question
+    3 tranchée le 2026-09-25, migration 040) — pour remplir le menu déroulant
+    de l'écran de vente.
 
-    Aucune liste de vendeurs séparée n'est créée (question 3 de l'addendum
-    non tranchée) : uniquement des comptes existants et actifs, du site de
+    Une fiche employé (module RH), PAS un compte utilisateur : un vendeur
+    peut n'avoir jamais eu de compte (aide occasionnel qui négocie un prix
+    sans jamais se connecter). Uniquement des employés actifs, du site de
     cette vente (un agent d'un site ne négocie pas de prix pour l'autre) ;
-    le responsable, qui couvre les deux sites, y figure toujours."""
+    un employé ``site_id`` NULL couvre les deux sites (même convention que
+    ``declarations_article_offert.employe_id``, migration 039)."""
     if session.site_id is not None:
         site_cible = session.site_id
     elif site_id is not None:
@@ -117,8 +123,8 @@ def lister_vendeurs(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, nom_complet FROM utilisateurs
-                 WHERE actif = TRUE AND (site_id = %s OR role = 'responsable')
+                SELECT id, nom_complet FROM employes
+                 WHERE actif = TRUE AND (site_id = %s OR site_id IS NULL)
                  ORDER BY nom_complet
                 """,
                 (site_cible,),
@@ -182,6 +188,31 @@ def enregistrer_vente(
                     "Aucun compte responsable trouvé pour l'encaissement.",
                 )
             utilisateur_caisse_id = ligne_resp["id"]
+
+            # Vendeur = une fiche employé, jamais un compte utilisateur
+            # (addendum point c, question 3, migration 040) : validé ici
+            # plutôt que de laisser la seule contrainte FK répondre — même
+            # style de message que declarer_article_offert() (migration 039),
+            # pour rester cohérent d'un point d'écriture à l'autre.
+            cur.execute(
+                "SELECT site_id, actif FROM employes WHERE id = %s", (demande.vendeur_id,)
+            )
+            ligne_vendeur = cur.fetchone()
+            if ligne_vendeur is None:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    f"Vendeur introuvable (employé {demande.vendeur_id}).",
+                )
+            if not ligne_vendeur["actif"]:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    f"L'employé {demande.vendeur_id} n'est plus actif.",
+                )
+            if ligne_vendeur["site_id"] is not None and ligne_vendeur["site_id"] != site_cible:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    f"L'employé {demande.vendeur_id} n'appartient pas au site {site_cible}.",
+                )
 
             # Remises (addendum, point f, décision 2026-09-22) : seuil de
             # validation responsable — 'a_definir' tant que le propriétaire
@@ -626,7 +657,7 @@ def recu_vente(
                        v.montant_tva, v.total_ttc, v.date_encaissement,
                        v.remise_globale_montant, u.nom_complet AS vendeur_nom
                   FROM ventes v
-                  LEFT JOIN utilisateurs u ON u.id = v.vendeur_id
+                  LEFT JOIN employes u ON u.id = v.vendeur_id
                  WHERE v.id = %s
                 """,
                 (vente_id,),
