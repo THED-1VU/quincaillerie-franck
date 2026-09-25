@@ -183,3 +183,41 @@ responsable de ne pas dévier de CE plan précis sans le signaler.
 
 Aucune piste ne fusionne sa propre PR. Chaque piste s'arrête après avoir
 ouvert sa pull request.
+
+---
+
+## Règle n°5 — Registre des numéros de migration (append-only)
+
+**Incident du 2026-09-25** : deux sessions ont chacune créé une migration
+portant le numéro **040** (`040_plafond_vraisemblance_decide.sql` et le
+chantier B `vendeur_id` du point f). Les effets sont corrects et la
+collision est sans conséquence cette fois, mais elle se reproduira, et un
+jour sur deux migrations touchant la même table.
+
+Pour l'empêcher, le tableau ci-dessous est le **registre des numéros de
+migration**. Règles :
+
+1. **Avant d'écrire un fichier `db/migrations/NNN_*.sql`**, une session
+   inscrit son numéro et son objet **à la fin** du tableau (une seule
+   ligne ajoutée, format `| NNN | objet court | auteur/date |`).
+2. **Avant de choisir un numéro**, la session **relit ce registre** (et
+   fait un `git pull` / `git fetch origin` pour voir les dernières
+   lignes ajoutées par les autres sessions) puis prend le premier numéro
+   libre **après** le plus grand déjà réservé.
+3. Le registre est **append-only** : chaque session n'ajoute qu'une
+   ligne à la fin, **jamais** de modification ni de suppression des
+   lignes existantes — c'est ce qui rend les ajouts fusionnables sans
+   conflit (ajout trivial en fin de fichier).
+4. Une réservation est retirée uniquement par son auteur, **en la
+   barrant** (`~~...~~`) et en ajoutant une ligne, jamais en éditant la
+   ligne d'origine.
+
+| N° | Objet | Réservé par / date |
+|---|---|---|
+| 040 | Plafond de vraisemblance DÉCIDÉ (C7) | session A, 2026-09-25 |
+| 040 | `vendeur_id` référence `employes` (chantier B, point f) | session B, 2026-09-25 |
+
+*(Ces deux lignes consignent l'incident du 2026-09-25 — deux 040 déjà
+fusionnés sur `main` sans collision de contenu. À partir de maintenant, le
+registre sert AVANT l'écriture, pas après.)*
+
