@@ -44,6 +44,25 @@ def test_reception_recalcule_le_seuil(client):
     assert avant_apres["seuil_alerte"] == 10    # 20 % de 50
 
 
+def test_reception_seuil_non_entier_arrondi_sans_echouer(client):
+    """Migration 044 — trouvé par exécution (outil d'import du stock
+    initial, point j) : 13 x 20 % = 2,6, un seuil décimal que le trigger de
+    cohérence (migration 034) refusait pour un article sans décimale (ici
+    l'article 1, Ciment, jeu d'essai). Corrigé en arrondissant le seuil à
+    l'entier dans ce cas — vérifié ici via la VRAIE route HTTP, pas
+    seulement en SQL direct."""
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.post(
+        "/stock/entrees",
+        headers=entete_autorisation(session["jeton"]),
+        json={"article_id": 1, "quantite": 13, "motif": "test non-régression 044"},
+    )
+    assert reponse.status_code == 201, reponse.text
+    ligne = _seuil_et_stock(1)
+    assert ligne["quantite_stock"] == 43  # 30 + 13
+    assert ligne["seuil_alerte"] == 3     # round(13 x 20 %) = round(2.6) = 3, pas 2.6
+
+
 def test_reception_ouvre_le_stock_au_site_de_lagent(client):
     """Décision 2026-09-19 : la première réception d'une fiche à un site
     OUVRE sa ligne de stock — un agent du Magasin peut donc réceptionner une

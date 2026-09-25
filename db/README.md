@@ -278,6 +278,20 @@ distincts (zones différentes) — c'est voulu, additif.
 jamais effacé, comme partout ailleurs dans ce projet) — la simulation est le
 seul filet de sécurité, à ne jamais sauter.
 
+### Correctif du seuil décimal — réception fournisseur (migration 044)
+
+Trouvé par exécution en construisant l'outil d'import ci-dessus : le même
+défaut déjà corrigé pour `enregistrer_inventaire_initial()` existait aussi
+dans `enregistrer_entree_stock()` (réception fournisseur, le chemin le plus
+quotidien de la boutique) — un seuil à 20 % d'une quantité entière ordinaire
+(ex. 13 → 2,6) pouvait être décimal et se faire refuser par la base pour un
+article n'autorisant pas les quantités décimales. Corrigé en arrondissant le
+seuil à l'entier dans ce cas précis (migration 044, prouvé par un balayage
+exhaustif de 1 à 50 dans `db/tests/01_protections.sql`, section 15).
+Vérifié à l'exécution que `transferer_stock()` (ne recalcule jamais de
+seuil) et `regulariser_ecart_comptage()` (ne touche jamais `stocks_sites`)
+n'ont pas ce défaut — décision du propriétaire de ne pas les toucher.
+
 ---
 
 ## Ce que chaque migration corrige

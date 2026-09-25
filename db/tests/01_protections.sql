@@ -744,6 +744,60 @@ SELECT t_valeur('041 · stock final inchangé par les tentatives refusées',
   '80.000');
 
 -- ============================================================================
+-- 15. Correctif du seuil décimal dans enregistrer_entree_stock() (migration
+--     044) — trouvé par exécution en construisant l'outil d'import du stock
+--     initial (le même défaut, déjà corrigé là pour
+--     enregistrer_inventaire_initial, existait aussi ici : le chemin le
+--     plus quotidien de la boutique).
+-- ============================================================================
+
+-- Reproduction exacte du cas signalé : 13 x 20 % = 2,6, article sans
+-- décimale (article 1, jeu d'essai) — devait être refusé avant le
+-- correctif, doit maintenant être accepté avec un seuil arrondi à l'entier.
+SELECT quantite_stock AS stock_avant_044, seuil_alerte AS seuil_avant_044
+  FROM stocks_sites WHERE article_id = 1 AND site_id = 1 \gset
+
+SELECT t_succes('044 · réception de 13 unités sur un article sans décimale acceptée',
+  $$SELECT enregistrer_entree_stock(1, 1, 13, 2, 'test correctif 044')$$);
+
+SELECT t_valeur('044 · seuil arrondi à l''entier (13 x 20 % = 2.6 -> 3, pas 2.600)',
+  $$SELECT seuil_alerte::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
+  '3.000');
+
+-- Restaure le stock/seuil de l'article 1/site 1 pour ne pas perturber la
+-- suite (baseline capturée ci-dessus, pas une valeur codée en dur — même
+-- précaution que la section 12).
+UPDATE stocks_sites SET quantite_stock = :'stock_avant_044', seuil_alerte = :'seuil_avant_044'
+ WHERE article_id = 1 AND site_id = 1;
+
+-- Preuve balayée, pas seulement le cas signalé : AUCUNE quantité entière de
+-- 1 à 50 ne doit produire un seuil décimal sur un article sans décimale
+-- (article 2, jeu d'essai, site 1 — choisi pour ne pas retoucher
+-- l'article 1 ci-dessus). Fonction jetable définie ici même, comme
+-- t_refus/t_succes/t_valeur en tête de fichier.
+CREATE OR REPLACE FUNCTION _verifier_aucun_seuil_decimal(p_article_id INTEGER, p_site_id INTEGER, p_borne INTEGER)
+RETURNS BOOLEAN LANGUAGE plpgsql AS $$
+DECLARE
+    q INTEGER;
+    s NUMERIC(12,3);
+BEGIN
+    FOR q IN 1..p_borne LOOP
+        PERFORM enregistrer_entree_stock(p_article_id, p_site_id, q, 2, 'test balayage 044');
+        SELECT seuil_alerte INTO s FROM stocks_sites WHERE article_id = p_article_id AND site_id = p_site_id;
+        IF s <> trunc(s) THEN
+            RAISE EXCEPTION 'seuil décimal trouvé pour la quantité % : %', q, s;
+        END IF;
+    END LOOP;
+    RETURN TRUE;
+END;
+$$;
+
+SELECT t_succes('044 · aucune quantité entière (1 à 50) ne produit de seuil décimal',
+  $$SELECT _verifier_aucun_seuil_decimal(2, 1, 50)$$);
+
+DROP FUNCTION _verifier_aucun_seuil_decimal(INTEGER, INTEGER, INTEGER);
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''
