@@ -1,12 +1,15 @@
-# Dernier résultat d'exécution — chantier C0, cycle 4
+# Dernier résultat d'exécution — chantier C0, cycle 53
 
-Exécuté le **2026-09-12**, PyInstaller **6.11.1**, Python **3.13.3** (venv
-`server/.venv/`).
+Exécuté le **2026-09-25**, PyInstaller **6.11.1**, Python **3.13.3**
+(venv `server/.venv/` monté sur le lockfile haché
+`server/requirements.txt` — FastAPI **0.141.1**, starlette **1.7.0**,
+pytest **9.1.1**).
 
 Trace rejouable :
 
 ```powershell
-.\server\fabrication\construire.ps1
+server\.venv\Scripts\python.exe -m pip install -r server\requirements.txt
+powershell -NoProfile -ExecutionPolicy Bypass -File server\fabrication\construire.ps1
 ```
 
 ---
@@ -17,125 +20,50 @@ Trace rejouable :
 
 ```
 Construction terminee.
-  Executable : ...\server\fabrication\dist\QuincaillerieFranck.exe
-  Taille     : 17.9 Mo
+  Executable : ...\server\fabrication\dist\Akuma.exe
+  Taille     : 28.8 Mo
 ```
 
-Deux avertissements à la construction, **expliqués et confirmés inoffensifs
-par exécution** (pas par hypothèse) :
+### 2. Lancement réel de l'exécutable
+
+`Akuma.exe` lancé depuis `server/fabrication/dist/` (config.ini de test à
+côté de l'exe, base dédiée `quincaillerie_c0`). Le port 8000 étant occupé
+par un processus parasite, le lanceur a choisi dynamiquement le port
+**49322** — comportement prévu (`_choisir_port()`).
+
+Journal HTTP réel du lanceur :
 
 ```
-WARNING: Hidden import "_cffi_backend" not found!
-WARNING: Hidden import "psycopg_binary._uuid" not found!
+INFO: 127.0.0.1:50529 - "GET /app/connexion.html HTTP/1.1" 200 OK
+INFO: 127.0.0.1:50529 - "GET /app/theme.css HTTP/1.1" 200 OK
+INFO: 127.0.0.1:63376 - "GET /app/styles.css HTTP/1.1" 200 OK
+INFO: 127.0.0.1:63124 - "GET /app/assets/akuma-logo.png HTTP/1.1" 200 OK
+INFO: 127.0.0.1:54571 - "GET /app/api.js HTTP/1.1" 200 OK
+INFO: 127.0.0.1:63124 - "GET /app/favicon.ico HTTP/1.1" 200 OK
 ```
 
-- `_cffi_backend` : provient du hook communautaire `hook-bcrypt.py`
-  (`_pyinstaller_hooks_contrib`), écrit pour d'anciennes versions de
-  `bcrypt` basées sur `cffi`. **bcrypt 4.2.1** (celui utilisé ici) est basé
-  sur une extension **Rust**, pas `cffi` : ce module n'existe simplement pas
-  dans cette version, et n'est jamais nécessaire.
-- `psycopg_binary._uuid` : sous-module non trouvé par nom exact, sans
-  conséquence observée dans aucun des tests ci-dessous (le projet n'a pas de
-  colonne de type UUID).
+`GET /sante` → `{"etat":"ok","base":"joignable"}`.
 
-### 2. L'exécutable tourne sans Python installé sur le poste
+### 3. Mode kiosque (cycle 46) confirmé dans l'exécutable
 
-Copié seul (avec `config.ini`) dans un dossier **totalement isolé**
-(`C:\Users\USER\Desktop\test_fabrication_qf\`, sans aucun fichier du projet
-à proximité) :
+Ligne de commande du processus Edge lancé par l'exécutable :
 
 ```
-INFO:     Started server process [63160]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:49824 (Press CTRL+C to quit)
-Ets Quincaillerie Franck — démarrage du serveur local...
-Serveur démarré sur 127.0.0.1:49824. Fermez cette fenêtre pour arrêter l'application.
-INFO:     127.0.0.1:60800 - "GET /docs HTTP/1.1" 200 OK
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --kiosk http://127.0.0.1:49322/app/connexion.html --no-first-run --no-default-browser-check
 ```
 
-Le navigateur s'est ouvert automatiquement sur `/docs`.
+### 4. Pile à jour embarquée
 
-### 3. Les dépendances compilées à risque fonctionnent réellement
-
-Testées une à une, dans l'exécutable empaqueté (pas dans le venv de
-développement) :
-
-| Dépendance | Test | Résultat |
-|---|---|---|
-| `psycopg[binary]` | `GET /sante` (connexion PostgreSQL réelle) | `{"etat":"ok","base":"joignable"}` |
-| `psycopg[binary]` | `POST /auth/connexion` (requête + fonction SQL) | `200`, jeton renvoyé |
-| `bcrypt` | `POST /auth/changer-mot-de-passe` (hachage `$2a$`) | `204`, puis reconnexion avec le nouveau mot de passe → `200` |
-| signature HMAC (`hashlib`/`hmac`, stdlib) | jeton de la connexion | vérifié valide par une route protégée |
-
-### 4. Les garde-fous de sécurité (chantier C11) survivent à l'empaquetage
-
-Testés directement dans l'exécutable, pas seulement en développement :
-
-```
-$ config.ini absent
-Configuration invalide : Fichier de configuration introuvable : ...\config.ini.
-Copiez config.example.ini vers config.ini et renseignez les valeurs.
-
-$ config.ini avec user = postgres
-Configuration invalide : Configuration refusée : l'application ne doit jamais
-se connecter avec le compte superutilisateur 'postgres'. Utilisez le rôle
-applicatif qf_app (voir db/outils/definir_mot_de_passe_app.sql).
-```
-
-### 5. Résolution du chemin de configuration
-
-`config.ini` est cherché **à côté de l'exécutable réel**, jamais dans le
-dossier temporaire d'extraction de PyInstaller — vérifié en lançant l'exe
-depuis trois emplacements différents (le dossier de fabrication, un dossier
-isolé sur le Bureau, et une seconde fois après reconstruction), chaque fois
-avec le `config.ini` de cet emplacement précis.
+Le paquet embarque la montée majeure C11 (cycle 49) : FastAPI 0.141.1,
+starlette 1.7.0 (pytest 9.1.1 : test uniquement), lockfile avec hachages
+`server/requirements.txt`.
 
 ---
 
-## Piège rencontré et corrigé — nommage du dossier source
+## Historique des constructions
 
-Le dossier de fabrication s'appelait initialement `server/build/`. Or
-`.gitignore` exclut tout dossier nommé `build/` (artefact de compilation
-générique, réutilisé dans plusieurs langages) : **Git ignorait aussi mes
-fichiers sources** (`lanceur.py`, le `.spec`, `construire.ps1`), sans
-qu'aucun message d'erreur ne le signale — un `git status` bien intentionné
-ne les aurait simplement jamais montrés.
-
-Détecté par exécution (`git check-ignore -v`), pas par relecture. Corrigé en
-renommant le dossier source en `server/fabrication/`, tout en conservant les
-noms `dist/` et `build/` pour les **sous-dossiers de sortie** de PyInstaller
-(`fabrication/dist/`, `fabrication/build/`) : ces noms correspondent
-exactement aux règles génériques déjà existantes, donc aucune nouvelle
-entrée `.gitignore` n'a été nécessaire.
-
-```
-git check-ignore -v server/build/lanceur.py
-  .gitignore:8:build/   server/build/lanceur.py     <- AVANT : ignoré à tort
-
-git add -A -n server/fabrication/
-  add 'server/fabrication/construire.ps1'
-  add 'server/fabrication/lanceur.py'
-  add 'server/fabrication/quincaillerie_franck.spec'
-  (aucun fichier de fabrication/dist/ ou fabrication/build/ proposé)   <- APRÈS : correct
-```
-
----
-
-## Ce que ce cycle NE couvre PAS (documenté, pas oublié)
-
-- **Aucun écran réel n'est encore servi.** `/docs` est un placeholder : la
-  maquette du cycle 1 n'est pas câblée sur ce serveur (chantiers C9/C10).
-  Le mécanisme de lancement (choix de port, attente du démarrage, ouverture
-  du navigateur) ne changera pas quand ce sera fait — seule la constante
-  `CHEMIN_A_OUVRIR` dans `lanceur.py` changera.
-- **Pas de mode kiosque activé.** Le navigateur s'ouvre en fenêtre normale.
-  Le passage en plein écran (`--kiosk` pour Chrome/Edge) n'a de sens qu'une
-  fois un vrai écran à afficher — prématuré tant que C9/C10 n'est pas fait.
-- **Pas d'outil de création du premier compte responsable** (l'équivalent de
-  l'ancien `CreerCompteResponsable.exe`). Le cahier des charges §7 le liste
-  comme un second livrable distinct ; il reste à construire dans un cycle
-  ultérieur — documenté dans `RAPPORT AVANCEMENT/loop-state.md`.
-- **Pas de CI automatisée.** Le build est reproductible et documenté, mais
-  pas encore déclenché automatiquement (GitHub Actions ou équivalent) à
-  chaque changement.
+| Date | Cycle | Exe | Taille | Changement |
+|---|---|---|---|---|
+| 2026-09-12 | 4 | QuincaillerieFranck.exe | 17,9 Mo | Premier paquet autonome (ouvrait `/docs`) |
+| 2026-09-20 | 30 | Akuma.exe | 26,4 Mo | C0-A : ouvre `/app/connexion.html`, maquette embarquée |
+| **2026-09-25** | **53** | **Akuma.exe** | **28,8 Mo** | **Kiosque + pile FastAPI/starlette à jour** |
