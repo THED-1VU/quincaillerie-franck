@@ -85,7 +85,12 @@ class DemandeVente(BaseModel):
     ``remise_globale_montant``/``remise_globale_pct`` (décision
     2026-09-22, addendum point f) : remise sur la vente ENTIÈRE, mécanisme
     séparé d'une remise par ligne — au plus un des deux, aucun n'est
-    obligatoire (pas de remise globale par défaut)."""
+    obligatoire (pas de remise globale par défaut).
+
+    ``client_id`` (addendum point b, décidé le 2026-09-25) : obligatoire
+    uniquement quand ``mode_paiement == 'credit_client'`` — la vérification
+    elle-même (obligatoire, client actif, plafond) est faite dans la route,
+    pas ici, car elle dépend de l'état de la base."""
 
     site_id: Optional[int] = None
     mode_paiement: str = Field(min_length=1, max_length=30)
@@ -94,6 +99,7 @@ class DemandeVente(BaseModel):
     lignes: List[LigneVenteDemande] = Field(min_length=1)
     remise_globale_montant: Optional[float] = Field(default=None, ge=0)
     remise_globale_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    client_id: Optional[int] = None
 
     @model_validator(mode="after")
     def _au_plus_une_remise_globale(self) -> "DemandeVente":
@@ -627,3 +633,43 @@ class ReponseReinitialisationMotDePasse(BaseModel):
 
 class DemandeActifCompte(BaseModel):
     actif: bool
+
+
+# ---------------------------------------------------------------------------
+# Crédit client (addendum, point b, décidé le 2026-09-25) — clients,
+# créances, règlements. Partagé entre les deux sites (site_id informatif,
+# jamais un filtre) ; plafond par client, 100 000 FCFA par défaut ;
+# règlements partiels alloués en FIFO (jamais liés à une créance précise) ;
+# aucune relance automatique, aucun intérêt.
+# ---------------------------------------------------------------------------
+
+class DemandeClient(BaseModel):
+    nom: str = Field(min_length=1, max_length=150)
+    telephone: Optional[str] = Field(default=None, max_length=30)
+    plafond_credit: float = Field(default=100000, ge=0)
+    site_id: Optional[int] = None
+
+
+class ReponseClient(BaseModel):
+    id: int
+    nom: str
+    telephone: Optional[str] = None
+    plafond_credit: float
+    site_id: Optional[int] = None
+    actif: bool
+    encours: float
+
+
+class DemandeReglementCreance(BaseModel):
+    montant: float = Field(gt=0)
+    motif: Optional[str] = Field(default=None, max_length=200)
+
+
+class ReponseReglementCreance(BaseModel):
+    client_id: int
+    encours: float
+
+
+class ReponseVieillissementCreances(BaseModel):
+    tranche: str
+    montant: float

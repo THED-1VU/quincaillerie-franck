@@ -36,7 +36,9 @@ def _texte_pdf(contenu: bytes) -> str:
 
 def test_parametres_vente_expose_le_taux_tva_en_vigueur(client):
     """La maquette lit le taux de TVA ici plutôt que de le coder en dur
-    (addendum, point d) — vérifié pour les deux rôles autorisés."""
+    (addendum, point d) — vérifié pour les deux rôles autorisés. Depuis la
+    migration 045 (point b), cette route expose aussi credit_client_actif,
+    lu par vente.html pour proposer ou non le mode de paiement."""
     for identifiant, mdp in (
         ("magasin.compta", MOT_DE_PASSE_AGENT_COMPTA),
         ("resp", MOT_DE_PASSE_RESPONSABLE),
@@ -44,7 +46,7 @@ def test_parametres_vente_expose_le_taux_tva_en_vigueur(client):
         session = se_connecter(client, identifiant, mdp)
         reponse = client.get("/ventes/parametres", headers=entete_autorisation(session["jeton"]))
         assert reponse.status_code == 200, reponse.text
-        assert reponse.json() == {"taux_tva": 19.25}
+        assert reponse.json() == {"taux_tva": 19.25, "credit_client_actif": True}
 
 
 def test_vente_normale_decremente_le_stock_et_calcule_la_tva(client):
@@ -134,9 +136,11 @@ def test_vente_a_decouvert_nest_jamais_refusee_et_consigne_lecart(client):
             assert cur.fetchone()["quantite_manquante"] == 4
 
 
-def test_credit_client_reste_desactive(client):
-    """Point b : pas encore de décision complète sur la vente à crédit —
-    la route la refuse avec un message clair, pas une erreur SQL brute."""
+def test_credit_client_sans_client_id_refuse_message_clair(client):
+    """Point b, activé depuis la migration 045 (voir server/tests/test_clients.py
+    pour la couverture complète : créance, plafond, FIFO...) — cette route
+    refuse toujours une vente à crédit SANS client, avec un message clair,
+    pas une erreur SQL brute."""
     session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
     entetes = entete_autorisation(session["jeton"])
 
@@ -151,8 +155,7 @@ def test_credit_client_reste_desactive(client):
         },
     )
     assert reponse.status_code == 422
-    assert "crédit" in reponse.json()["detail"].lower()
-    assert "addendum" in reponse.json()["detail"].lower()
+    assert "client" in reponse.json()["detail"].lower()
 
 
 def test_agent_stock_ne_peut_pas_enregistrer_de_vente(client):

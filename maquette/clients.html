@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clients — Akuma</title>
+<link rel="icon" href="favicon.ico">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="simu">Écran câblé (addendum point b, décidé le 2026-09-25) : clients, créances et règlements sont réels (<code>server/app/routes/clients.py</code>). Création/modification/désactivation réservées au responsable ; l'agent comptabilité peut lister les clients et enregistrer un règlement.</div>
+<div class="page">
+  <header class="bandeau">
+    <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
+    <span class="bandeau__role bandeau__pousse" id="entete-role">…</span>
+    <a class="btn btn--fantome" href="tableau-bord.html">Retour</a>
+    <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
+  </header>
+
+  <main class="contenu">
+    <h1>Clients</h1>
+
+    <div class="carte" style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2>Clients à crédit</h2>
+        <button class="btn btn--secondaire" id="bouton-nouveau-client" type="button" hidden>+ Nouveau client</button>
+      </div>
+      <div id="zone-erreur-clients" class="erreur-champ" hidden></div>
+      <ul class="liste-nue" id="liste-clients"></ul>
+      <p class="champ__aide">Encours = créances - règlements. Un client désactivé peut toujours régler ce qu'il doit déjà, mais ne peut plus acheter à crédit.</p>
+    </div>
+
+    <div class="carte" id="carte-panneau" hidden style="margin-top:var(--e-4);">
+      <div class="carte__titre">
+        <h2 id="panneau-titre">—</h2>
+        <button class="btn btn--fantome" id="panneau-fermer" type="button">Fermer</button>
+      </div>
+      <div id="panneau-contenu"></div>
+      <div id="zone-erreur-panneau" class="erreur-champ" hidden></div>
+      <div id="zone-succes-panneau" class="erreur-champ" hidden
+           style="background:var(--c-succes-clair); color:var(--c-succes); border-color:var(--c-succes);"></div>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+(async function () {
+  "use strict";
+
+  // Lecture (liste, règlement) ouverte au responsable ET à l'agent
+  // comptabilité (même rôle que POST /ventes, qui a besoin de choisir un
+  // client pour une vente à crédit) — création/modification/désactivation
+  // réservées au responsable (boutons masqués sinon, ET la route refuse de
+  // toute façon : jamais une sécurité côté écran seule).
+  const session = await exigerSession(["responsable", "agent_comptabilite"]);
+  if (!session) return;
+
+  const estResponsable = session.role === "responsable";
+  const $ = (id) => document.getElementById(id);
+
+  $("entete-role").textContent = LIBELLE_ROLE[session.role] + " · " + session.nom_complet;
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+  afficherLogoBoutiqueDansBandeau();
+  if (estResponsable) $("bouton-nouveau-client").hidden = false;
+
+  // --- Liste des clients : RÉEL, via GET /clients ---
+  async function chargerClients() {
+    try {
+      const clients = await appelApi("/clients");
+      const ul = $("liste-clients");
+      ul.innerHTML = "";
+      if (clients.length === 0) {
+        ul.innerHTML = "<li><span>Aucun client.</span></li>";
+        return;
+      }
+      clients.forEach((c) => {
+        const depasse = c.encours > c.plafond_credit;
+        const li = creerLigneListe(
+          c.nom,
+          (c.telephone ? c.telephone + " · " : "") + "encours " + fcfa(c.encours) + " / plafond " + fcfa(c.plafond_credit),
+          c.actif ? "actif" : "inactif",
+          depasse ? "pastille--alerte" : (c.actif ? "pastille--ok" : "pastille--alerte")
+        );
+
+        const boutonRegler = document.createElement("button");
+        boutonRegler.type = "button";
+        boutonRegler.className = "btn btn--fantome";
+        boutonRegler.style.marginLeft = "var(--e-2)";
+        boutonRegler.textContent = "Régler";
+        boutonRegler.disabled = c.encours <= 0;
+        boutonRegler.addEventListener("click", () => ouvrirPanneauReglement(c));
+        li.appendChild(boutonRegler);
+
+        if (estResponsable) {
+          const boutonModifier = document.createElement("button");
+          boutonModifier.type = "button";
+          boutonModifier.className = "btn btn--fantome";
+          boutonModifier.style.marginLeft = "var(--e-2)";
+          boutonModifier.textContent = "Modifier";
+          boutonModifier.addEventListener("click", () => ouvrirPanneauClient(c));
+          li.appendChild(boutonModifier);
+
+          const boutonActif = document.createElement("button");
+          boutonActif.type = "button";
+          boutonActif.className = "btn btn--fantome";
+          boutonActif.style.marginLeft = "var(--e-2)";
+          boutonActif.textContent = c.actif ? "Désactiver" : "Activer";
+          boutonActif.addEventListener("click", async () => {
+            boutonActif.disabled = true;
+            try {
+              await appelApi("/clients/" + c.id + "/actif", {
+                method: "PATCH", body: JSON.stringify({ actif: !c.actif }),
+              });
+              await chargerClients();
+            } catch (erreur) {
+              boutonActif.disabled = false;
+              afficherErreurServeur("zone-erreur-clients", erreur);
+            }
+          });
+          li.appendChild(boutonActif);
+        }
+
+        ul.appendChild(li);
+      });
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-clients", erreur);
+    }
+  }
+
+  // --- Panneau unique : une seule action à la fois (même principe que rh.html). ---
+  const champ = (contenu, id, libelle, type, aide) => {
+    const div = document.createElement("div");
+    div.className = "champ";
+    const label = document.createElement("label");
+    label.className = "champ__label";
+    label.htmlFor = id;
+    label.textContent = libelle;
+    const input = document.createElement("input");
+    input.className = "champ__saisie";
+    input.id = id;
+    input.type = type || "text";
+    if (type === "number") { input.min = "0"; input.step = "1"; }
+    div.appendChild(label);
+    div.appendChild(input);
+    if (aide) {
+      const p = document.createElement("p");
+      p.className = "champ__aide";
+      p.textContent = aide;
+      div.appendChild(p);
+    }
+    contenu.appendChild(div);
+    return input;
+  };
+
+  function ouvrirPanneauBase(titre) {
+    $("carte-panneau").hidden = false;
+    $("zone-erreur-panneau").hidden = true;
+    $("zone-succes-panneau").hidden = true;
+    $("panneau-titre").textContent = titre;
+    const contenu = $("panneau-contenu");
+    contenu.innerHTML = "";
+    return contenu;
+  }
+
+  function ouvrirPanneauClient(clientExistant) {
+    const contenu = ouvrirPanneauBase(clientExistant ? "Modifier " + clientExistant.nom : "Nouveau client");
+    const nom = champ(contenu, "f-nom", "Nom");
+    const telephone = champ(contenu, "f-telephone", "Téléphone (optionnel)");
+    const plafond = champ(contenu, "f-plafond", "Plafond de crédit (FCFA)", "number",
+      "100 000 FCFA par défaut si laissé vide.");
+    if (clientExistant) {
+      nom.value = clientExistant.nom;
+      telephone.value = clientExistant.telephone || "";
+      plafond.value = clientExistant.plafond_credit;
+    }
+
+    const boutonValider = document.createElement("button");
+    boutonValider.type = "button";
+    boutonValider.className = "btn btn--primaire btn--large";
+    boutonValider.textContent = clientExistant ? "Enregistrer les modifications" : "Créer le client";
+    boutonValider.addEventListener("click", async () => {
+      const corps = {
+        nom: nom.value.trim(),
+        plafond_credit: plafond.value ? Number(plafond.value) : 100000,
+      };
+      if (telephone.value.trim()) corps.telephone = telephone.value.trim();
+      $("zone-erreur-panneau").hidden = true;
+      $("zone-succes-panneau").hidden = true;
+      try {
+        if (clientExistant) {
+          await appelApi("/clients/" + clientExistant.id, { method: "PUT", body: JSON.stringify(corps) });
+        } else {
+          await appelApi("/clients", { method: "POST", body: JSON.stringify(corps) });
+        }
+        $("zone-succes-panneau").hidden = false;
+        $("zone-succes-panneau").textContent = clientExistant ? "Client modifié." : "Client créé.";
+        await chargerClients();
+      } catch (erreur) {
+        afficherErreurServeur("zone-erreur-panneau", erreur);
+      }
+    });
+    contenu.appendChild(boutonValider);
+  }
+
+  function ouvrirPanneauReglement(client) {
+    const contenu = ouvrirPanneauBase("Règlement — " + client.nom);
+    const info = document.createElement("p");
+    info.textContent = "Encours actuel : " + fcfa(client.encours) + ".";
+    contenu.appendChild(info);
+    const montant = champ(contenu, "f-montant-reglement", "Montant réglé (FCFA)", "number",
+      "Alloué automatiquement à la créance la plus ancienne (FIFO) — ne peut pas dépasser l'encours.");
+    const motif = champ(contenu, "f-motif-reglement", "Motif (optionnel)");
+
+    const boutonValider = document.createElement("button");
+    boutonValider.type = "button";
+    boutonValider.className = "btn btn--primaire btn--large";
+    boutonValider.textContent = "Enregistrer le règlement";
+    boutonValider.addEventListener("click", async () => {
+      const corps = { montant: Number(montant.value) };
+      if (motif.value.trim()) corps.motif = motif.value.trim();
+      $("zone-erreur-panneau").hidden = true;
+      $("zone-succes-panneau").hidden = true;
+      try {
+        await appelApi("/clients/" + client.id + "/reglements", { method: "POST", body: JSON.stringify(corps) });
+        $("zone-succes-panneau").hidden = false;
+        $("zone-succes-panneau").textContent = "Règlement enregistré.";
+        await chargerClients();
+      } catch (erreur) {
+        afficherErreurServeur("zone-erreur-panneau", erreur);
+      }
+    });
+    contenu.appendChild(boutonValider);
+  }
+
+  $("panneau-fermer").addEventListener("click", () => { $("carte-panneau").hidden = true; });
+  $("bouton-nouveau-client").addEventListener("click", () => ouvrirPanneauClient(null));
+
+  await chargerClients();
+})();
+</script>
+</body>
+</html>

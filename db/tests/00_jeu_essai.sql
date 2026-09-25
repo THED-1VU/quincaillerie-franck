@@ -82,7 +82,11 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
  'commentaire devient obligatoire à la clôture. Tant que ce n''est pas '
  'tranché, cloturer_caisse() applique une tolérance NULLE (tout écart non '
  'nul exige un commentaire) — jamais un chiffre inventé.',
- TRUE, TRUE, 'addendum point g, question 5');
+ TRUE, TRUE, 'addendum point g, question 5'),
+('credit_client_actif', 'oui', 'texte',
+ 'Active ou désactive la vente à crédit (clients, créances, règlements) '
+ 'pour cette boutique — produit vendu en gamme, chaque déploiement décide '
+ 'indépendamment.', TRUE, FALSE, 'décision du propriétaire, 2026-09-25 (addendum point b)');
 
 INSERT INTO fournisseurs (id, nom, contact, telephone) VALUES
   (1, 'Cimenterie du Cameroun', 'M. Ateba', '+237 6 99 00 11 22');
