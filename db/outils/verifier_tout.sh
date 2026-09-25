@@ -124,7 +124,7 @@ if [ "$PRET" -ne 0 ]; then
     verdict 1 "suites Playwright"
 else
     CODE_PW=0
-    for suite in cablage vente inventaire stock rapports echappement rh; do
+    for suite in cablage vente inventaire stock rapports echappement rh exploitation; do
         ( cd "$RACINE/maquette/verification" && SERVEUR_URL="$SERVEUR_URL" npm run "$suite" )
         CODE_SUITE=$?
         verdict "$CODE_SUITE" "  suite $suite"
