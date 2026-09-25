@@ -1010,6 +1010,18 @@ de reprise**, ni la **mise à jour des 5 postes**.
 > (point a, « une fiche, un stock par site ») — importer dans l'ancien
 > modèle (une fiche par site) puis fusionner après coup doublerait le
 > travail et le risque d'erreur.
+>
+> **Livré (2026-09-25, migration 041) — le STOCK seul.** Dépendance d'ordre
+> satisfaite (point a livré aux cycles 34-35, voir plus haut). Mouvement
+> `inventaire_initial` dédié, seuil à 20 % (convention retenue), plusieurs
+> chargements successifs et partiels sans duplication (`db/outils/importer_stock_initial.py`,
+> simulation obligatoire avant tout chargement réel, création d'article
+> seulement après confirmation explicite du responsable — voir `db/README.md`,
+> « Chargement du stock initial réel »). **Le crédit client N'A PAS été
+> chargé avec le stock**, contrairement à ce que demande le callout
+> ci-dessus : le point b (reprise du crédit client) n'est pas construit (pas
+> de table `clients`) — c'est un chantier séparé, à mener avant de pouvoir
+> tenir cette dépendance littéralement.
 
 **Contexte.** La gestion était manuelle (cahier, facturier papier). Il faut **charger le
 stock de départ**, connaître les **volumes réels**, et **former** des utilisateurs sans

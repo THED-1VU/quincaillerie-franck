@@ -653,6 +653,91 @@ SELECT t_valeur('040 · plafond actif (a_decider = false)',
   'false');
 
 -- ============================================================================
+-- 14. Chargement du stock initial réel (migration 041, point j, décision
+--     2026-09-25) — catégorie inventaire_initial dédiée, distincte de
+--     reception_fournisseur, seuil recalculé à 20 %.
+-- ============================================================================
+
+-- Article 4 (jeu d'essai) n'a pas encore de ligne stocks_sites au site 2 —
+-- vérifie la création directe (pas seulement un ON CONFLICT).
+DELETE FROM stocks_sites WHERE article_id = 4 AND site_id = 2;
+
+SELECT t_succes('041 · chargement initial crée la ligne de stock (site sans stock préalable)',
+  $$SELECT enregistrer_inventaire_initial(4, 2, 50, 2, 'zone A - premier chargement')$$);
+
+SELECT t_valeur('041 · quantité chargée correctement enregistrée',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 4 AND site_id = 2$$,
+  '50.000');
+
+SELECT t_valeur('041 · seuil recalculé à 20 % de la quantité chargée',
+  $$SELECT seuil_alerte::TEXT FROM stocks_sites WHERE article_id = 4 AND site_id = 2$$,
+  '10.000');
+
+SELECT t_valeur('041 · mouvement catégorisé inventaire_initial, type entree',
+  $$SELECT categorie || ',' || type FROM mouvements_stock
+     WHERE article_id = 4 AND site_id = 2 AND categorie = 'inventaire_initial'
+     ORDER BY id DESC LIMIT 1$$,
+  'inventaire_initial,entree');
+
+-- Second chargement sur la même ligne (zone B) : la quantité s'ADDITIONNE
+-- (chargement partiel/successif, addendum point j), le seuil est recalculé
+-- sur le total, pas rejoué depuis zéro.
+SELECT t_succes('041 · second chargement sur article/site déjà chargé additionne',
+  $$SELECT enregistrer_inventaire_initial(4, 2, 30, 2, 'zone B - complément')$$);
+
+SELECT t_valeur('041 · quantité additionnée (50 + 30 = 80)',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 4 AND site_id = 2$$,
+  '80.000');
+
+SELECT t_valeur('041 · seuil recalculé sur le total additionné (20 % de 80 = 16)',
+  $$SELECT seuil_alerte::TEXT FROM stocks_sites WHERE article_id = 4 AND site_id = 2$$,
+  '16.000');
+
+-- Garde-fous.
+SELECT t_refus('041 · quantité nulle refusée',
+  $$SELECT enregistrer_inventaire_initial(4, 2, 0, 2, 'zone C')$$);
+
+SELECT t_refus('041 · quantité négative refusée',
+  $$SELECT enregistrer_inventaire_initial(4, 2, -5, 2, 'zone C')$$);
+
+SELECT t_refus('041 · motif vide refusé',
+  $$SELECT enregistrer_inventaire_initial(4, 2, 10, 2, '')$$);
+
+SELECT t_refus('041 · motif NULL refusé',
+  $$SELECT enregistrer_inventaire_initial(4, 2, 10, 2, NULL)$$);
+
+SELECT t_refus('041 · article introuvable refusé',
+  $$SELECT enregistrer_inventaire_initial(999999, 2, 10, 2, 'zone C')$$);
+
+-- Contrainte de cohérence catégorie/type : une écriture brute qui associe
+-- inventaire_initial à une sortie est refusée au niveau de la base, pas
+-- seulement par la fonction SECURITY DEFINER.
+SELECT t_refus('041 · contrainte : inventaire_initial doit être une entree',
+  $$INSERT INTO mouvements_stock (article_id, site_id, type, categorie, quantite, motif, utilisateur_id)
+    VALUES (4, 2, 'sortie', 'inventaire_initial', 1, 'test contrainte 041', 2)$$);
+
+-- Non-régression (trouvé par exécution en testant l'outil d'import) : un
+-- article n'autorisant pas les quantités décimales (cas par défaut, article
+-- 4) refusait un SEUIL décimal issu d'une quantité entière ordinaire (13 x
+-- 20 % = 2.6) — corrigé avant tout commit en arrondissant le seuil à
+-- l'entier dans ce cas précis. Article 3 (jeu d'essai, site 2, 100 en stock,
+-- non décimal) sert ici pour ne pas perturber les totaux déjà vérifiés sur
+-- l'article 4/site 2 ci-dessus.
+SELECT t_succes('041 · quantité entière ordinaire (13) sur article non décimal acceptée (seuil arrondi à l''entier)',
+  $$SELECT enregistrer_inventaire_initial(3, 1, 13, 2, 'test non-régression seuil entier')$$);
+
+SELECT t_valeur('041 · seuil arrondi à l''entier (13 x 20 % = 2.6 -> 3, pas 2.600)',
+  $$SELECT seuil_alerte::TEXT FROM stocks_sites WHERE article_id = 3 AND site_id = 1$$,
+  '3.000');
+
+-- Non-régression : le stock final au site 2 pour l'article 4 doit refléter
+-- exactement les deux chargements réussis ci-dessus (les garde-fous refusés
+-- ne touchent pas stocks_sites).
+SELECT t_valeur('041 · stock final inchangé par les tentatives refusées',
+  $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 4 AND site_id = 2$$,
+  '80.000');
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''
