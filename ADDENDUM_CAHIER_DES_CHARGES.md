@@ -212,6 +212,37 @@ part entière, à mener AVANT l'import du stock initial (point j)** —
 importer 800 à 1 200 références dans l'ancien modèle (une fiche par site)
 puis les fusionner après coup serait un travail double et risqué.
 
+> **Livré (cycles 34-35, 2026-09-20/21) — retrouvé en diagnostiquant le
+> chantier C, 2026-09-25 : cette section décrivait encore un plan, jamais
+> marquée comme construite, alors qu'elle l'était depuis cinq jours.** Le
+> plan ci-dessus a été suivi dans l'ordre : **migration 025** (cycle 34,
+> « 13a ») livre `candidats_rapprochement()`/`enregistrer_rapprochement()`
+> — les paires homonymes sont **suggérées**, **jamais fusionnées
+> automatiquement**, chaque décision (`fusionner`/`distincts`) validée une
+> par une par un humain et consignée. **Migrations 026-031** (cycle 35,
+> « 13b ») livrent le reste : `stocks_sites` (clé composite article+site),
+> `site_id` explicite sur `mouvements_stock`/`comptages_stock`/
+> `ecarts_stock_ventes`, les décisions `fusionner` du 13a consommées
+> (toutes les références historiques repointées vers la fiche gardée, la
+> fiche en double supprimée), `articles` qui perd enfin `site_id`/
+> `quantite_stock`/`seuil_alerte`, RLS et `GRANT` réécrits par table plutôt
+> que par colonne, `transferer_stock()` qui crée l'emplacement de
+> destination automatiquement s'il n'existe pas encore. Reconfirmé sur le
+> schéma vivant le 2026-09-25 : `articles` n'a plus aucune des trois
+> colonnes.
+>
+> **Les deux questions restées ouvertes dans le plan ci-dessus n'ont
+> toujours pas de réponse explicite du propriétaire** (l'implémentation a
+> tranché par construction, pas par décision confirmée) : fournisseur et
+> prix restent **une seule valeur par fiche** (pas par site) — cohérent
+> avec l'exemple du propriétaire (une seule référence), mais jamais
+> confirmé mot pour mot.
+>
+> **Ce qui reste réellement à faire n'est pas ce chantier, mais le
+> point j** (import du stock initial réel, 800 à 1 200 références) — la
+> dépendance d'ordre posée au point j (« ne peut démarrer qu'après le
+> point a ») est désormais levée.
+
 **Contexte.** Le modèle a deux sites (magasin de stock, comptoir de vente) et un article
 appartient à un seul site (`articles.site_id`). Le réapprovisionnement du comptoir depuis le
 magasin est une opération quotidienne, absente du cahier des charges et du schéma
@@ -1178,7 +1209,7 @@ prestataire et **incapable de reconstruire, corriger ou reprendre** l'outil.
 
 | Point | Décision structurante | État |
 |---|---|---|
-| a | **Modèle de transfert inter-sites** | **Décidé cycle 9** (questions 2-3) : opération atomique sortie+entrée, sans recalcul de seuil — questions 1, 4, 5 restent ouvertes, sans effet bloquant |
+| a | **Modèle de transfert inter-sites** | **Décidé cycle 9** (questions 2-3) : opération atomique sortie+entrée, sans recalcul de seuil. **Question 4 (une fiche, un stock par site) décidée 2026-09-19, livrée cycles 34-35 (2026-09-20/21), marquée ici le 2026-09-25** — `stocks_sites`, rapprochement d'homonymes humain non automatique, `articles` sans `site_id`. Reste réellement ouvert : point j (import du stock initial) |
 | b | Créance client / vente à crédit | Statu quo confirmé cycle 6 : **désactivé**, C5/C6 attendent toujours les 6 questions |
 | c | **Numéro facturier + vendeur obligatoires** | **Décidé 2026-09-13** : un facturier par site (préfixe MAG-/CPT-). **Question 3 décidée 2026-09-19, livrée 2026-09-25 (chantier B, migration 040)** : le vendeur est une fiche employé, pas un compte — questions 2, 4, 5 (format exact, blocage vs. alerte, seuil de validation) ouvertes, sans effet bloquant sur le principe |
 | d | **Régime fiscal / taux de TVA** | **Décidé cycle 6** : réel, 19,25 %, TTC, arrondi arithmétique sur le total |
