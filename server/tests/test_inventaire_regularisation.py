@@ -145,7 +145,8 @@ def test_agent_stock_ne_peut_pas_regulariser(client):
 
 
 def test_plafond_vraisemblance_10000_refuse_au_dela(client):
-    """Décision 2026-09-25 (cycle 51) : plafond fixé à 10 000 — un comptage
+    """Valeur par défaut (2026-09-25) : plafond à 10 000 posé par l'équipe de
+    développement, en attente de confirmation du propriétaire — un comptage
     au-delà est refusé comme invraisemblable."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.post(

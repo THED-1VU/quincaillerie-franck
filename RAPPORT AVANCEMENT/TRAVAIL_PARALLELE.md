@@ -216,6 +216,8 @@ migration**. Règles :
 |---|---|---|
 | 040 | Plafond de vraisemblance DÉCIDÉ (C7) | session A, 2026-09-25 |
 | 040 | `vendeur_id` référence `employes` (chantier B, point f) | session B, 2026-09-25 |
+| 041 | `inventaire_initial` (point j) | session B, 2026-09-25 — **réservé rétroactivement** (le registre n'existait pas encore) |
+| 042 | Correction de la référence du plafond de vraisemblance (C7) | session A, 2026-09-25 |
 
 *(Ces deux lignes consignent l'incident du 2026-09-25 — deux 040 déjà
 fusionnés sur `main` sans collision de contenu. À partir de maintenant, le

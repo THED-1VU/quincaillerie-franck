@@ -68,7 +68,9 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
  'Valeur proposée, à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
 ('plafond_vraisemblance_comptage', '10000', 'entier',
  'Quantité comptée maximale acceptée sur une ligne de comptage. '
- 'Décision 2026-09-25 (cycle 51) : plafond fixé à 10 000.', TRUE, FALSE, 'Décision 2026-09-25 (cycle 51)'),
+ 'Valeur par défaut posée par l''équipe de développement (2026-09-25), '
+ 'en attente de confirmation du propriétaire.', TRUE, FALSE,
+ 'Défaut équipe de développement (2026-09-25), à confirmer par le propriétaire'),
 ('tentatives_max_connexion', '5', 'entier',
  'Nombre d''échecs consécutifs avant verrouillage du compte. Valeur proposée, '
  'à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
