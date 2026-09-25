@@ -1,15 +1,22 @@
 # Dépendances directes du noyau serveur.
 # Le fichier figé AVEC HACHAGES est requirements.txt, généré par :
 #   pip-compile --generate-hashes --strip-extras --output-file requirements.txt requirements.in
-fastapi==0.117.1
+#
+# Chantier C11 (cycle 49) : montée majeure décidée le 2026-09-25 après
+# l'audit pip-audit du cycle 47 — fastapi 0.141.1 + starlette 1.7.0 +
+# pytest 9.1.1 (dernières disponibles), validées par suite complète dans
+# un venv séparé.
+fastapi==0.141.1
+# Épinglé en direct : fastapi laisse starlette libre (>=0.46) et le
+# résolveur reprenait l'ancienne 0.48.0 ; la montée C11 exige la 1.x corrigée.
+starlette==1.7.0
 uvicorn[standard]==0.35.0
 psycopg[binary]==3.2.4
 bcrypt==4.2.1
-pytest==8.3.5
+pytest==9.1.1
 httpx==0.28.1
 
-# Chantier C13 (cycle 48) : reprise automatique du seul test flaky identifié
-# (test_caisse), sans masquer un échec déterministe.
+# Chantier C13 (cycle 48) : reprise automatique du seul test flaky identifié.
 pytest-rerunfailures==16.0
 
 # Chantier C11 (cycle 47) : python-multipart monté à 0.0.31 après l'audit
