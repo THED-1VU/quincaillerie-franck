@@ -183,3 +183,40 @@ responsable de ne pas dévier de CE plan précis sans le signaler.
 
 Aucune piste ne fusionne sa propre PR. Chaque piste s'arrête après avoir
 ouvert sa pull request.
+
+---
+
+## Règle n°5 — Réservation des numéros de migration (à partir du 2026-09-25)
+
+**Incident constaté (2026-09-25)** : deux sessions concurrentes ont chacune
+écrit une migration numérotée `040` (`040_plafond_vraisemblance_decide.sql`
+et `040_vendeur_employe.sql`), sans se voir. Les deux se sont appliquées
+sans casse cette fois (tables différentes), mais `schema_migrations` ne
+conserve que le nom de la première par ordre alphabétique pour la version
+`'040'` — un défaut de traçabilité qui restera en l'état (aucune donnée
+perdue, pas réparé rétroactivement). Le prochain conflit de ce genre, sur
+la MÊME table, ne serait pas aussi indolore.
+
+**Règle, applicable à toute session qui prévoit d'écrire une migration** :
+1. **Relire le tableau ci-dessous** avant de choisir un numéro — pas
+   seulement `git ls-tree`/`ls db/migrations` (qui ne voit que ce qui est
+   déjà écrit sur disque ou poussé, jamais une migration qu'une autre
+   session a réservée mais pas encore écrite).
+2. **Ajouter une ligne à la fin du tableau, avant d'écrire le fichier de
+   migration** — numéro, objet en quelques mots, session/piste, date.
+3. **Ce fichier reste partagé** : chaque session n'y ajoute qu'**une seule
+   ligne à la fin**, jamais de modification d'une ligne existante (même
+   principe que `maquette/verification/*.mjs`, règle n°2 ci-dessus). Un
+   conflit de fusion sur un simple ajout en fin de tableau reste trivial à
+   résoudre (garder les deux lignes) — un numéro réservé deux fois, lui,
+   ne l'est pas.
+4. Si le numéro qu'une session s'apprêtait à utiliser apparaît déjà réservé
+   par une ligne plus récente qu'elle n'avait pas vue en relisant, elle
+   **s'arrête et en choisit un autre** avant d'écrire quoi que ce soit —
+   jamais de fusion a posteriori de deux fichiers sur le même numéro.
+
+| Numéro | Objet | Session / piste | Date |
+|---|---|---|---|
+| 040 | Plafond de vraisemblance décidé (chantier C7) | session concurrente (C7/C11/C13) | 2026-09-25 |
+| 040 | `vendeur_id` référence `employes` (chantier B) | session point f / chantiers A-B-C | 2026-09-25 |
+| 041 | Chargement du stock initial réel — catégorie `inventaire_initial` (point j) | session point f / chantiers A-B-C | 2026-09-25 |
