@@ -240,7 +240,7 @@ def test_responsable_peut_vendre_pour_un_site_precise(client):
             "site_id": 2,
             "mode_paiement": "mtn_momo",
             "numero_facturier": "CPT-TEST0007",
-            "vendeur_id": 1,
+            "vendeur_id": 2,  # « Employée Comptoir » — l'employé 1 est du Magasin, site 1
             "lignes": [{"article_id": 3, "quantite": 1, "prix_unitaire": 800}],
         },
     )
@@ -743,10 +743,10 @@ def test_recu_vente_agent_comptabilite_limite_a_son_site(client):
 
 # ---------------------------------------------------------------------------
 # Numéro de facturier + vendeur (addendum, point c, décidé le 2026-09-13,
-# cycle 27) — périmètre réduit au socle décidé, voir
-# db/migrations/020_facturier_vendeur.sql : PAS de rapport d'écarts de prix
-# par vendeur, PAS de liste de vendeurs sans compte (questions 3 et 5 non
-# tranchées).
+# cycle 27 ; question 3 tranchée le 2026-09-25, migration 040) — vendeur_id
+# référence désormais une fiche employé (module RH), pas un compte
+# utilisateur : un vendeur peut n'avoir jamais eu de compte. PAS de rapport
+# d'écarts de prix par vendeur (question 5, toujours non tranchée).
 # ---------------------------------------------------------------------------
 
 def test_numero_facturier_obligatoire(client):
@@ -828,6 +828,70 @@ def test_vendeur_id_inexistant_refuse(client):
     assert "vendeur" in reponse.json()["detail"].lower()
 
 
+def test_vendeur_dun_autre_site_refuse(client):
+    """Chantier B (migration 040) : l'employé 2 (« Employée Comptoir »,
+    site 2) ne peut pas être vendeur d'une vente au Magasin (site 1)."""
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={
+            "mode_paiement": "especes",
+            "numero_facturier": "MAG-VENDEURAUTRESITE",
+            "vendeur_id": 2,
+            "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+        },
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "n'appartient pas au site" in reponse.json()["detail"].lower()
+
+
+def test_vendeur_employe_inactif_refuse(client):
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        conn.execute("UPDATE employes SET actif = FALSE WHERE id = 1")
+        conn.commit()
+    try:
+        session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+        reponse = client.post(
+            "/ventes",
+            headers=entete_autorisation(session["jeton"]),
+            json={
+                "mode_paiement": "especes",
+                "numero_facturier": "MAG-VENDEURINACTIF",
+                "vendeur_id": 1,
+                "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+            },
+        )
+        assert reponse.status_code == 422, reponse.text
+        assert "n'est plus actif" in reponse.json()["detail"].lower()
+    finally:
+        with psycopg.connect(PG_ADMIN_DSN) as conn:
+            conn.execute("UPDATE employes SET actif = TRUE WHERE id = 1")
+            conn.commit()
+
+
+def test_recu_vente_affiche_le_nom_de_lemploye_vendeur(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    entetes = entete_autorisation(session["jeton"])
+    reponse_vente = client.post(
+        "/ventes",
+        headers=entetes,
+        json={
+            "mode_paiement": "especes",
+            "numero_facturier": "MAG-VENDEURRECU",
+            "vendeur_id": 1,
+            "lignes": [{"article_id": 1, "quantite": 1, "prix_unitaire": 6500}],
+        },
+    )
+    assert reponse_vente.status_code == 201, reponse_vente.text
+    vente_id = reponse_vente.json()["vente_id"]
+
+    reponse = client.get(f"/ventes/{vente_id}/recu", headers=entetes)
+    assert reponse.status_code == 200, reponse.text
+    texte = _texte_pdf(reponse.content)
+    assert "Employé Essai" in texte
+
+
 def test_numero_facturier_reellement_enregistre_et_restitue(client):
     """Pas seulement accepté : réellement écrit en base ET renvoyé dans la
     réponse, exactement tel que saisi — jamais reformaté ni tronqué."""
@@ -856,16 +920,32 @@ def test_numero_facturier_reellement_enregistre_et_restitue(client):
     assert ligne["vendeur_id"] == 1
 
 
-def test_lister_vendeurs_du_site_inclut_le_responsable(client):
-    """Le comptable du Magasin (site 1) doit pouvoir choisir un vendeur de
-    SON site — et toujours le responsable, qui couvre les deux sites."""
+def test_lister_vendeurs_du_site_ne_montre_que_ses_employes(client):
+    """Chantier B (migration 040) : le vendeur est une fiche EMPLOYÉ, plus
+    un compte utilisateur — le comptable du Magasin (site 1) voit l'employé
+    de son site, jamais celui du Comptoir."""
     session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
     reponse = client.get("/ventes/vendeurs", headers=entete_autorisation(session["jeton"]))
     assert reponse.status_code == 200, reponse.text
     noms = [v["nom_complet"] for v in reponse.json()["vendeurs"]]
-    assert "Awa Franck" in noms  # le responsable (id=1, jeu d'essai)
-    assert "Cyr Magasin" in noms  # le comptable connecté lui-même (id=4)
-    assert "Dina Comptoir" not in noms  # comptable de l'AUTRE site (id=5)
+    assert "Employé Essai" in noms  # employé du Magasin (site 1, jeu d'essai)
+    assert "Employée Comptoir" not in noms  # employé de l'AUTRE site (site 2)
+
+
+def test_lister_vendeurs_employe_site_null_couvre_les_deux_sites(client):
+    """Un employé site_id NULL (même convention que
+    declarations_article_offert.employe_id, migration 039) apparaît quel
+    que soit le site consulté."""
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        conn.execute(
+            "INSERT INTO employes (nom_complet, poste, site_id) VALUES ('Employé Volant', 'Polyvalent', NULL)"
+        )
+        conn.commit()
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.get("/ventes/vendeurs", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    noms = [v["nom_complet"] for v in reponse.json()["vendeurs"]]
+    assert "Employé Volant" in noms
 
 
 def test_lister_vendeurs_responsable_doit_preciser_le_site(client):

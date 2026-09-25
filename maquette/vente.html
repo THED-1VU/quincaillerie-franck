@@ -238,12 +238,11 @@
         opt.textContent = v.nom_complet;
         vendeurEl.appendChild(opt);
       });
-      // Présélection : le cas courant est que la personne connectée est
-      // elle-même la vendeuse/le vendeur (cas limite documenté de
-      // l'addendum, point c) — reste modifiable avant validation.
-      if (donnees.vendeurs.some((v) => v.id === session.utilisateur_id)) {
-        vendeurEl.value = String(session.utilisateur_id);
-      }
+      // Pas de présélection (chantier B, décision 2026-09-25) : le vendeur
+      // est désormais un EMPLOYÉ (module RH), jamais un compte utilisateur
+      // — rien ne relie « le compte connecté » à « quel employé je suis »,
+      // et beaucoup de vendeurs n'ont justement aucun compte. Toujours
+      // choisi manuellement, comme les autres listes de ce type.
     } catch (erreur) {
       afficherErreurServeur("zone-erreur-catalogue", erreur);
     }

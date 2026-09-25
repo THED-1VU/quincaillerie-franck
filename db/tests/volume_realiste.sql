@@ -16,6 +16,14 @@ VALUES
   ('Agent Stock Volume', 'stock.volume', crypt('StockVolume123', gen_salt('bf', 12)), 'agent_stock', 1, TRUE, FALSE),
   ('Agent Compta Volume', 'compta.volume', crypt('ComptaVolume123', gen_salt('bf', 12)), 'agent_comptabilite', 2, TRUE, FALSE);
 
+-- 1 bis. Employes (vendeur_id, chantier B, migration 040) - un par site,
+-- distinct des comptes utilisateurs ci-dessus (un vendeur peut n'avoir
+-- jamais eu de compte).
+INSERT INTO employes (nom_complet, poste, type_contrat, salaire_mensuel, site_id, date_embauche, actif)
+VALUES
+  ('Vendeur Volume Magasin', 'Vendeur', 'permanent', 55000, 1, '2026-01-01', TRUE),
+  ('Vendeuse Volume Comptoir', 'Vendeuse', 'permanent', 55000, 2, '2026-01-01', TRUE);
+
 -- 2. Fournisseurs
 INSERT INTO fournisseurs (nom, contact, telephone)
 VALUES
@@ -65,14 +73,19 @@ SELECT s.site_id,
        NOW() - interval '1 day' * ((g - 1) % 30),
        CASE WHEN s.site_id = 1 THEN 'MAG-' || lpad(g::text, 6, '0')
             ELSE 'CPT-' || lpad(g::text, 6, '0') END,
-       u.id
+       e.id
 FROM generate_series(1, 600) AS g
 CROSS JOIN (VALUES (1), (2)) AS s(site_id)
 JOIN LATERAL (
     SELECT id FROM utilisateurs
      WHERE site_id = s.site_id AND role IN ('agent_stock', 'agent_comptabilite')
      LIMIT 1
-) AS u ON TRUE;
+) AS u ON TRUE
+-- vendeur_id = une fiche employe, pas un compte utilisateur (chantier B,
+-- migration 040) - l'employe cree a l'etape 1 bis, du meme site.
+JOIN LATERAL (
+    SELECT id FROM employes WHERE site_id = s.site_id LIMIT 1
+) AS e ON TRUE;
 
 -- 7. 3 lignes par vente (1 800 lignes), article et prix reels
 INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id)

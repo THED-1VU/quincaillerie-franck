@@ -96,9 +96,11 @@ async function seConnecter(page, identifiant, motDePasse) {
   // pour la panne réseau AVANT même l'envoi).
   await page.route("**/ventes", (route) => { /* jamais route.fulfill() ni route.abort() */ });
 
-  // N° facturier obligatoire depuis le cycle 27 (addendum point c) — le
-  // vendeur est déjà présélectionné.
+  // N° facturier obligatoire depuis le cycle 27 (addendum point c). Vendeur
+  // = une fiche employé depuis le chantier B (migration 040), plus jamais
+  // présélectionné — choix manuel explicite ici.
   await page.fill("#numero-facturier", "MAG-UX07");
+  await page.selectOption("#vendeur", "1");
 
   await page.keyboard.press("F9"); // 1ère pression : confirmation
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
@@ -182,10 +184,13 @@ async function seConnecter(page, identifiant, motDePasse) {
   const focusApresEntree = await page.evaluate(() => document.activeElement.id);
   verifier(focusApresEntree === "recherche", "UX-2 : Entrée dans le champ de prix ramène le focus à la recherche (clavier seul, sans souris)");
 
-  // N° facturier obligatoire (addendum point c, cycle 27) — page.fill() ne
-  // simule pas un clic de souris, cohérent avec le scénario « clavier seul »
-  // de ce contrôle (aucune assertion ci-dessous ne porte sur ce champ).
+  // N° facturier + vendeur obligatoires (addendum point c, cycle 27 ;
+  // vendeur = une fiche employé depuis le chantier B, migration 040,
+  // jamais présélectionné) — page.fill()/selectOption() ne simulent pas un
+  // clic de souris, cohérent avec le scénario « clavier seul » de ce
+  // contrôle (aucune assertion ci-dessous ne porte sur ces deux champs).
   await page.fill("#numero-facturier", "MAG-UX02");
+  await page.selectOption("#vendeur", "1");
 
   // Mode de paiement (F4) puis validation (F9 x2), toujours au clavier.
   await page.keyboard.press("F4");

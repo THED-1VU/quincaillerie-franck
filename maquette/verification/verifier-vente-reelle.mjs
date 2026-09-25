@@ -107,9 +107,10 @@ async function seConnecter(page, identifiant, motDePasse) {
   const apercuMontantTva = await page.textContent("#montant-tva");
 
   // N° facturier + vendeur, réels et obligatoires (addendum point c, cycle
-  // 27) : le vendeur est déjà présélectionné (le comptable connecté figure
-  // dans sa propre liste).
+  // 27). Vendeur = une fiche employé depuis le chantier B (migration 040),
+  // plus jamais présélectionné — choix manuel explicite ici.
   await page.fill("#numero-facturier", "MAG-REEL01");
+  await page.selectOption("#vendeur", "1");
 
   await page.keyboard.press("F9");
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
@@ -161,6 +162,7 @@ async function seConnecter(page, identifiant, motDePasse) {
   await page.locator(".panier__ligne input.panier__mini").first().dispatchEvent("input");
 
   await page.fill("#numero-facturier", "MAG-REEL02");
+  await page.selectOption("#vendeur", "1");
 
   await page.keyboard.press("F9");
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
