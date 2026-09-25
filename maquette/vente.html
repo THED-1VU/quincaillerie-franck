@@ -148,6 +148,14 @@
             <p class="champ__aide"><kbd>F4</kbd> pour changer de mode sans la souris.</p>
           </div>
 
+          <div class="champ" id="champ-client" style="margin-top:var(--e-4);" hidden>
+            <label class="champ__label" for="client-credit">Client (crédit)</label>
+            <select class="champ__select" id="client-credit">
+              <option value="">— Choisir —</option>
+            </select>
+            <p class="champ__aide">Encours et plafond vérifiés par le serveur à la validation.</p>
+          </div>
+
           <div id="zone-confirmation" class="erreur-champ" hidden
                style="background:var(--c-attention-clair); color:var(--c-attention); border-color:var(--c-attention);"></div>
           <div id="zone-succes" class="erreur-champ" hidden
@@ -191,9 +199,11 @@
   // Jamais une constante écrite en dur ici (addendum, point d, décidé cycle
   // 6) : le taux vient du serveur, qui le lit lui-même dans `parametres`.
   let TAUX_TVA = 0;
+  let CREDIT_CLIENT_ACTIF = false;
   try {
     const p = await appelApi("/ventes/parametres");
     TAUX_TVA = p.taux_tva;
+    CREDIT_CLIENT_ACTIF = !!p.credit_client_actif;
   } catch (erreur) {
     afficherErreurServeur("zone-erreur-catalogue", erreur);
   }
@@ -266,11 +276,45 @@
   let catalogue = [];
 
   // --- Modes de paiement (aucune route ne les expose : liste fixe du CDC) ---
-  DONNEES.modesPaiement.forEach((m) => {
+  // « Crédit client » (addendum point b, décidé le 2026-09-25) est ajouté
+  // ICI, à part, seulement si le paramètre serveur l'active pour cette
+  // boutique — jamais dans la liste simulée elle-même (donnees-simulees.js),
+  // pour qu'une boutique sans crédit client ne voie jamais l'option, plutôt
+  // que de la voir puis se la faire refuser.
+  const MODES_PAIEMENT = CREDIT_CLIENT_ACTIF
+    ? [...DONNEES.modesPaiement, { code: "credit_client", libelle: "Crédit client" }]
+    : DONNEES.modesPaiement;
+  MODES_PAIEMENT.forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m.code; opt.textContent = m.libelle;
     paiementEl.appendChild(opt);
   });
+
+  // --- Client (crédit) : chargé une seule fois si l'option est active,
+  // affiché seulement quand « Crédit client » est le mode choisi. ---
+  const champClientEl = $("champ-client");
+  const clientEl = $("client-credit");
+  let clientsCharges = false;
+  async function rafraichirVisibiliteClient() {
+    const estCredit = paiementEl.value === "credit_client";
+    champClientEl.hidden = !estCredit;
+    if (!estCredit || clientsCharges) return;
+    clientsCharges = true;
+    try {
+      const donnees = await appelApi("/clients");
+      donnees.forEach((c) => {
+        const opt = document.createElement("option");
+        opt.value = String(c.id);
+        opt.textContent = c.nom + (c.telephone ? " (" + c.telephone + ")" : "");
+        clientEl.appendChild(opt);
+      });
+    } catch (erreur) {
+      afficherErreurServeur("zone-erreur-catalogue", erreur);
+    }
+  }
+  if (CREDIT_CLIENT_ACTIF) {
+    paiementEl.addEventListener("change", rafraichirVisibiliteClient);
+  }
 
   // --- Catalogue RÉEL, via /articles (filtré par rôle et par site côté serveur) ---
   try {
@@ -576,12 +620,22 @@
       zoneConfirmation.textContent = "Le vendeur (qui a négocié le prix) est obligatoire avant de valider.";
       return;
     }
+    if (paiementEl.value === "credit_client" && !clientEl.value) {
+      zoneConfirmation.hidden = false;
+      zoneConfirmation.textContent = "Le client est obligatoire pour une vente à crédit.";
+      return;
+    }
     if (!enAttenteConfirmation) {
       enAttenteConfirmation = true;
       zoneConfirmation.hidden = false;
-      zoneConfirmation.textContent = "Confirmer l'encaissement de " + $("total-ttc").textContent
-        + " (" + paiementEl.options[paiementEl.selectedIndex].text + ") ? Appuyez de nouveau sur F9 ou sur le bouton.";
-      btnValider.textContent = "Confirmer l'encaissement";
+      const estCredit = paiementEl.value === "credit_client";
+      zoneConfirmation.textContent =
+        (estCredit
+          ? "Confirmer la vente à crédit de " + $("total-ttc").textContent
+          : "Confirmer l'encaissement de " + $("total-ttc").textContent
+            + " (" + paiementEl.options[paiementEl.selectedIndex].text + ")")
+        + " ? Appuyez de nouveau sur F9 ou sur le bouton.";
+      btnValider.textContent = estCredit ? "Confirmer la vente à crédit" : "Confirmer l'encaissement";
       return;
     }
 
@@ -596,6 +650,7 @@
           mode_paiement: paiementEl.value,
           numero_facturier: facturierEl.value.trim(),
           vendeur_id: Number(vendeurEl.value),
+          client_id: paiementEl.value === "credit_client" ? Number(clientEl.value) : null,
           lignes: panier.map((l) => ({
             article_id: l.id, quantite: l.quantite, prix_unitaire: l.prixUnitaire,
           })),
@@ -658,7 +713,14 @@
   document.addEventListener("keydown", (e) => {
     if (e.key === "F2")      { e.preventDefault(); recherche.focus(); recherche.select(); }
     else if (e.key === "F3") { e.preventDefault(); modifierPrixDernier(); }
-    else if (e.key === "F4") { e.preventDefault(); paiementEl.selectedIndex = (paiementEl.selectedIndex + 1) % paiementEl.options.length; }
+    else if (e.key === "F4") {
+      e.preventDefault();
+      paiementEl.selectedIndex = (paiementEl.selectedIndex + 1) % paiementEl.options.length;
+      // Changer selectedIndex par script ne déclenche pas "change" : sans
+      // cet appel explicite, F4 vers « Crédit client » laisserait le champ
+      // client caché.
+      if (CREDIT_CLIENT_ACTIF) rafraichirVisibiliteClient();
+    }
     else if (e.key === "F9") { e.preventDefault(); valider(); }
   });
 

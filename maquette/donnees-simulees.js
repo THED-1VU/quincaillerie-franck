@@ -39,10 +39,11 @@ const DONNEES = {
     { id: "ART-084", nom: "Vis à bois 4x40 (boîte)", unite: "boîte", prixCatalogue: 2000 },
   ],
 
-  /* « credit_client » existe dans le schéma mais reste désactivé au niveau
-     applicatif (addendum, point b — décision du propriétaire, cycle 6) :
-     volontairement absent de cette liste, pour qu'il ne soit même pas
-     proposable à l'écran plutôt que proposé puis refusé par le serveur.
+  /* « credit_client » est activé (addendum, point b, décidé le 2026-09-25)
+     mais volontairement ABSENT d'ici : vente.html l'ajoute lui-même à cette
+     liste, seulement si GET /ventes/parametres répond credit_client_actif,
+     pour qu'une boutique où la fonctionnalité est désactivée ne le voie
+     jamais à l'écran plutôt que de le voir puis se le faire refuser.
      Cette liste reste simulée (aucune route ne l'expose), mais ses codes
      doivent rester synchronisés avec server/app/routes/ventes.py. */
   modesPaiement: [

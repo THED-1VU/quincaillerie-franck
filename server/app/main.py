@@ -54,6 +54,7 @@ from .routes import (
     articles,
     auth,
     caisse,
+    clients,
     comptes,
     configuration,
     demonstration,
@@ -165,6 +166,7 @@ def creer_application(config: Config | None = None) -> FastAPI:
     app.include_router(rapports.routeur)
     app.include_router(transactions.routeur)
     app.include_router(rh.routeur)
+    app.include_router(clients.routeur)
     app.include_router(caisse.routeur)
     app.include_router(exploitation.routeur)
     app.include_router(configuration.routeur)

@@ -300,6 +300,28 @@ entre sites »).
 > **cahier de crédit** physique — leur chargement initial (nom, téléphone,
 > solde de départ, plafond éventuel déjà connu) doit être prévu au même
 > titre que le stock, pas traité comme un cas annexe.
+>
+> **Livré (2026-09-25, migration 045).** Client (nom, téléphone, plafond
+> 100 000 FCFA par défaut, dépassable par le responsable) ; une vente à
+> crédit crée une créance, jamais une recette (question 1-2 tenues) ;
+> règlements partiels, **alloués en FIFO contre les créances les plus
+> anciennes** — jamais liés à une créance précise, comme le cahier papier
+> ne l'a jamais demandé (répond à la question 5 en ouvrant l'écriture du
+> règlement au responsable ET à l'agent comptabilité) ; encours et
+> vieillissement 30/60/90 jours sur le tableau de bord du responsable
+> (question 6) ; activable/désactivable par boutique (question implicite
+> de la gamme, `VISION_PRODUIT.md`) ; chargement initial des créances,
+> `db/outils/importer_creances_initiales.py`, même discipline que le point j.
+> **Non traité, comme explicitement laissé ouvert ci-dessus** : paiements
+> mixtes (question 3), créance non recouvrée/relance/abandon (question 4).
+> **Trouvé et corrigé en construisant ce chantier** : `annuler_vente()`
+> (migration 017) contre-passait inconditionnellement une recette par une
+> dépense — pour une vente à crédit, qui n'en a jamais créé, cela aurait
+> produit une dépense fantôme. Corrigé : la créance est annulée à sa place ;
+> une créance déjà entamée par un règlement refuse l'annulation (le premier
+> des « cas limites » ci-dessous reste donc réellement ouvert, le second
+> — annulation après règlement partiel — refuse plutôt que d'inventer un
+> avoir).
 
 **Contexte.** `mode_paiement = 'credit_client'` est autorisé. Le cahier des charges (§3.3)
 crée une **recette immédiate** à la validation de la vente. Or, en crédit, **aucun argent

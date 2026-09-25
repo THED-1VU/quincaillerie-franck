@@ -51,6 +51,7 @@
     <a class="btn btn--fantome" href="comptes.html">Comptes</a>
     <a class="btn btn--fantome" href="cloture-caisse.html">Clôture de caisse</a>
     <a class="btn btn--fantome" href="declarations.html">Déclarations</a>
+    <a class="btn btn--fantome" id="lien-clients" href="clients.html" hidden>Clients</a>
     <button class="btn btn--fantome" id="bouton-deconnexion" type="button">Déconnexion</button>
   </header>
 
@@ -100,6 +101,15 @@
         <p id="resume-offerts">Chargement…</p>
         <a class="btn btn--secondaire" href="declarations.html">Voir et valider</a>
         <p class="champ__aide">Sans effet sur le stock tant que non validée (chantier C4/C5, point f) — une déclaration ancienne est un signal, pas un oubli. Casse et retours clients en attente : sur le même écran dédié.</p>
+      </section>
+
+      <section class="carte" id="carte-credit-client" hidden>
+        <h2>Crédit client</h2>
+        <div id="zone-erreur-credit" class="erreur-champ" hidden></div>
+        <p id="resume-credit">Chargement…</p>
+        <ul class="liste-nue" id="liste-vieillissement"></ul>
+        <a class="btn btn--secondaire" href="clients.html">Voir les clients</a>
+        <p class="champ__aide">Vieillissement calculé en FIFO : chaque règlement éteint d'abord la créance la plus ancienne du client (addendum point b).</p>
       </section>
 
       <section class="carte">
@@ -466,6 +476,40 @@
     }
   }
   await chargerOffertsEnAttente();
+
+  // --- Crédit client (addendum point b, décidé le 2026-09-25) : la carte
+  // et le lien « Clients » du bandeau restent CACHÉS tant que la boutique
+  // n'a pas activé la fonctionnalité (paramètre credit_client_actif) —
+  // même principe que le mode de paiement sur vente.html.
+  const TRANCHE_LIBELLE = { "0-30": "0 à 30 jours", "31-60": "31 à 60 jours", "61-90": "61 à 90 jours", "91+": "91 jours et plus" };
+  async function chargerCreditClient() {
+    try {
+      const parametres = await appelApi("/ventes/parametres");
+      if (!parametres.credit_client_actif) return;
+      $("carte-credit-client").hidden = false;
+      $("lien-clients").hidden = false;
+
+      const donnees = await appelApi("/tableau-bord/credit-client");
+      $("resume-credit").textContent = "Encours total : " + donnees.encours_total.toLocaleString("fr-FR") + " FCFA";
+      const liste = $("liste-vieillissement");
+      liste.innerHTML = "";
+      Object.entries(donnees.vieillissement).forEach(([tranche, montant]) => {
+        if (montant <= 0) return;
+        const li = document.createElement("li");
+        li.textContent = (TRANCHE_LIBELLE[tranche] || tranche) + " : " + montant.toLocaleString("fr-FR") + " FCFA";
+        liste.appendChild(li);
+      });
+      if (!liste.children.length) {
+        const li = document.createElement("li");
+        li.textContent = "Aucun encours en cours.";
+        liste.appendChild(li);
+      }
+    } catch (erreur) {
+      $("carte-credit-client").hidden = false;
+      afficherErreurServeur("zone-erreur-credit", erreur);
+    }
+  }
+  await chargerCreditClient();
 
   // --- Saisie rapide (recette/dépense hors vente) : RÉEL, via POST /transactions ---
   // (chantier C6, cycle 16 ; la clôture de caisse — addendum point g —

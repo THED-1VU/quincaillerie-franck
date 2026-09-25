@@ -292,6 +292,51 @@ Vérifié à l'exécution que `transferer_stock()` (ne recalcule jamais de
 seuil) et `regulariser_ecart_comptage()` (ne touche jamais `stocks_sites`)
 n'ont pas ce défaut — décision du propriétaire de ne pas les toucher.
 
+### Crédit client (point b, migration 045)
+
+Décision du propriétaire (2026-09-25) : une vente à crédit crée une
+**créance** (`creances`), **jamais** une recette encaissée (`transactions`)
+— le stock décrémente normalement, mais aucun argent n'entre en caisse.
+Déjà anticipé six cycles plus tôt : `calculer_attendu_caisse()` (migration
+019, clôture de caisse) excluait déjà `credit_client` de ses 4 totaux tout
+en laissant la vente au statut `payee`.
+
+Tables : `clients` (partagés entre les deux sites, `site_id` informatif
+seulement — jamais un filtre), `creances` (une ligne par vente à crédit ou
+par reprise du cahier papier, `vente_id` NULL dans ce second cas),
+`reglements_creances` (versements **jamais liés à une créance précise** —
+allocation FIFO calculée à la lecture par `vieillissement_creances()`,
+comme le cahier papier ne demande jamais au client quelle vente il règle).
+`encours_client()` (créances − règlements) fait foi pour le plafond
+(100 000 FCFA par défaut par client) vérifié à chaque vente à crédit.
+
+Activable/désactivable par boutique (paramètre `credit_client_actif`,
+`'oui'`/`'non'`) — c'est un produit vendu en gamme, chaque déploiement
+décide indépendamment. Trouvé par exécution en écrivant les tests de ce
+cycle : `db/tests/00_jeu_essai.sql` réamorce `parametres` avec sa PROPRE
+copie figée de la migration 006 — tout paramètre ajouté par une migration
+ultérieure (comme `credit_client_actif` ici, ou `plafond_vraisemblance_comptage`
+avant lui) doit être ajouté EXPLICITEMENT à cette liste, sinon le
+`TRUNCATE`/réamorçage le fait disparaître silencieusement dans la base de
+test — la valeur reste correcte en développement/production, où
+`00_jeu_essai.sql` n'est jamais rejoué.
+
+Chargement initial des créances existantes, même esprit que le point j :
+`db/outils/importer_creances_initiales.py` (simulation obligatoire,
+idempotence par ligne, réutilise une fiche client existante par téléphone
+ou, à défaut, par nom exact).
+
+Aucune relance automatique, aucun intérêt — décision explicite du
+propriétaire, volontairement pas construit.
+
+**Trouvé par exécution en écrivant ce cycle** : `annuler_vente()` (migration
+017) contre-passait inconditionnellement une recette par une dépense — pour
+une vente à crédit, qui n'a jamais créé de recette, cela aurait inséré une
+dépense fantôme. Corrigé (migration 045) : la créance associée est marquée
+`annulee` à la place ; une créance déjà entamée par un règlement (allocation
+FIFO) refuse l'annulation plutôt que de produire un encours négatif ou un
+avoir inventé — cas explicitement laissé ouvert par l'addendum, point b.
+
 ---
 
 ## Ce que chaque migration corrige

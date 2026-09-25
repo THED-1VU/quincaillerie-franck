@@ -798,6 +798,119 @@ SELECT t_succes('044 · aucune quantité entière (1 à 50) ne produit de seuil 
 DROP FUNCTION _verifier_aucun_seuil_decimal(INTEGER, INTEGER, INTEGER);
 
 -- ============================================================================
+-- 16. Crédit client (migration 045, point b, décision 2026-09-25) —
+--     clients, créances, règlements. Une vente à crédit crée une créance,
+--     jamais une recette encaissée ; règlements FIFO ; aucune relance,
+--     aucun intérêt.
+-- ============================================================================
+
+INSERT INTO clients (id, nom, plafond_credit) VALUES (900, 'Client protections', 50000);
+SELECT setval('clients_id_seq', 900, TRUE);
+
+-- Garde-fous de enregistrer_creance_initiale().
+SELECT t_refus('045 · créance initiale de montant nul refusée',
+  $$SELECT enregistrer_creance_initiale(900, 0, 1, 2, 'reprise cahier')$$);
+SELECT t_refus('045 · créance initiale sans motif refusée',
+  $$SELECT enregistrer_creance_initiale(900, 1000, 1, 2, '')$$);
+SELECT t_refus('045 · créance initiale pour un client introuvable refusée',
+  $$SELECT enregistrer_creance_initiale(999999, 1000, 1, 2, 'reprise cahier')$$);
+
+SELECT t_succes('045 · créance initiale acceptée (reprise du cahier papier)',
+  $$SELECT enregistrer_creance_initiale(900, 20000, 1, 2, 'reprise cahier papier')$$);
+
+SELECT t_valeur('045 · encours du client après la créance initiale',
+  $$SELECT encours_client(900)::TEXT$$, '20000.00');
+
+-- Une créance née d'une vente réelle (vente_id NON NULL) s'additionne à
+-- l'encours — écriture directe ici (comme le fait POST /ventes), pas de
+-- fonction dédiée pour ce chemin.
+INSERT INTO creances (client_id, vente_id, site_id, montant, utilisateur_id)
+VALUES (900, 900, 1, 15000, 2);
+
+SELECT t_valeur('045 · encours cumule créance initiale + créance de vente',
+  $$SELECT encours_client(900)::TEXT$$, '35000.00');
+
+-- Garde-fous de enregistrer_reglement_creance().
+SELECT t_refus('045 · règlement de montant nul refusé',
+  $$SELECT enregistrer_reglement_creance(900, 0, 2, 'test')$$);
+SELECT t_refus('045 · règlement pour un client introuvable refusé',
+  $$SELECT enregistrer_reglement_creance(999999, 100, 2, 'test')$$);
+SELECT t_refus('045 · règlement dépassant l''encours refusé',
+  $$SELECT enregistrer_reglement_creance(900, 999999, 2, 'test')$$);
+
+-- Règlement partiel : éteint FIFO la créance initiale (20000, la plus
+-- ancienne) en totalité, puis entame la créance de vente (15000) de 5000.
+SELECT t_succes('045 · règlement partiel accepté',
+  $$SELECT enregistrer_reglement_creance(900, 25000, 2, 'paiement partiel')$$);
+
+SELECT t_valeur('045 · encours après le règlement partiel (35000 - 25000)',
+  $$SELECT encours_client(900)::TEXT$$, '10000.00');
+
+-- Un client désactivé peut encore régler ce qu'il doit (aucun blocage sur
+-- actif dans enregistrer_reglement_creance).
+UPDATE clients SET actif = FALSE WHERE id = 900;
+SELECT t_succes('045 · un client désactivé peut régler son encours restant',
+  $$SELECT enregistrer_reglement_creance(900, 10000, 2, 'solde après désactivation')$$);
+SELECT t_valeur('045 · encours nul après le solde complet',
+  $$SELECT encours_client(900)::TEXT$$, '0.00');
+UPDATE clients SET actif = TRUE WHERE id = 900;
+
+-- Non-destructibilité : jamais de suppression, même sans effet apparent.
+SELECT t_refus('045 · suppression d''une créance refusée',
+  $$DELETE FROM creances WHERE client_id = 900$$);
+SELECT t_refus('045 · suppression d''un règlement refusée',
+  $$DELETE FROM reglements_creances WHERE client_id = 900$$);
+
+-- Trouvé par exécution en écrivant ce cycle : annuler_vente() (migration
+-- 017) contre-passait INCONDITIONNELLEMENT une recette par une dépense —
+-- pour une vente à crédit, jamais de recette créée, la dépense serait
+-- fantôme. Corrigé (migration 045) : la créance est annulée à la place,
+-- aucune dépense insérée.
+INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+                     utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
+                     total_ttc, date_encaissement, numero_facturier, vendeur_id)
+VALUES (901, 1, 4, 'payee', 'credit_client', 1, 6500, 0, 0, 6500, NOW(), 'MAG-9001', 1);
+INSERT INTO creances (client_id, vente_id, site_id, montant, utilisateur_id)
+VALUES (900, 901, 1, 6500, 1);
+
+SELECT t_succes('045 · annulation d''une vente à crédit non réglée acceptée',
+  $$SELECT * FROM annuler_vente(901, 1, 'test annulation crédit')$$);
+SELECT t_valeur('045 · la créance associée est marquée annulée',
+  $$SELECT annulee::TEXT FROM creances WHERE vente_id = 901$$, 'true');
+SELECT t_valeur('045 · aucune dépense fantôme créée pour une vente à crédit annulée',
+  $$SELECT count(*)::TEXT FROM transactions WHERE vente_id = 901$$, '0');
+
+-- Une créance déjà entamée par un règlement (allocation FIFO) refuse
+-- l'annulation — cas volontairement non traité (addendum point b).
+INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+                     utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
+                     total_ttc, date_encaissement, numero_facturier, vendeur_id)
+VALUES (902, 1, 4, 'payee', 'credit_client', 1, 6500, 0, 0, 6500, NOW(), 'MAG-9002', 1);
+INSERT INTO creances (client_id, vente_id, site_id, montant, utilisateur_id)
+VALUES (900, 902, 1, 6500, 1);
+SELECT enregistrer_reglement_creance(900, 2000, 1, 'paiement partiel avant annulation');
+
+SELECT t_refus('045 · annulation refusée si la créance a déjà reçu un règlement',
+  $$SELECT * FROM annuler_vente(902, 1, 'test refus annulation')$$);
+
+-- Non-régression : l'annulation d'une vente normale (non crédit) continue
+-- de contre-passer une dépense, comme avant la migration 045. Vente 903,
+-- pas 900 : la vente 900 a déjà été annulée directement (section 5
+-- ci-dessus, pour tester le déclencheur de changement de statut), passer
+-- par annuler_vente() dessus échouerait ("déjà annulée").
+INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+                     utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
+                     total_ttc, date_encaissement, numero_facturier, vendeur_id)
+VALUES (903, 1, 4, 'payee', 'especes', 1, 6500, 0, 0, 6500, NOW(), 'MAG-9003', 1);
+INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, vente_id)
+VALUES (1, 4, 'recette', 6500, 'Vente 903', 903);
+
+SELECT t_succes('045 · annulation d''une vente normale contre-passe toujours une dépense',
+  $$SELECT * FROM annuler_vente(903, 1, 'test non-régression annulation normale')$$);
+SELECT t_valeur('045 · dépense de contre-passation bien créée pour une vente normale',
+  $$SELECT count(*)::TEXT FROM transactions WHERE vente_id = 903 AND type = 'depense'$$, '1');
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''

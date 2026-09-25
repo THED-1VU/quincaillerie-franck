@@ -83,3 +83,28 @@ def articles_offerts_en_attente(
             lignes = cur.fetchall()
 
     return {"declarations": lignes}
+
+
+@routeur.get("/credit-client")
+def credit_client(
+    request: Request,
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Encours total et vieillissement (addendum, point b, décidé le
+    2026-09-25) — allocation FIFO calculée par ``vieillissement_creances()``
+    (migration 045), même principe que ``calculer_attendu_caisse`` : lecture
+    seule, pas de SECURITY DEFINER, le responsable a déjà SELECT sur les
+    tables sources."""
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(role_pg(session.role), utilisateur_id=session.utilisateur_id) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT tranche, montant FROM vieillissement_creances()")
+            tranches = cur.fetchall()
+
+    par_tranche = {t: 0.0 for t in ("0-30", "31-60", "61-90", "91+")}
+    for ligne in tranches:
+        par_tranche[ligne["tranche"]] = float(ligne["montant"])
+    return {
+        "encours_total": round(sum(par_tranche.values()), 2),
+        "vieillissement": par_tranche,
+    }

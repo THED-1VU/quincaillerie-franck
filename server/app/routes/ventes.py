@@ -15,10 +15,12 @@ db/migrations/011_ventes_fiscalite_anti_survente.sql) :
     arrondi arithmétique sur le TOTAL de TVA de la vente (jamais ligne à
     ligne, pour éviter les écarts d'un franc). Le taux n'est jamais une
     constante du code : il vient de ``parametres`` via ``parametre_numerique``.
-  * point b (crédit client) — PAS activé ce cycle. ``mode_paiement =
-    'credit_client'`` est explicitement refusé ici, avec un message clair :
-    aucune table Client, aucune créance n'existe tant que le reste du
-    point b n'est pas tranché.
+  * point b (crédit client) — activé (décidé le 2026-09-25, migration 045).
+    ``mode_paiement = 'credit_client'`` exige un ``client_id``, vérifie que
+    le client est actif et que la vente ne dépasse pas son plafond, puis
+    crée une CRÉANCE (table ``creances``) au lieu d'une recette
+    (``transactions``) — activable/désactivable par boutique via le
+    paramètre ``credit_client_actif`` (produit vendu en gamme).
   * point c (numéro facturier + vendeur) — traité au cycle 27, périmètre
     réduit au socle décidé (voir db/migrations/020_facturier_vendeur.sql) :
     ``numero_facturier`` (référence du carnet PAPIER, transcrite par le
@@ -67,9 +69,10 @@ from ..securite import Session
 
 routeur = APIRouter(prefix="/ventes", tags=["ventes"])
 
-# 'credit_client' existe dans le CHECK du schéma d'origine mais reste
-# désactivé au niveau applicatif : décision du propriétaire, cycle 6
-# (addendum, point b — voir le message dédié ci-dessous).
+# 'credit_client' est géré à PART (voir `est_credit` ci-dessous, addendum
+# point b, migration 045) : jamais dans cet ensemble, dont chaque valeur
+# crée une recette de caisse (transactions) — une vente à crédit ne le fait
+# jamais.
 _MODES_PAIEMENT_ACTIFS = {"especes", "orange_money", "mtn_momo", "autre"}
 
 
@@ -77,7 +80,8 @@ _MODES_PAIEMENT_ACTIFS = {"especes", "orange_money", "mtn_momo", "autre"}
 def parametres_vente(
     request: Request, session: Session = Depends(exiger_role("responsable", "agent_comptabilite"))
 ):
-    """Taux de TVA actuellement en vigueur (addendum, point d).
+    """Taux de TVA actuellement en vigueur (addendum, point d), et si le
+    crédit client (addendum, point b) est activé pour cette boutique.
 
     Jamais une constante écrite en dur côté écran : la maquette lit cette
     route pour afficher un aperçu du total AVANT validation. Le calcul qui
@@ -88,7 +92,10 @@ def parametres_vente(
         with conn.cursor() as cur:
             cur.execute("SELECT parametre_numerique(%s) AS v", ("taux_tva",))
             taux_tva = cur.fetchone()["v"]
-    return {"taux_tva": float(taux_tva)}
+            cur.execute("SELECT valeur FROM parametres WHERE cle = 'credit_client_actif'")
+            ligne = cur.fetchone()
+            credit_client_actif = bool(ligne and ligne["valeur"] == "oui")
+    return {"taux_tva": float(taux_tva), "credit_client_actif": credit_client_actif}
 
 
 @routeur.get("/vendeurs")
@@ -139,14 +146,14 @@ def enregistrer_vente(
     request: Request,
     session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
 ):
-    if demande.mode_paiement == "credit_client":
+    est_credit = demande.mode_paiement == "credit_client"
+    if not est_credit and demande.mode_paiement not in _MODES_PAIEMENT_ACTIFS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Mode de paiement inconnu.")
+    if est_credit and demande.client_id is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "La vente à crédit n'est pas encore activée "
-            "(décision du propriétaire en attente — addendum, point b).",
+            "Le client est obligatoire pour une vente à crédit.",
         )
-    if demande.mode_paiement not in _MODES_PAIEMENT_ACTIFS:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Mode de paiement inconnu.")
 
     # Le site vient TOUJOURS de la session pour un agent (jamais du corps de
     # la requête, que l'appelant pourrait manipuler) ; le responsable, qui
@@ -169,6 +176,36 @@ def enregistrer_vente(
         with conn.cursor() as cur:
             cur.execute("SELECT parametre_numerique(%s) AS v", ("taux_tva",))
             taux_tva = cur.fetchone()["v"]
+
+            # Crédit client (addendum point b, décidé le 2026-09-25) :
+            # activable/désactivable par boutique — vérifié ICI, pas
+            # seulement côté écran, puisque c'est la seule vraie source de
+            # vérité. Le plafond est vérifié plus bas, une fois le total
+            # TTC de la vente connu.
+            if est_credit:
+                cur.execute("SELECT valeur FROM parametres WHERE cle = 'credit_client_actif'")
+                ligne_param = cur.fetchone()
+                if not (ligne_param and ligne_param["valeur"] == "oui"):
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        "La vente à crédit n'est pas activée pour cette boutique.",
+                    )
+                cur.execute(
+                    "SELECT actif, encours_client(id) AS encours, plafond_credit "
+                    "FROM clients WHERE id = %s",
+                    (demande.client_id,),
+                )
+                ligne_client = cur.fetchone()
+                if ligne_client is None:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        f"Client introuvable (identifiant {demande.client_id}).",
+                    )
+                if not ligne_client["actif"]:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        f"Le client {demande.client_id} n'est plus actif.",
+                    )
 
             # Point h (rôle caissier) : décidé le 2026-09-13 (fusionné avec
             # agent_comptabilite, cycle 27 — voir ADDENDUM_CAHIER_DES_CHARGES.md).
@@ -348,6 +385,16 @@ def enregistrer_vente(
                 montant_tva = Decimal("0")
             sous_total_ht = total_ttc - montant_tva
 
+            if est_credit:
+                encours_apres = Decimal(str(ligne_client["encours"])) + total_ttc
+                plafond = Decimal(str(ligne_client["plafond_credit"]))
+                if encours_apres > plafond:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        f"Cette vente porterait l'encours du client à {encours_apres} FCFA, "
+                        f"au-delà de son plafond ({plafond} FCFA).",
+                    )
+
             try:
                 cur.execute(
                     """
@@ -429,17 +476,28 @@ def enregistrer_vente(
                         )
                     )
 
-            # Une recette par vente (cahier des charges §3.3) — le crédit
-            # client étant désactivé ce cycle (point b), toute vente payée
-            # ici en crée systématiquement une. L'index unique partiel
-            # (migration 002) empêche de toute façon le double comptage.
-            cur.execute(
-                """
-                INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, vente_id)
-                VALUES (%s, %s, 'recette', %s, %s, %s)
-                """,
-                (site_cible, session.utilisateur_id, total_ttc, f"Vente #{vente_id}", vente_id),
-            )
+            # Une recette par vente (cahier des charges §3.3) — SAUF une
+            # vente à crédit (addendum point b, décidé le 2026-09-25) : elle
+            # crée une créance, JAMAIS une recette encaissée (aucun argent
+            # n'est réellement entré en caisse). L'index unique partiel
+            # (migration 002) empêche de toute façon le double comptage sur
+            # le chemin normal.
+            if est_credit:
+                cur.execute(
+                    """
+                    INSERT INTO creances (client_id, vente_id, site_id, montant, utilisateur_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (demande.client_id, vente_id, site_cible, total_ttc, session.utilisateur_id),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, vente_id)
+                    VALUES (%s, %s, 'recette', %s, %s, %s)
+                    """,
+                    (site_cible, session.utilisateur_id, total_ttc, f"Vente #{vente_id}", vente_id),
+                )
         # Commit automatique à la sortie de connexion_pour() (voir auth.py).
 
     return ReponseVente(

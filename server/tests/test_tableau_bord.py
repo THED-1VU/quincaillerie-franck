@@ -6,10 +6,13 @@ Alertes de stock faible (dernière carte encore simulée de
 
 from __future__ import annotations
 
+import psycopg
+
 from conftest import (
     MOT_DE_PASSE_AGENT_COMPTA,
     MOT_DE_PASSE_AGENT_STOCK,
     MOT_DE_PASSE_RESPONSABLE,
+    PG_ADMIN_DSN,
     entete_autorisation,
     se_connecter,
 )
@@ -128,4 +131,35 @@ def test_historique_comptages_reserve_au_responsable(client):
         headers=entete_autorisation(session["jeton"]),
         params={"date_debut": "2000-01-01", "date_fin": "2999-12-31"},
     )
+    assert reponse.status_code == 403, reponse.text
+
+
+# ---------------------------------------------------------------------------
+# Crédit client — encours et vieillissement (addendum point b, migration 045)
+# ---------------------------------------------------------------------------
+
+def test_credit_client_encours_et_vieillissement(client):
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO clients (nom) VALUES ('Client Tableau de Bord') RETURNING id"
+            )
+            client_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO creances (client_id, site_id, montant, utilisateur_id, date_creance) "
+                "VALUES (%s, 1, 15000, 1, NOW() - INTERVAL '95 days')",
+                (client_id,),
+            )
+
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get("/tableau-bord/credit-client", headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    corps = reponse.json()
+    assert corps["encours_total"] >= 15000
+    assert corps["vieillissement"]["91+"] >= 15000
+
+
+def test_credit_client_reserve_au_responsable(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.get("/tableau-bord/credit-client", headers=entete_autorisation(session["jeton"]))
     assert reponse.status_code == 403, reponse.text
