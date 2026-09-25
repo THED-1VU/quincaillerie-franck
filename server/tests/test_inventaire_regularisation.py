@@ -144,42 +144,47 @@ def test_agent_stock_ne_peut_pas_regulariser(client):
     assert reponse.status_code == 403
 
 
-def test_plafond_inactif_tant_que_non_fixe(client):
-    """Décision 2026-09-22 : tant que `plafond_vraisemblance_comptage` est
-    `a_definir`, AUCUN comptage n'est refusé pour vraisemblance."""
+def test_plafond_vraisemblance_10000_refuse_au_dela(client):
+    """Décision 2026-09-25 (cycle 51) : plafond fixé à 10 000 — un comptage
+    au-delà est refusé comme invraisemblable."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.post(
         "/inventaire/comptages",
         headers=entete_autorisation(session["jeton"]),
-        json={"article_id": 2, "moment": "matin", "quantite_comptee": 999999},
+        json={"article_id": 2, "moment": "matin", "quantite_comptee": 10001},
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "invraisemblable" in reponse.json()["detail"].lower()
+
+
+def test_plafond_vraisemblance_10000_accepte_la_valeur_limite(client):
+    """La valeur plafond elle-même (10 000) reste acceptée."""
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.post(
+        "/inventaire/comptages",
+        headers=entete_autorisation(session["jeton"]),
+        json={"article_id": 2, "moment": "soir", "quantite_comptee": 10000},
     )
     assert reponse.status_code == 201, reponse.text
 
 
-def test_plafond_refuse_quand_le_proprietaire_le_fixe(client):
-    """La mécanique est prête : dès que le paramètre est fixé, elle refuse."""
+def test_plafond_redecidable_par_le_proprietaire(client):
+    """La mécanique reste configurable : repasser le paramètre à décider
+    désactive le plafond (décision réversible)."""
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     _executer_sql_admin(
-        "UPDATE parametres SET valeur = '1000', a_decider = FALSE"
+        "UPDATE parametres SET valeur = 'a_definir', a_decider = TRUE"
         " WHERE cle = 'plafond_vraisemblance_comptage'"
     )
     try:
         reponse = client.post(
             "/inventaire/comptages",
             headers=entete_autorisation(session["jeton"]),
-            json={"article_id": 2, "moment": "soir", "quantite_comptee": 1001},
+            json={"article_id": 4, "moment": "matin", "quantite_comptee": 999999},
         )
-        assert reponse.status_code == 422, reponse.text
-        assert "invraisemblable" in reponse.json()["detail"].lower()
-
-        acceptable = client.post(
-            "/inventaire/comptages",
-            headers=entete_autorisation(session["jeton"]),
-            json={"article_id": 4, "moment": "soir", "quantite_comptee": 1000},
-        )
-        assert acceptable.status_code == 201, acceptable.text
+        assert reponse.status_code == 201, reponse.text
     finally:
         _executer_sql_admin(
-            "UPDATE parametres SET valeur = 'a_definir', a_decider = TRUE"
+            "UPDATE parametres SET valeur = '10000', a_decider = FALSE"
             " WHERE cle = 'plafond_vraisemblance_comptage'"
         )

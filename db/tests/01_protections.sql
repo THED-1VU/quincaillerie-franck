@@ -641,6 +641,18 @@ SELECT t_succes('040 · vente avec un vendeur (employé) réel acceptée',
 UPDATE ventes SET vendeur_id = NULL WHERE id = 900;
 
 -- ============================================================================
+-- 13. Plafond de vraisemblance DÉCIDÉ (migration 040, chantier C7,
+--     décision 2026-09-25 : 10 000)
+-- ============================================================================
+SELECT t_valeur('040 · plafond fixé à 10 000',
+  $$SELECT valeur FROM parametres WHERE cle = 'plafond_vraisemblance_comptage'$$,
+  '10000');
+
+SELECT t_valeur('040 · plafond actif (a_decider = false)',
+  $$SELECT a_decider::TEXT FROM parametres WHERE cle = 'plafond_vraisemblance_comptage'$$,
+  'false');
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''
