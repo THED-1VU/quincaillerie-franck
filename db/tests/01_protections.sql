@@ -911,6 +911,40 @@ SELECT t_valeur('045 · dépense de contre-passation bien créée pour une vente
   $$SELECT count(*)::TEXT FROM transactions WHERE vente_id = 903 AND type = 'depense'$$, '1');
 
 -- ============================================================================
+-- 16. Normalisation des noms d'articles (migration 046, candidat 16, C1)
+--     — insensible à la casse, aux accents, aux espaces multiples et aux
+--     tirets ; ne tranche jamais entre plusieurs fiches (l'outil d'import
+--     présente les paires douteuses au responsable).
+-- ============================================================================
+
+SELECT t_valeur('046 · accents ignorés',
+  $$SELECT normaliser_nom_article('Fer à béton 12')$$,
+  'fer a beton 12');
+
+SELECT t_valeur('046 · casse ignorée',
+  $$SELECT normaliser_nom_article('FER A BETON 12')$$,
+  'fer a beton 12');
+
+SELECT t_valeur('046 · espaces multiples réduits à un seul',
+  $$SELECT normaliser_nom_article('Fer à béton  12')$$,
+  'fer a beton 12');
+
+SELECT t_valeur('046 · tiret traité comme une espace',
+  $$SELECT normaliser_nom_article('Fer à béton-12')$$,
+  'fer a beton 12');
+
+SELECT t_valeur('046 · tiret bas et apostrophe traités comme une espace',
+  $$SELECT normaliser_nom_article('Fer à béton_12')$$,
+  'fer a beton 12');
+
+SELECT t_valeur('046 · espaces de tête et de queue supprimés',
+  $$SELECT normaliser_nom_article('  Fer à béton 12  ')$$,
+  'fer a beton 12');
+
+SELECT t_succes('046 · la fonction est exécutable par qf_responsable',
+  $$SELECT has_function_privilege('qf_responsable', 'normaliser_nom_article(VARCHAR)', 'EXECUTE')$$);
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''
