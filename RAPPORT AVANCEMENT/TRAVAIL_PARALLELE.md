@@ -211,6 +211,17 @@ migration**. Règles :
 4. Une réservation est retirée uniquement par son auteur, **en la
    barrant** (`~~...~~`) et en ajoutant une ligne, jamais en éditant la
    ligne d'origine.
+5. **Une réservation n'existe que commise directement sur `main`,
+   immédiatement — jamais dans une branche ou une PR en attente.** Une
+   réservation qui n'est pas encore fusionnée est invisible pour les
+   autres sessions et ne protège de rien.
+
+**Incident du 2026-09-26** : la session B a réservé le numéro 046 dans une
+PR restée ouverte (revue en attente) au lieu de la commettre directement.
+Pendant ce temps, la session A, qui ne pouvait pas la voir, a réservé et
+fusionné directement sa propre migration 046
+(`046_normalisation_noms_articles.sql`, commit `8a17aa7`). La session B a
+dû renuméroter sa migration en 047 après coup. D'où la règle 5 ci-dessus.
 
 | N° | Objet | Réservé par / date |
 |---|---|---|
@@ -221,6 +232,7 @@ migration**. Règles :
 | 044 | Correctif seuil décimal `enregistrer_entree_stock()` | session B, 2026-09-25 — 043 laissé à la session A |
 | 045 | Crédit client (point b) : clients, créances, règlements | session B, 2026-09-25 |
 | 046 | Normalisation noms articles (C1) : insensible aux accents/casse/espaces/tirets | session A, 2026-09-26 |
+| 047 | Correctif retour client sur vente à crédit (`montant_retourne`) — renumérotée depuis 046, collision avec la session A | session B, 2026-09-26 |
 
 *(Ces deux lignes consignent l'incident du 2026-09-25 — deux 040 déjà
 fusionnés sur `main` sans collision de contenu. À partir de maintenant, le
