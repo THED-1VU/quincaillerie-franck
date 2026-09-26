@@ -4,7 +4,11 @@
    1. Le comptable ajoute un article réel au panier, valide (double F9), et
       voit un message de succès RÉEL (numéro de vente serveur, TVA calculée),
       plus AUCUNE occurrence du mot « SIMULATION ».
-   2. Le crédit client n'est même pas proposable à l'écran (point b).
+   2. Le crédit client est PROPOSÉ à l'écran (point b fusionné) et son
+      parcours complet est vérifié plus bas (section 4) : vente à crédit
+      depuis l'écran, créance visible, règlement partiel, annulation refusée
+      après règlement, annulation acceptée sur vente non réglée, retour
+      marchandise sur vente à crédit (réduit la créance, aucune dépense).
    3. Une vente à découvert de stock (article rare, stock 1) est quand même
       acceptée, avec un écart signalé à l'écran (point e).
    4. Le responsable, qui couvre deux sites, doit choisir un site avant de
@@ -56,6 +60,13 @@ function psql(sql) {
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }
 
+function psqlValeur(sql) {
+  return execFileSync(PSQL, [
+    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
+    "-t", "-A", "-c", sql,
+  ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } }).toString().trim();
+}
+
 console.log("== Préparation de la base (jeu d'essai + comptes de test) ==");
 execFileSync(PSQL, [
   "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
@@ -90,9 +101,9 @@ async function seConnecter(page, identifiant, motDePasse) {
   await seConnecter(page, "magasin.compta", MDP_AGENT_COMPTA);
   verifier(page.url().endsWith("vente.html"), "comptable : connexion -> vente.html");
 
-  // Le crédit client n'est même pas proposable.
+  // Le crédit client est désormais PROPOSÉ (point b fusionné, cycle 54).
   const optionsPaiement = await page.locator("#paiement option").allTextContents();
-  verifier(!optionsPaiement.some((t) => /crédit/i.test(t)), "vente : crédit client absent des options de paiement");
+  verifier(optionsPaiement.some((t) => /crédit/i.test(t)), "vente : crédit client proposé dans les options de paiement");
 
   // Ajoute "Ciment CIM II 50 kg" (site 1, stock 30) au panier.
   await page.fill("#recherche", "ciment");
@@ -199,6 +210,168 @@ async function seConnecter(page, identifiant, motDePasse) {
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
   const messageSansSite = await page.textContent("#zone-confirmation");
   verifier(/site/i.test(messageSansSite), `responsable sans site choisi : refus explicite ("${messageSansSite}")`);
+
+  await contexte.close();
+}
+
+// ============================================================================
+// 4. Crédit client : parcours complet de bout en bout (point b, cycle 54)
+//    — vente à crédit depuis l'écran, créance visible, règlement partiel,
+//      annulation refusée après règlement, annulation acceptée sur une vente
+//      à crédit non réglée, retour marchandise sur vente à crédit (réduit la
+//      créance, aucune dépense — correctif de l'autre session).
+// ============================================================================
+{
+  const contexte = await navigateur.newContext({ viewport: { width: 1366, height: 900 } });
+  const page = await contexte.newPage();
+  await seConnecter(page, "resp", MDP_RESPONSABLE);
+
+  // --- Création d'un client depuis l'écran clients.html ---
+  await page.goto(`${SERVEUR_URL}/app/clients.html`, { waitUntil: "networkidle" });
+  await page.click("#bouton-nouveau-client");
+  await page.fill("#f-nom", "Client Credit C13");
+  await page.fill("#f-plafond", "500000");
+  await page.locator("#panneau-contenu button").last().click();
+  await page.waitForSelector("#zone-succes-panneau:not([hidden])", { timeout: 10000 });
+  await page.waitForFunction(
+    () => document.getElementById("liste-clients").textContent.includes("Client Credit C13"),
+    { timeout: 5000 }
+  );
+  verifier(true, "crédit : client créé depuis clients.html et visible dans la liste");
+  const clientId = psqlValeur("SELECT id FROM clients WHERE nom = 'Client Credit C13' LIMIT 1;");
+
+  // --- Vente à crédit depuis l'écran de vente ---
+  await page.goto(`${SERVEUR_URL}/app/vente.html`, { waitUntil: "networkidle" });
+  await page.selectOption("#site-vente", "1");
+  await page.fill("#recherche", "ciment");
+  await page.waitForFunction(() => !document.getElementById("suggestions").hidden, { timeout: 5000 });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.getElementById("panier").textContent.includes("Ciment"), { timeout: 5000 });
+  await page.fill("#numero-facturier", "MAG-CRED01");
+  await page.selectOption("#vendeur", "1");
+  await page.selectOption("#paiement", "credit_client");
+  await page.waitForFunction(() => !document.getElementById("champ-client").hidden, { timeout: 5000 });
+  await page.selectOption("#client-credit", { label: "Client Credit C13" });
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const [reponseCredit] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/ventes") && r.request().method() === "POST", { timeout: 10000 }),
+    page.keyboard.press("F9"),
+  ]);
+  verifier(reponseCredit.ok(), "crédit : vente à crédit depuis l'écran -> POST /ventes 201");
+  const corpsCredit = await reponseCredit.json();
+  const venteCreditId = corpsCredit.vente_id;
+  await page.waitForFunction(() => !document.getElementById("zone-succes").hidden, { timeout: 10000 });
+  verifier(true, "crédit : message de succès affiché après la vente à crédit");
+  const creancesAvant = Number(psqlValeur("SELECT count(*) FROM creances WHERE vente_id = " + venteCreditId + ";"));
+  verifier(creancesAvant === 1, "crédit : une créance a été créée pour la vente à crédit");
+
+  // --- Créance visible sur l'écran clients.html ---
+  await page.goto(`${SERVEUR_URL}/app/clients.html`, { waitUntil: "networkidle" });
+  const ligneClient = page.locator("#liste-clients li", { hasText: "Client Credit C13" }).first();
+  verifier(await ligneClient.count() > 0, "crédit : client listé avec son encours");
+  const texteLigne = await ligneClient.textContent();
+  verifier(/encours/.test(texteLigne), `crédit : l'encours est affiché sur la ligne du client (${texteLigne.trim().slice(0, 60)}…)`);
+
+  // --- Règlement partiel depuis l'écran clients.html ---
+  const montantCreance = Number(psqlValeur(`SELECT montant FROM creances WHERE vente_id = ${venteCreditId};`));
+  const montantReglement = Math.floor(montantCreance / 2);
+  await ligneClient.getByRole("button", { name: "Régler" }).click();
+  await page.fill("#f-montant-reglement", String(montantReglement));
+  await page.locator("#panneau-contenu button").last().click();
+  await page.waitForSelector("#zone-succes-panneau:not([hidden])", { timeout: 10000 });
+  verifier(true, "crédit : règlement partiel enregistré depuis l'écran");
+  const reglementsCount = Number(psqlValeur(`SELECT count(*) FROM reglements_creances WHERE client_id = ${clientId};`));
+  verifier(reglementsCount === 1, "crédit : un règlement est enregistré en base");
+  const encoursApresReglement = Number(psqlValeur(`SELECT encours_client(${clientId});`));
+  verifier(encoursApresReglement === montantCreance - montantReglement,
+    `crédit : l'encours a diminué du règlement partiel (encours ${encoursApresReglement}, attendu ${montantCreance - montantReglement})`);
+
+  // --- Annulation refusée après règlement (FIFO) ---
+  const annulationRefusee = await page.evaluate(async (id) => {
+    const session = JSON.parse(sessionStorage.getItem("qf_session"));
+    const r = await fetch(`/ventes/${id}/annuler`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.jeton },
+      body: JSON.stringify({ motif: "Tentative d'annulation après règlement" }),
+    });
+    return { statut: r.status, corps: await r.json() };
+  }, venteCreditId);
+  verifier(annulationRefusee.statut >= 400,
+    `crédit : annulation après règlement refusée (statut ${annulationRefusee.statut})`);
+
+  // --- Seconde vente à crédit, NON réglée -> annulation acceptée ---
+  await page.goto(`${SERVEUR_URL}/app/vente.html`, { waitUntil: "networkidle" });
+  await page.selectOption("#site-vente", "1");
+  await page.fill("#recherche", "ciment");
+  await page.waitForFunction(() => !document.getElementById("suggestions").hidden, { timeout: 5000 });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.getElementById("panier").textContent.includes("Ciment"), { timeout: 5000 });
+  await page.fill("#numero-facturier", "MAG-CRED02");
+  await page.selectOption("#vendeur", "1");
+  await page.selectOption("#paiement", "credit_client");
+  await page.waitForFunction(() => !document.getElementById("champ-client").hidden, { timeout: 5000 });
+  await page.selectOption("#client-credit", { label: "Client Credit C13" });
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const [reponseCredit2] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/ventes") && r.request().method() === "POST", { timeout: 10000 }),
+    page.keyboard.press("F9"),
+  ]);
+  verifier(reponseCredit2.ok(), "crédit : seconde vente à crédit -> POST /ventes 201");
+  const venteNonRegleeId = (await reponseCredit2.json()).vente_id;
+
+  const annulationAcceptee = await page.evaluate(async (id) => {
+    const session = JSON.parse(sessionStorage.getItem("qf_session"));
+    const r = await fetch(`/ventes/${id}/annuler`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.jeton },
+      body: JSON.stringify({ motif: "Annulation d'une vente à crédit non réglée" }),
+    });
+    return { statut: r.status, corps: await r.json() };
+  }, venteNonRegleeId);
+  verifier(annulationAcceptee.statut < 400,
+    `crédit : annulation acceptée sur vente à crédit non réglée (statut ${annulationAcceptee.statut})`);
+  const creanceAnnulee = psqlValeur(`SELECT annulee::text FROM creances WHERE vente_id = ${venteNonRegleeId};`);
+  verifier(creanceAnnulee === "true", "crédit : la créance de la vente annulée est marquée annulée");
+
+  // --- Retour marchandise sur la vente à crédit non annulée : doit réduire
+  // la créance et ne produire AUCUNE dépense (correctif de l'autre session,
+  // valider_retour_client — dépense fantôme en remboursement espèces sur
+  // une vente jamais encaissée).
+  await page.goto(`${SERVEUR_URL}/app/stock.html`, { waitUntil: "networkidle" });
+  await page.fill("#recherche", "ciment");
+  const ligneCiment = page.locator("#liste-articles li", { hasText: "Ciment" }).first();
+  await ligneCiment.getByRole("button", { name: "Retour client", exact: true }).click();
+  await page.waitForSelector("#carte-panneau:not([hidden])", { timeout: 5000 });
+  await page.fill("#f-quantite", "1");
+  await page.fill("#f-vente-id", String(venteCreditId));
+  await page.selectOption("#f-issue", "remboursement_especes");
+  await page.selectOption("#f-etat", "invendable");
+  await page.locator("#panneau-contenu button").last().click();
+  await page.waitForSelector("#zone-succes-panneau:not([hidden])", { timeout: 10000 });
+  verifier(true, "crédit : retour marchandise déclaré sur la vente à crédit");
+
+  await page.goto(`${SERVEUR_URL}/app/declarations.html`, { waitUntil: "networkidle" });
+  const ligneRetour = page.locator("#liste-retours li", { hasText: "vente n°" + venteCreditId }).first();
+  verifier(await ligneRetour.count() > 0, "crédit : le retour sur vente à crédit apparaît en attente");
+  const encoursAvantRetour = Number(psqlValeur(`SELECT encours_client(${clientId});`));
+  const depensesAvant = Number(psqlValeur(`SELECT count(*) FROM transactions WHERE vente_id = ${venteCreditId} AND type = 'depense';`));
+  await ligneRetour.getByRole("button", { name: "Valider" }).click();
+  const boutonRembourser = page.getByRole("button", { name: "Oui, rembourser" });
+  verifier(await boutonRembourser.count() > 0, "crédit : confirmation explicite demandée pour le remboursement espèces");
+  const [reponseValidationRetour] = await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/stock/retours-client/declarations/") && r.request().method() === "POST", { timeout: 10000 }),
+    boutonRembourser.click(),
+  ]);
+  verifier(reponseValidationRetour.ok(), "crédit : validation du retour sur vente à crédit acceptée");
+  await page.waitForFunction(() => document.querySelectorAll("#liste-retours li").length === 1, { timeout: 5000 });
+  const encoursApresRetour = Number(psqlValeur(`SELECT encours_client(${clientId});`));
+  verifier(encoursApresRetour < encoursAvantRetour,
+    `crédit : le retour réduit la créance (encours ${encoursAvantRetour} -> ${encoursApresRetour})`);
+  const depensesApres = Number(psqlValeur(`SELECT count(*) FROM transactions WHERE vente_id = ${venteCreditId} AND type = 'depense';`));
+  verifier(depensesApres === depensesAvant,
+    `crédit : le retour ne produit AUCUNE dépense fantôme (dépenses ${depensesAvant} -> ${depensesApres})`);
 
   await contexte.close();
 }
