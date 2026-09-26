@@ -59,6 +59,10 @@
     echange: "Échange", avoir_client: "Avoir client", remboursement_especes: "Remboursement espèces",
   };
   const LIBELLE_ETAT = { revendable: "Revendable", invendable: "Invendable" };
+  const LIBELLE_MODE_PAIEMENT = {
+    especes: "espèces", orange_money: "Orange Money", mtn_momo: "MTN Mobile Money",
+    autre: "autre", credit_client: "crédit client",
+  };
 
   function anciennete(dateDeclaration) {
     const jours = Math.max(0, Math.floor((Date.now() - new Date(dateDeclaration)) / 86400000));
@@ -122,14 +126,22 @@
         return;
       }
       declarations.forEach((d) => {
+        // Mode de paiement de la vente d'origine — TOUJOURS visible, pas
+        // seulement pour un remboursement espèces : trouvé par exécution en
+        // corrigeant valider_retour_client() (migration 046) — un retour
+        // sur une vente à crédit ne se comporte pas comme les autres, le
+        // responsable doit le savoir avant de cliquer, pas après un refus
+        // ou un comportement qu'il n'attendait pas.
+        const paiementLibelle = "vente payée en " + (LIBELLE_MODE_PAIEMENT[d.mode_paiement] || d.mode_paiement)
+          + (d.mode_paiement === "credit_client" && d.client_nom ? " (" + d.client_nom + ")" : "");
         const li = creerLigneListe(
           d.article_nom + " (" + d.quantite + ") — vente n°" + d.vente_id,
           (LIBELLE_SITE[d.site_id] || "Site " + d.site_id) + " · " + LIBELLE_ISSUE[d.issue] +
-            " · " + LIBELLE_ETAT[d.etat_marchandise] +
+            " · " + LIBELLE_ETAT[d.etat_marchandise] + " · " + paiementLibelle +
             (d.motif ? " · " + d.motif : "") +
             " · déclaré par " + d.declarant_nom,
           anciennete(d.date_declaration),
-          "pastille--info"
+          d.mode_paiement === "credit_client" ? "pastille--alerte" : "pastille--info"
         );
 
         const zoneAction = document.createElement("div");
@@ -161,12 +173,18 @@
           }
           // Confirmation explicite supplémentaire, exigée par l'API
           // elle-même (migration 036) — jamais silencieuse pour un
-          // remboursement en espèces.
+          // remboursement en espèces. Texte différent pour une vente à
+          // crédit (migration 046) : le montant ne devient une dépense
+          // réelle qu'au-delà de ce que le client a déjà réellement réglé —
+          // jamais "crée une dépense" sans qualification, ce serait faux
+          // pour une créance encore due.
           zoneAction.innerHTML = "";
           const avertissement = document.createElement("p");
           avertissement.style.color = "var(--c-alerte)";
           avertissement.style.fontSize = "var(--t-xs)";
-          avertissement.textContent = "Confirmer le remboursement en espèces (crée une dépense) ?";
+          avertissement.textContent = d.mode_paiement === "credit_client"
+            ? "Vente à crédit : ce retour réduit d'abord la créance du client ; seul un éventuel excédent (au-delà de ce qu'il a déjà réglé) sera remboursé en espèces. Confirmer ?"
+            : "Confirmer le remboursement en espèces (crée une dépense) ?";
           const confirmer = document.createElement("button");
           confirmer.type = "button";
           confirmer.className = "btn btn--primaire";

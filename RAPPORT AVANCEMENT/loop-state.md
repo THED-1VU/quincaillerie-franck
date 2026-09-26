@@ -3199,6 +3199,34 @@ tenue pour acquise. Liste donnée au propriétaire avant toute correction
 faite ici tant qu'elle n'est pas validée chantier par chantier, même
 discipline que le reste de ce projet.
 
+**Suite (2026-09-26, migration 047)** : la recherche a trouvé une seconde
+instance, `valider_retour_client()` (migration 036, remboursement espèces
+inconditionnel) — jugée par le propriétaire **plus grave** que l'incident
+ci-dessus : une annulation est rare et visible, un retour marchandise est
+quotidien, et le responsable qui clique « rembourser en espèces » n'avait
+aucun signal que la vente était à crédit. Corrigée avec une règle plus
+complète que pour l'annulation, cette fois sans aucun cas laissé ouvert :
+le retour réduit d'abord la créance restante, seul l'excédent (au-delà de
+ce qui reste dû) devient un remboursement espèces réel — un acompte
+partiel, le cas le plus banal en boutique (un client à crédit qui a versé
+un acompte puis rapporte un article), ne bloque plus le retour. Mode de
+paiement de la vente d'origine désormais visible sur chaque ligne de
+l'écran de validation, pas seulement au moment de cliquer.
+
+**La suite d'habilitations a fait exactement son travail ici.** Pour
+exposer ce mode de paiement à `qf_agent_stock` (qui liste aussi ces
+déclarations), le premier réflexe a été un `GRANT SELECT (mode_paiement)
+ON ventes` — minimal en apparence, une seule colonne. `db/tests/02_habilitations.sql`
+a immédiatement fait échouer `d_refus('lire les ventes', 'SELECT count(*)
+FROM ventes')` : `count(*)` ne demande aucun privilège sur une colonne
+précise, seulement une existence de droit sur la table — le `GRANT` avait
+donc rouvert un accès que rien dans le diagnostic n'avait anticipé.
+Remplacé par `detail_paiement_vente()` (`SECURITY DEFINER`), qui n'exige
+aucun `GRANT` direct sur `ventes`/`clients`/`creances`. C'est précisément
+ce que cette suite est censée attraper — une protection qui recule d'un
+pas pendant qu'on en corrige une autre, invisible sans un test qui vérifie
+l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
+
 ---
 
 ### Cycle 55 — C1 (candidat 16) : normalisation des noms d'articles — 2026-09-26

@@ -322,6 +322,21 @@ entre sites »).
 > des « cas limites » ci-dessous reste donc réellement ouvert, le second
 > — annulation après règlement partiel — refuse plutôt que d'inventer un
 > avoir).
+>
+> **Second incident du même type, trouvé en le cherchant délibérément
+> (2026-09-26, migration 047)** : `valider_retour_client()` (migration
+> 036, antérieure au crédit client) avait exactement le même défaut — un
+> remboursement espèces contre-passé inconditionnellement, sans savoir que
+> la vente pouvait être à crédit. Plus grave que l'incident
+> `annuler_vente()` : une annulation est rare et visible, un retour
+> marchandise est quotidien. Corrigé, et **la règle est plus complète que
+> pour l'annulation** : le retour réduit d'abord la créance restante ; si
+> sa valeur dépasse ce qui reste dû, l'excédent — et lui seul — devient un
+> remboursement espèces légitime, puisque le client l'a réellement versé.
+> Aucun cas laissé de côté cette fois (voir la « Cas limites » ci-dessous,
+> désormais tenu). Le mode de paiement de la vente d'origine est visible
+> sur chaque ligne de l'écran de validation, pas seulement pour un
+> remboursement espèces.
 
 **Contexte.** `mode_paiement = 'credit_client'` est autorisé. Le cahier des charges (§3.3)
 crée une **recette immédiate** à la validation de la vente. Or, en crédit, **aucun argent
@@ -347,6 +362,10 @@ rapprochement de caisse.
 - Règlement partiel, puis second règlement.
 - Vente à crédit **annulée** avant tout règlement → créance annulée (tracée), stock restitué.
 - Vente à crédit annulée **après** un règlement partiel → avoir / remboursement à définir.
+- **Retour marchandise sur une vente à crédit → tenu (migration 047,
+  2026-09-26)** : réduit d'abord la créance restante, l'excédent éventuel
+  (au-delà de ce qui reste dû) devient un remboursement espèces légitime.
+  Contrairement à l'annulation ci-dessus, aucun cas n'est laissé ouvert ici.
 - Client qui dépasse son plafond de crédit → blocage ou alerte responsable ?
 - Créance ancienne jamais réglée → relance, passage en « douteuse », abandon de créance
   (écriture comptable dédiée) ?

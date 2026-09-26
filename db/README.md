@@ -337,6 +337,21 @@ dépense fantôme. Corrigé (migration 045) : la créance associée est marquée
 FIFO) refuse l'annulation plutôt que de produire un encours négatif ou un
 avoir inventé — cas explicitement laissé ouvert par l'addendum, point b.
 
+**Même défaut trouvé une deuxième fois, en le cherchant délibérément**
+(migration 047) : `valider_retour_client()` (migration 036, antérieure au
+crédit client) contre-passait aussi inconditionnellement une dépense pour
+un remboursement espèces. Corrigé avec une règle **plus complète** que pour
+l'annulation, aucun cas laissé ouvert cette fois : le retour réduit d'abord
+la créance restante (`creances.montant_retourne`, append-only) ; si sa
+valeur dépasse ce qui reste dû, seul l'excédent devient un remboursement
+espèces réel. Le mode de paiement de la vente d'origine est exposé par
+`detail_paiement_vente()` (`SECURITY DEFINER`, jamais un `GRANT` direct sur
+`ventes`/`clients`/`creances` pour `qf_agent_stock` — un simple
+`GRANT SELECT (colonne)` aurait suffi à rouvrir `SELECT count(*) FROM
+ventes`, protection vérifiée par `db/tests/02_habilitations.sql`) et affiché
+sur **chaque** ligne de l'écran de validation, pas seulement pour un
+remboursement espèces.
+
 ---
 
 ## Ce que chaque migration corrige
