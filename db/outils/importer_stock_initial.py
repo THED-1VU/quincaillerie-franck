@@ -99,6 +99,7 @@ class Rapport:
     fournisseurs_en_attente: list = field(default_factory=list)
     avertissements: list = field(default_factory=list)
     erreurs: list = field(default_factory=list)
+    a_trancher: list = field(default_factory=list)
 
     def fusionner(self, autre: "Rapport") -> None:
         self.articles_crees += autre.articles_crees
@@ -108,6 +109,7 @@ class Rapport:
         self.fournisseurs_crees += autre.fournisseurs_crees
         self.fournisseurs_en_attente += autre.fournisseurs_en_attente
         self.avertissements += autre.avertissements
+        self.a_trancher += autre.a_trancher
 
     def imprimer(self, simulation: bool) -> None:
         titre = "SIMULATION (aucune écriture)" if simulation else "CHARGEMENT RÉEL"
@@ -132,6 +134,15 @@ class Rapport:
             print(f"\n-- Avertissements ({len(self.avertissements)}, non bloquants) :")
             for texte in self.avertissements:
                 print(f"   {texte}")
+        if self.a_trancher:
+            distinctes = sorted(set(self.a_trancher))
+            print(f"\n-- À TRANCHER par le responsable ({len(distinctes)}) :")
+            for texte in distinctes:
+                print(f"   {texte}")
+            print("   Plusieurs fiches existantes portent un nom équivalent après")
+            print("   normalisation (accents/casse/espaces/tirets) : l'outil ne")
+            print("   choisit jamais d'office. Rapprocher manuellement (outil")
+            print("   db/outils/rapprocher_articles.ps1), puis relancer l'import.")
         if self.erreurs:
             print(f"\n-- ERREURS ({len(self.erreurs)}, lignes ignorées) :")
             for texte in self.erreurs:
@@ -140,7 +151,8 @@ class Rapport:
             f"\nBilan : {len(self.charges)} ligne(s) chargée(s), "
             f"{len(self.deja_charges)} déjà présente(s), "
             f"{len(self.erreurs)} en erreur, "
-            f"{len(set(self.fournisseurs_en_attente))} fournisseur(s) en attente."
+            f"{len(set(self.fournisseurs_en_attente))} fournisseur(s) en attente, "
+            f"{len(set(self.a_trancher))} ambiguïté(s) de nom à trancher."
         )
 
 
@@ -227,16 +239,35 @@ def _trouver_site(cur, nom_site: str) -> Optional[int]:
     return ligne[0] if ligne else None
 
 
-def _trouver_article(cur, nom_article: str) -> Optional[dict]:
+def _trouver_article(cur, nom_article: str) -> dict:
+    """Rapprochement par nom NORMALISÉ (migration 046) : insensible à la
+    casse, aux accents, aux espaces multiples et aux tirets.
+
+    Retourne :
+      * {"trouvee": False} si aucune fiche ne correspond ;
+      * {"trouvee": True, ...} si UNE seule fiche correspond ;
+      * {"trouvee": False, "ambigu": [noms...]} si PLUSIEURS fiches
+        portent un nom équivalent après normalisation — l'appelant doit
+        présenter la paire douteuse au responsable, jamais choisir d'office.
+    """
     cur.execute(
-        "SELECT id, unite, prix_achat, prix_vente FROM articles "
-        "WHERE lower(btrim(nom)) = lower(btrim(%s))",
+        "SELECT id, nom, unite, prix_achat, prix_vente FROM articles "
+        "WHERE normaliser_nom_article(nom) = normaliser_nom_article(%s) "
+        "ORDER BY id",
         (nom_article,),
     )
-    ligne = cur.fetchone()
-    if not ligne:
-        return None
-    return dict(id=ligne[0], unite=ligne[1], prix_achat=ligne[2], prix_vente=ligne[3])
+    lignes = cur.fetchall()
+    if not lignes:
+        return {"trouvee": False}
+    if len(lignes) == 1:
+        return dict(
+            trouvee=True, id=lignes[0][0], nom=lignes[0][1],
+            unite=lignes[0][2], prix_achat=lignes[0][3], prix_vente=lignes[0][4],
+        )
+    return {
+        "trouvee": False,
+        "ambigu": [f"{l[0]} ({l[1]})" for l in lignes],
+    }
 
 
 def _trouver_ou_marquer_fournisseur(cur, nom_fournisseur: str, autoriser_creation: bool, rapport: Rapport) -> Optional[int]:
@@ -285,9 +316,16 @@ def _traiter_ligne(
         return
 
     existante = _trouver_article(cur, ligne.nom)
+    if not existante.get("trouvee") and existante.get("ambigu"):
+        rapport.a_trancher.append(
+            f"{repere} : {ligne.nom!r} — plusieurs fiches existantes "
+            f"({', '.join(existante['ambigu'])}) — ligne ignorée, à trancher."
+        )
+        return
+
     quantite_decimale = ligne.quantite != int(ligne.quantite)
 
-    if existante is None:
+    if not existante.get("trouvee"):
         cur.execute(
             "INSERT INTO articles (nom, categorie, unite, prix_achat, prix_vente, "
             "fournisseur_id, quantite_decimale_autorisee) "
