@@ -617,6 +617,112 @@ def test_retour_client_liste_les_declarations_en_attente(client):
     assert ligne["declarant_nom"]
 
 
+def test_retour_client_liste_expose_le_mode_de_paiement(client):
+    """Trouvé par exécution en corrigeant valider_retour_client() (migration
+    047) : le responsable doit voir le mode de paiement de la vente
+    d'origine AVANT de valider, pas seulement pour un remboursement
+    espèces — présent sur CHAQUE ligne, credit ou non."""
+    vente_id = _creer_vente_test(client, "MAG-TESTLISTE02", quantite=1)
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    client.post(
+        "/stock/retours-client/declarations",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 1,
+              "issue": "echange", "etat_marchandise": "revendable", "motif": "pour le mode de paiement"},
+    )
+    for identifiant, mdp in (("magasin.stock", MOT_DE_PASSE_AGENT_STOCK), ("resp", MOT_DE_PASSE_RESPONSABLE)):
+        session = se_connecter(client, identifiant, mdp)
+        liste = client.get(
+            "/stock/retours-client/declarations", headers=entete_autorisation(session["jeton"]),
+        )
+        assert liste.status_code == 200, liste.text
+        ligne = next(d for d in liste.json() if d["motif"] == "pour le mode de paiement")
+        assert ligne["mode_paiement"] == "especes"
+        assert ligne["client_nom"] is None
+
+
+# ---------------------------------------------------------------------------
+# Retour client sur une vente à crédit (migration 047) — trouvé en
+# cherchant délibérément le même défaut qu'annuler_vente (migration 045) :
+# un remboursement espèces réduit d'abord la créance restante, seul
+# l'excédent (au-delà de ce qui reste dû) devient une dépense réelle.
+# ---------------------------------------------------------------------------
+
+def _creer_vente_credit_test(client, numero_facturier: str, client_id: int, quantite: int, prix_unitaire: float) -> int:
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={
+            "mode_paiement": "credit_client", "numero_facturier": numero_facturier, "vendeur_id": 1,
+            "client_id": client_id,
+            "lignes": [{"article_id": 1, "quantite": quantite, "prix_unitaire": prix_unitaire}],
+        },
+    )
+    assert reponse.status_code == 201, reponse.text
+    return reponse.json()["vente_id"]
+
+
+def _creer_client_credit_test(nom: str, plafond: float = 1000000) -> int:
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO clients (nom, plafond_credit) VALUES (%s, %s) RETURNING id", (nom, plafond)
+            )
+            return cur.fetchone()[0]
+
+
+def test_retour_client_credit_partiellement_regle_partage_dette_et_especes(client):
+    """Le maçon avec un acompte, bout en bout via la vraie route HTTP :
+    100 000 à crédit, acompte de 40 000, retour de 70 000 -> 60 000
+    réduisent la créance, 10 000 (l'excédent) partent réellement en
+    espèces."""
+    client_id = _creer_client_credit_test("Client HTTP Maçon")
+    vente_id = _creer_vente_credit_test(client, "MAG-TESTCREDIT01", client_id, quantite=100, prix_unitaire=1000)
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reglement = client.post(
+        f"/clients/{client_id}/reglements",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"montant": 40000},
+    )
+    assert reglement.status_code == 201, reglement.text
+
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    declaration = client.post(
+        "/stock/retours-client/declarations",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "vente_id": vente_id, "quantite": 70,
+              "issue": "remboursement_especes", "etat_marchandise": "revendable"},
+    )
+    assert declaration.status_code == 201, declaration.text
+
+    # Le mode de paiement et le client doivent être visibles AVANT validation.
+    liste = client.get(
+        "/stock/retours-client/declarations", headers=entete_autorisation(session_resp["jeton"]),
+    )
+    ligne = next(d for d in liste.json() if d["declaration_id"] == declaration.json()["declaration_id"])
+    assert ligne["mode_paiement"] == "credit_client"
+    assert ligne["client_nom"] == "Client HTTP Maçon"
+
+    validation = client.post(
+        f"/stock/retours-client/declarations/{declaration.json()['declaration_id']}/valider",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"confirmation_remboursement": True},
+    )
+    assert validation.status_code == 200, validation.text
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute("SELECT montant_retourne FROM creances WHERE vente_id = %s", (vente_id,))
+            assert float(cur.fetchone()["montant_retourne"]) == 60000.0
+            cur.execute(
+                "SELECT montant FROM transactions WHERE vente_id = %s AND type = 'depense'", (vente_id,)
+            )
+            assert float(cur.fetchone()["montant"]) == 10000.0
+            assert float(conn.execute("SELECT encours_client(%s)", (client_id,)).fetchone()[0]) == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Retour fournisseur (addendum, point f)
 # ---------------------------------------------------------------------------

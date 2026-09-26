@@ -268,7 +268,14 @@ def lister_declarations_retour_client(
 ):
     """Déclarations de retour client EN ATTENTE de validation — mêmes
     règles de site que les déclarations de casse (RLS,
-    `p_declarations_retour_site`, migration 036)."""
+    `p_declarations_retour_site`, migration 036).
+
+    ``mode_paiement`` de la vente d'origine (et le client, pour une vente à
+    crédit) — trouvé par exécution en corrigeant `valider_retour_client()`
+    (migration 047) : le responsable qui valide un remboursement espèces
+    doit voir AVANT de cliquer que la vente était à crédit, plutôt que de
+    découvrir un refus (ou un comportement différent de ce qu'il croyait)
+    après coup."""
     bd = obtenir_bd(request)
     with bd.connexion_pour(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
@@ -277,10 +284,12 @@ def lister_declarations_retour_client(
             cur.execute(
                 "SELECT r.id AS declaration_id, r.article_id, a.nom AS article_nom, r.vente_id,"
                 " r.site_id, r.quantite, r.issue, r.etat_marchandise, r.motif, r.declarant_id,"
-                " u.nom_complet AS declarant_nom, r.date_declaration, r.statut"
+                " u.nom_complet AS declarant_nom, r.date_declaration, r.statut,"
+                " d.mode_paiement, d.client_nom"
                 " FROM declarations_retour_client r"
                 " JOIN articles a ON a.id = r.article_id"
                 " JOIN utilisateurs u ON u.id = r.declarant_id"
+                " CROSS JOIN LATERAL detail_paiement_vente(r.vente_id) d"
                 " WHERE r.statut = 'en_attente' ORDER BY r.date_declaration"
             )
             lignes = cur.fetchall()

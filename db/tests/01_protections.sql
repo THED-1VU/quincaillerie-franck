@@ -945,6 +945,97 @@ SELECT t_succes('046 · la fonction est exécutable par qf_responsable',
   $$SELECT has_function_privilege('qf_responsable', 'normaliser_nom_article(VARCHAR)', 'EXECUTE')$$);
 
 -- ============================================================================
+-- 17. Retour client sur une vente à crédit (migration 047) — trouvé en
+--     cherchant délibérément le même défaut qu'annuler_vente (migration
+--     045) : un remboursement espèces réduit d'abord la créance restante,
+--     seul l'excédent (au-delà de ce qui reste dû) devient une dépense
+--     réelle. Le cas non-crédit (vente 900, section 10 ci-dessus) est déjà
+--     couvert sans modification de comportement.
+-- ============================================================================
+
+-- --- Cas 1 : créance partiellement réglée (le maçon avec un acompte) ------
+-- Vente 960, 100 x 1000 = 100 000 à crédit ; acompte de 40 000 (reste dû
+-- 60 000) ; retour de 70 unités (valeur 70 000) : 60 000 éteignent la
+-- créance, 10 000 (l'excédent) partent réellement en espèces.
+INSERT INTO clients (id, nom) VALUES (960, 'Client protections crédit partiel');
+INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+                     utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
+                     total_ttc, date_encaissement, numero_facturier, vendeur_id)
+VALUES (960, 1, 4, 'payee', 'credit_client', 1, 100000, 0, 0, 100000, NOW(), 'MAG-9601', 1);
+INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id)
+VALUES (960, 1, 100, 1000, 1);
+INSERT INTO creances (client_id, vente_id, site_id, montant, utilisateur_id)
+VALUES (960, 960, 1, 100000, 1);
+SELECT enregistrer_reglement_creance(960, 40000, 1, 'acompte test protections');
+
+SELECT declarer_retour_client(1, 960, 70, 'remboursement_especes', 'revendable', 2, 'test protections crédit partiel');
+
+SELECT t_succes('047 · validation du retour (créance partiellement réglée) acceptée',
+  $$SELECT valider_retour_client(
+      (SELECT id FROM declarations_retour_client WHERE motif = 'test protections crédit partiel' LIMIT 1), 1, TRUE)$$);
+
+SELECT t_valeur('047 · la créance est réduite du montant restant dû (60 000), pas de la valeur totale du retour',
+  $$SELECT montant_retourne::TEXT FROM creances WHERE vente_id = 960$$, '60000.00');
+
+SELECT t_valeur('047 · seul l''excédent (10 000) part réellement en espèces',
+  $$SELECT montant::TEXT FROM transactions WHERE vente_id = 960 AND type = 'depense'$$, '10000.00');
+
+SELECT t_valeur('047 · encours du client tombe à zéro (créance intégralement absorbée par le retour + l''acompte)',
+  $$SELECT encours_client(960)::TEXT$$, '0.00');
+
+-- --- Cas 2 : créance intégralement impayée (rien réglé) --------------------
+-- Vente 961, 50 x 1000 = 50 000 à crédit, aucun règlement ; retour de 20
+-- unités (valeur 20 000) : tout réduit la créance, aucune espèce ne sort.
+INSERT INTO clients (id, nom) VALUES (961, 'Client protections crédit impayé');
+INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+                     utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
+                     total_ttc, date_encaissement, numero_facturier, vendeur_id)
+VALUES (961, 1, 4, 'payee', 'credit_client', 1, 50000, 0, 0, 50000, NOW(), 'MAG-9602', 1);
+INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id)
+VALUES (961, 1, 50, 1000, 1);
+INSERT INTO creances (client_id, vente_id, site_id, montant, utilisateur_id)
+VALUES (961, 961, 1, 50000, 1);
+
+SELECT declarer_retour_client(1, 961, 20, 'remboursement_especes', 'revendable', 2, 'test protections crédit impayé');
+
+SELECT t_succes('047 · validation du retour (créance intégralement impayée) acceptée',
+  $$SELECT valider_retour_client(
+      (SELECT id FROM declarations_retour_client WHERE motif = 'test protections crédit impayé' LIMIT 1), 1, TRUE)$$);
+
+SELECT t_valeur('047 · toute la valeur du retour réduit la créance (20 000)',
+  $$SELECT montant_retourne::TEXT FROM creances WHERE vente_id = 961$$, '20000.00');
+
+SELECT t_valeur('047 · aucune dépense : rien n''avait jamais été réellement encaissé',
+  $$SELECT count(*)::TEXT FROM transactions WHERE vente_id = 961 AND type = 'depense'$$, '0');
+
+-- --- Cas 3 : créance intégralement réglée (le crédit est soldé) -----------
+-- Vente 962, 30 x 1000 = 30 000 à crédit, réglée en totalité ; retour de 10
+-- unités (valeur 10 000) : la créance ne peut plus être réduite (déjà à
+-- zéro), tout part réellement en espèces — l'argent a réellement été versé.
+INSERT INTO clients (id, nom) VALUES (962, 'Client protections crédit soldé');
+INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+                     utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
+                     total_ttc, date_encaissement, numero_facturier, vendeur_id)
+VALUES (962, 1, 4, 'payee', 'credit_client', 1, 30000, 0, 0, 30000, NOW(), 'MAG-9603', 1);
+INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id)
+VALUES (962, 1, 30, 1000, 1);
+INSERT INTO creances (client_id, vente_id, site_id, montant, utilisateur_id)
+VALUES (962, 962, 1, 30000, 1);
+SELECT enregistrer_reglement_creance(962, 30000, 1, 'solde complet test protections');
+
+SELECT declarer_retour_client(1, 962, 10, 'remboursement_especes', 'revendable', 2, 'test protections crédit soldé');
+
+SELECT t_succes('047 · validation du retour (créance intégralement réglée) acceptée',
+  $$SELECT valider_retour_client(
+      (SELECT id FROM declarations_retour_client WHERE motif = 'test protections crédit soldé' LIMIT 1), 1, TRUE)$$);
+
+SELECT t_valeur('047 · aucune réduction de créance : elle était déjà à zéro',
+  $$SELECT montant_retourne::TEXT FROM creances WHERE vente_id = 962$$, '0.00');
+
+SELECT t_valeur('047 · tout part réellement en espèces (l''argent avait vraiment été versé)',
+  $$SELECT montant::TEXT FROM transactions WHERE vente_id = 962 AND type = 'depense'$$, '10000.00');
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''

@@ -371,6 +371,8 @@ class ReponseRetourClientDetail(BaseModel):
     declarant_nom: str
     date_declaration: datetime
     statut: str
+    mode_paiement: str
+    client_nom: Optional[str] = None
 
 
 class DemandeValidationRetourClient(BaseModel):
