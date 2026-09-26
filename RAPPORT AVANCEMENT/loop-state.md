@@ -3132,6 +3132,75 @@ documentées plus haut.)*
 
 ---
 
+### Incident — dépense fantôme à l'annulation d'une vente à crédit (2026-09-25, hors cycle numéroté, trouvé en construisant le point b)
+
+**Ce qui s'est passé.** `annuler_vente()` (migration 017, fusionnée au
+cycle 17, 2026-09-13) contre-passe l'encaissement d'une vente annulée par
+une écriture `transactions` de type `depense`, du même montant que la
+`recette` créée à l'enregistrement de la vente — **inconditionnellement**,
+sans jamais vérifier qu'une `recette` existait réellement. Le crédit
+client (migration 045, ce cycle, point b) introduit le premier mode de
+vente qui ne crée **jamais** de recette (la vente crée une créance à la
+place). Annuler une vente à crédit aurait donc inséré une `depense` sans
+aucune `recette` en face : une écriture comptable réelle, dans le journal
+`transactions`, sans contrepartie — pas une erreur de calcul, une
+**dépense qui n'a jamais existé**.
+
+**Comment il a été trouvé.** Par accident, en traçant à la main tout ce
+qui touche `transactions` pendant la construction du point b — pas par un
+test qui échouait, pas par une revue systématique du code existant. Rien
+dans le déroulement normal du chantier ne demandait d'ouvrir
+`annuler_vente()` ; elle a été relue uniquement parce que « et si on
+annule une vente à crédit ? » s'est posée en tête en écrivant les cas
+limites déjà listés par `ADDENDUM_CAHIER_DES_CHARGES.md`, point b.
+
+**Comment il a échappé aux tests pendant 12 cycles.** Le code de
+`annuler_vente()` était **entièrement correct** au moment où il a été
+écrit (cycle 17) et à chaque cycle suivant, jusqu'à ce cycle : tant
+qu'aucun mode de paiement ne pouvait éviter de créer une recette,
+l'invariant « toute vente `payee` a exactement une recette » tenait
+**universellement**, sans exception, et aucun test n'avait de raison de le
+mettre en doute. Le bug n'existait pas en soi — il dormait, invisible,
+dans une hypothèse implicite jamais écrite nulle part (« il existe
+toujours une recette à contre-passer ») que le code tenait pour acquise
+sans jamais la vérifier. Il est devenu faux le jour où une fonctionnalité
+**nouvelle**, ailleurs dans le code, a cassé silencieusement cette
+hypothèse — sans qu'`annuler_vente()` elle-même soit touchée ni même
+relue à cette occasion. Aucune suite de tests locale à une fonction ne
+peut attraper ça : `test_ventes.py` testait `annuler_vente()` dans son
+coin, `test_clients.py` teste le crédit client dans le sien ; le défaut
+vit exactement à la frontière entre les deux, là où aucun des deux
+fichiers ne regarde par construction.
+
+**Ce qu'il faudrait pour attraper ce genre de défaut.** Pas un test de
+plus sur `annuler_vente()` isolément (celui-ci existe désormais — voir
+migration 045 et `test_clients.py`) mais une vérification de
+**l'invariant comptable lui-même**, indépendante de la fonction qui
+l'a écrit : *toute écriture `depense` de contre-passation dans
+`transactions` doit avoir une `recette` correspondante pour la même
+vente, et réciproquement — jamais une écriture produite sans
+contrepartie réelle*. Une requête d'audit générale (candidate pour
+`db/tests/01_protections.sql` ou `db/outils/verifier_tout.sh`) qui
+balaie **toutes** les ventes annulées, pas seulement celle du dernier
+test écrit, aurait attrapé ce défaut dès l'introduction de
+`mode_paiement = 'credit_client'` — et attraperait, par construction,
+la PROCHAINE fois qu'une hypothèse de ce genre est cassée ailleurs, sans
+qu'il soit nécessaire de deviner où regarder à l'avance. C'est la
+différence entre tester une fonction et vérifier une propriété du
+système : la seconde survit à un changement qui n'a jamais touché le
+code testé.
+
+**Recherche demandée par le propriétaire, immédiatement après cet
+incident** : d'autres fonctions qui écrivent dans la comptabilité en
+supposant qu'un mode de paiement produit toujours une recette encaissée —
+le crédit client vient de casser cette hypothèse partout où elle était
+tenue pour acquise. Liste donnée au propriétaire avant toute correction
+(voir la conversation de ce cycle) ; correction volontairement **non**
+faite ici tant qu'elle n'est pas validée chantier par chantier, même
+discipline que le reste de ce projet.
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
