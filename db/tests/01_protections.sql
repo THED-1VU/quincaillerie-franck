@@ -366,15 +366,14 @@ SELECT t_valeur('034 · la quantité décimale est bien celle enregistrée, non 
   $$SELECT quantite_stock::TEXT FROM stocks_sites WHERE article_id = 1 AND site_id = 1$$,
   '42.500');
 
-UPDATE articles SET quantite_decimale_autorisee = FALSE WHERE id = 1;
--- Restaure aussi le STOCK ET LE SEUIL (pas seulement l'indicateur) : la
--- réception décimale ci-dessus a aussi recalculé seuil_alerte à 2,5
--- (20 % de 12,5) — le laisser fractionnaire avec l'indicateur remis à
--- FALSE aurait refusé la PROCHAINE écriture sur cette ligne, quelle
--- qu'elle soit (le déclencheur vérifie TOUTE la ligne, pas seulement la
--- colonne visée) — trouvé par exécution en écrivant la section 10.
 UPDATE stocks_sites SET quantite_stock = 30, seuil_alerte = 6
  WHERE article_id = 1 AND site_id = 1;
+-- L'indicateur SEULEMENT ENSUITE : depuis la migration 049, le remettre à
+-- FALSE alors que le stock ou le seuil est encore décimal est refusé — la
+-- réception décimale ci-dessus a laissé 42,5 et 2,5. C'est précisément le
+-- garde-fou ajouté au cycle 60 pour qu'un article ne devienne jamais
+-- immouvementable (déclencheurs de la 034).
+UPDATE articles SET quantite_decimale_autorisee = FALSE WHERE id = 1;
 
 -- ============================================================================
 -- 10. Retours enrichis : casse et retour client en deux temps (migration
@@ -1272,6 +1271,50 @@ SELECT t_valeur('048 · la vue est REFUSÉE à qf_agent_stock (aucun privilège 
 SELECT t_valeur('048 · SECURITY INVOKER : la vue s''exécute avec les droits du rôle lecteur (RLS active)',
   $$SELECT reloptions::TEXT FROM pg_class WHERE relname = 'ecarts_prix_vendeurs'$$,
   '{security_invoker=true}');
+
+-- ============================================================================
+-- 20. Désactivation des quantités décimales (migration 049, cycle 60) — un
+--     article ne peut repasser aux quantités entières tant qu'un stock ou un
+--     seuil décimal existe réellement : sinon tout mouvement serait refusé
+--     par les garde-fous de 034, sans explication à l'écran.
+--     Numérotée 20 : les sections 18 (PR #74) et 19 (PR #75) étaient déjà
+--     réservées au moment du cycle 60 ; elles sont désormais fusionnées et
+--     exécutées avant celle-ci.
+-- ============================================================================
+SELECT t_succes('049 · article décimal créé pour le contrôle',
+  $$INSERT INTO articles (id, nom, unite, prix_vente, quantite_decimale_autorisee)
+    VALUES (990, 'Article décimal (contrôle 049)', 'kg', 1000, TRUE)$$);
+
+SELECT t_succes('049 · stock réellement décimal (2,5 kg)',
+  $$INSERT INTO stocks_sites (article_id, site_id, quantite_stock, seuil_alerte)
+    VALUES (990, 1, 2.5, 1)$$);
+
+SELECT t_refus('049 · désactivation refusée avec un stock décimal',
+  $$UPDATE articles SET quantite_decimale_autorisee = FALSE WHERE id = 990$$);
+
+SELECT t_valeur('049 · l''article est resté décimal après le refus',
+  $$SELECT quantite_decimale_autorisee::TEXT FROM articles WHERE id = 990$$, 'true');
+
+SELECT t_succes('049 · stock corrigé en entier (2 kg)',
+  $$UPDATE stocks_sites SET quantite_stock = 2 WHERE article_id = 990 AND site_id = 1$$);
+
+SELECT t_succes('049 · seuil décimal posé (1,5)',
+  $$UPDATE stocks_sites SET seuil_alerte = 1.5 WHERE article_id = 990 AND site_id = 1$$);
+
+SELECT t_refus('049 · désactivation encore refusée pour un seuil décimal',
+  $$UPDATE articles SET quantite_decimale_autorisee = FALSE WHERE id = 990$$);
+
+SELECT t_succes('049 · seuil corrigé en entier (1)',
+  $$UPDATE stocks_sites SET seuil_alerte = 1 WHERE article_id = 990 AND site_id = 1$$);
+
+SELECT t_succes('049 · désactivation acceptée quand tout est entier',
+  $$UPDATE articles SET quantite_decimale_autorisee = FALSE WHERE id = 990$$);
+
+SELECT t_valeur('049 · la fiche est bien repassée en quantités entières',
+  $$SELECT quantite_decimale_autorisee::TEXT FROM articles WHERE id = 990$$, 'false');
+
+SELECT t_succes('049 · réactivation toujours possible',
+  $$UPDATE articles SET quantite_decimale_autorisee = TRUE WHERE id = 990$$);
 
 -- ============================================================================
 -- Résultat

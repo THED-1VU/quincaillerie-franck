@@ -267,3 +267,135 @@ def test_responsable_voit_une_ligne_par_article_et_site(client):
     sites = {a["site_id"] for a in articles}
     assert sites == {1, 2}
     assert all("prix_vente" in a and "quantite_stock" in a for a in articles)
+
+
+# ---------------------------------------------------------------------------
+# Quantités décimales par article (cycle 60, garde-fou migration 049)
+#
+# La case existe depuis la migration 033, mais la décocher alors qu'un stock
+# ou un seuil décimal existe déjà rend l'article immobile : les triggers de
+# la migration 034 refusent toute quantité non entière dès que le drapeau
+# est faux, y compris une réception entière dont le total devient décimal.
+# La migration 049 refuse donc la désactivation tant qu'une valeur décimale
+# subsiste — et ce, même si l'agent ne voit pas le site concerné (RLS).
+# ---------------------------------------------------------------------------
+
+def _creer_article_decimal(client, session, nom: str) -> int:
+    reponse = client.post(
+        "/articles",
+        headers=entete_autorisation(session["jeton"]),
+        json={"nom": nom, "unite": "kg", "quantite_decimale_autorisee": True},
+    )
+    assert reponse.status_code == 201, reponse.text
+    assert reponse.json()["quantite_decimale_autorisee"] is True
+    return reponse.json()["article_id"]
+
+
+def _flag_decimal(article_id: int) -> bool:
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT quantite_decimale_autorisee FROM articles WHERE id = %s",
+                (article_id,),
+            )
+            return cur.fetchone()[0]
+
+
+def test_creation_article_decimal_persiste_la_case(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    article_id = _creer_article_decimal(client, session, "Fil de fer galvanisé")
+    assert _flag_decimal(article_id) is True
+
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.get("/articles", headers=entete_autorisation(session_agent["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    ligne = [a for a in reponse.json()["articles"] if a["id"] == article_id]
+    assert ligne and ligne[0]["quantite_decimale_autorisee"] is True
+
+
+def test_desactivation_decimale_refusee_si_stock_decimal_sur_un_autre_site(client):
+    """L'agent du Magasin ne voit pas le stock du Comptoir (RLS), mais le
+    garde-fou SECURITY DEFINER le voit : il refuse la désactivation."""
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    article_id = _creer_article_decimal(client, session, "Câble électrique")
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        conn.execute(
+            "INSERT INTO stocks_sites (article_id, site_id, quantite_stock, seuil_alerte)"
+            " VALUES (%s, 2, 2.5, 1)",
+            (article_id,),
+        )
+        conn.commit()
+
+    reponse = client.put(
+        f"/articles/{article_id}",
+        headers=entete_autorisation(session["jeton"]),
+        json={"quantite_decimale_autorisee": False},
+    )
+    assert reponse.status_code == 422, reponse.text
+    detail = reponse.json()["detail"]
+    assert "Désactivation refusée" in detail
+    assert "erreur interne" not in detail.lower()
+    assert _flag_decimal(article_id) is True, "le drapeau reste vrai malgré la tentative"
+
+
+def test_desactivation_decimale_refusee_si_seuil_decimal_puis_acceptee(client):
+    """Le seuil seul suffit à bloquer. Une fois les valeurs corrigées en
+    entiers, la désactivation passe et chaque changement est tracé."""
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    article_id = _creer_article_decimal(client, session, "Tube PVC")
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        conn.execute(
+            "INSERT INTO stocks_sites (article_id, site_id, quantite_stock, seuil_alerte)"
+            " VALUES (%s, 1, 3, 1.5)",
+            (article_id,),
+        )
+        conn.commit()
+
+    reponse = client.put(
+        f"/articles/{article_id}",
+        headers=entete_autorisation(session["jeton"]),
+        json={"quantite_decimale_autorisee": False},
+    )
+    assert reponse.status_code == 422, reponse.text
+    assert "Désactivation refusée" in reponse.json()["detail"]
+    assert _flag_decimal(article_id) is True
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        conn.execute(
+            "UPDATE stocks_sites SET seuil_alerte = 1 WHERE article_id = %s AND site_id = 1",
+            (article_id,),
+        )
+        conn.commit()
+
+    reponse = client.put(
+        f"/articles/{article_id}",
+        headers=entete_autorisation(session["jeton"]),
+        json={"quantite_decimale_autorisee": False},
+    )
+    assert reponse.status_code == 200, reponse.text
+    assert reponse.json()["quantite_decimale_autorisee"] is False
+    assert _flag_decimal(article_id) is False
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+            cur.execute(
+                "SELECT ancienne_valeur, nouvelle_valeur FROM historique_modifications_articles"
+                " WHERE article_id = %s AND champ = 'quantite_decimale_autorisee'"
+                " ORDER BY id DESC LIMIT 1",
+                (article_id,),
+            )
+            ligne = cur.fetchone()
+    assert ligne is not None, "le changement de drapeau doit être tracé"
+    assert ligne["ancienne_valeur"].lower() in ("true", "t")
+    assert ligne["nouvelle_valeur"].lower() in ("false", "f")
+
+    # La réactivation reste toujours possible (aucun garde-fou dans ce sens).
+    reponse = client.put(
+        f"/articles/{article_id}",
+        headers=entete_autorisation(session["jeton"]),
+        json={"quantite_decimale_autorisee": True},
+    )
+    assert reponse.status_code == 200, reponse.text
+    assert _flag_decimal(article_id) is True

@@ -15,11 +15,15 @@
    1. Un agent stock (Magasin) crée un article, en fait la réception, le
       transfère au Comptoir, DÉCLARE un retour client (issue + état) et une
       casse, fait un retour fournisseur — le stock ne bouge que pour la
-      réception, le transfert et le retour fournisseur.
+      réception, le transfert et le retour fournisseur. Il crée aussi un
+      article à quantités décimales (cycle 60) : réception 2,5 kg acceptée,
+      et réception 1,5 refusée sur un article entier.
    2. Le responsable modifie le prix d'un article, puis valide sur
       declarations.html : la casse (décrémente), le retour client revendable
       (réintègre) et un article offert (décrémente) — effets vérifiés en
-      base à chaque étape.
+      base à chaque étape. Il tente aussi de décocher « quantités
+      décimales » alors qu'un stock décimal existe (refus 422, cycle 60),
+      corrige le stock en entiers, puis la désactivation passe.
    3. AUCUN montant FCFA, AUCUN champ de prix n'atteint la page ni les
       réponses réseau vues par l'agent stock.
    4. Layout aux 5 largeurs (360/390/768/1366/1920), cibles ≥ 44 px.
@@ -172,6 +176,67 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await validerPanneau(page);
   await attendreSucces(page);
   verifier(true, "agent stock : création d'article réussie");
+  // psql.exe reçoit les arguments en code page Windows : on ne fait jamais
+  // passer un nom accentué dans un littéral SQL (0xe2 seul = UTF-8 invalide,
+  // trouvé par exécution au cycle 60). L'article est le dernier créé.
+  const idScie = psqlValeur("SELECT max(id) FROM articles;");
+
+  // --- Article à quantités décimales (cycle 60) ---
+  await page.click("#lien-nouvel-article");
+  verifier(
+    await page.locator("#f-quantite-decimale").count() === 1,
+    "agent stock : la case « quantités décimales » existe à la création"
+  );
+  await page.fill("#f-nom", "Câble électrique (décimal)");
+  await page.fill("#f-unite", "m");
+  await page.check("#f-quantite-decimale");
+  await validerPanneau(page);
+  await attendreSucces(page);
+  const idCable = psqlValeur("SELECT max(id) FROM articles;");
+  verifier(
+    psqlValeur(`SELECT quantite_decimale_autorisee FROM articles WHERE id = ${idCable};`) === "t",
+    "agent stock : la case cochée est réellement persistée en base"
+  );
+
+  // La liste signale l'article décimal.
+  const itemCable = page.locator("#liste-articles li", { hasText: "Câble électrique" }).first();
+  await page.fill("#recherche", "Câble électrique");
+  await itemCable.waitFor({ timeout: 5000 });
+  verifier(
+    (await itemCable.innerText()).includes("quantités décimales"),
+    "agent stock : la liste mentionne « quantités décimales » pour l'article décimal"
+  );
+
+  // Réception décimale acceptée sur cet article.
+  await ouvrirArticle(page, "Câble électrique", "+ Réception");
+  await page.fill("#f-quantite", "2.5");
+  await validerPanneau(page);
+  await attendreSucces(page);
+  const stockCable = psqlValeur(
+    `SELECT quantite_stock FROM stocks_sites WHERE article_id = ${idCable} AND site_id = 1;`
+  );
+  verifier(
+    stockCable === "2.500",
+    `agent stock : réception décimale acceptée (stock Câble = ${stockCable}, attendu 2.500)`
+  );
+
+  // Réception décimale REFUSÉE sur l'article entier créé plus haut.
+  await ouvrirArticle(page, "Scie à métaux", "+ Réception");
+  await page.fill("#f-quantite", "1.5");
+  await validerPanneau(page);
+  await page.waitForSelector("#zone-erreur-panneau:not([hidden])", { timeout: 10000 });
+  const messageRefusEntier = await page.textContent("#zone-erreur-panneau");
+  verifier(
+    /quantités entières/.test(messageRefusEntier),
+    `agent stock : réception 1,5 refusée sur un article entier (message : ${messageRefusEntier.trim().slice(0, 80)})`
+  );
+  verifier(
+    psqlValeur(
+      `SELECT count(*) FROM stocks_sites WHERE article_id = ${idScie};`
+    ) === "0",
+    "agent stock : le refus n'a créé aucune ligne de stock"
+  );
+  await page.click("#panneau-fermer");
 
   // --- Réception sur « Ciment » ---
   await ouvrirArticle(page, "Ciment", "+ Réception");
@@ -269,6 +334,51 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
     "SELECT count(*) FROM historique_prix_articles WHERE article_id = 2 AND nouveau_prix_vente = 3800;"
   );
   verifier(traceModif === "1", "responsable : modification de prix tracée dans historique_prix_articles");
+
+  // --- Cycle 60 : la désactivation des quantités décimales est refusée
+  // tant qu'un stock ou un seuil décimal existe réellement (migration 049).
+  const idCable = psqlValeur("SELECT max(id) FROM articles;");
+  await ouvrirArticle(page, "Câble électrique", "Modifier");
+  verifier(
+    await page.isChecked("#f-quantite-decimale"),
+    "responsable : la case décimale est pré-cochée sur l'article décimal"
+  );
+  await page.uncheck("#f-quantite-decimale");
+  await validerPanneau(page);
+  await page.waitForSelector("#zone-erreur-panneau:not([hidden])", { timeout: 10000 });
+  const messageRefusDecimal = await page.textContent("#zone-erreur-panneau");
+  verifier(
+    /Désactivation refusée/.test(messageRefusDecimal),
+    `responsable : désactivation refusée avec un stock décimal (message : ${messageRefusDecimal.trim().slice(0, 80)})`
+  );
+  verifier(
+    psqlValeur(`SELECT quantite_decimale_autorisee FROM articles WHERE id = ${idCable};`) === "t",
+    "responsable : le drapeau reste vrai après le refus"
+  );
+  await page.click("#panneau-fermer");
+
+  // Correction en base du stock ET du seuil (2,5 et 0,5) : la désactivation
+  // passe, la mention disparaît de la liste.
+  psql(
+    `UPDATE stocks_sites SET quantite_stock = 2, seuil_alerte = 1`
+    + ` WHERE article_id = ${idCable} AND site_id = 1;`
+  );
+  await ouvrirArticle(page, "Câble électrique", "Modifier");
+  await page.uncheck("#f-quantite-decimale");
+  await validerPanneau(page);
+  await attendreSucces(page);
+  verifier(
+    psqlValeur(`SELECT quantite_decimale_autorisee FROM articles WHERE id = ${idCable};`) === "f",
+    "responsable : désactivation acceptée après correction en entiers"
+  );
+  await page.click("#panneau-fermer");
+  const itemCable = page.locator("#liste-articles li", { hasText: "Câble électrique" }).first();
+  await page.fill("#recherche", "Câble électrique");
+  await itemCable.waitFor({ timeout: 5000 });
+  verifier(
+    !(await itemCable.innerText()).includes("quantités décimales"),
+    "responsable : la mention « quantités décimales » a disparu de la liste"
+  );
 
   // --- Déclaration d'un article offert (créée ici par l'API : la
   // déclaration n'a pas encore d'écran dédié côté vente) ---
