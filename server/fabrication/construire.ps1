@@ -86,7 +86,11 @@ if (-not (Test-Path $PyInstaller)) {
 }
 
 EcrireEtape "Construction de Akuma.exe"
-& $PyInstaller $SpecFile --distpath $DistPath --workpath $WorkPath --noconfirm
+# Toujours via "python -m PyInstaller", jamais le shim pyinstaller.exe du venv :
+# constate au cycle 63, ce shim peut sortir en code 1 SANS aucune sortie, ce qui
+# fait echouer la construction avec un message trompeur. Le module, lui, produit
+# le journal complet.
+& $PythonExe -m PyInstaller $SpecFile --distpath $DistPath --workpath $WorkPath --noconfirm
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ECHEC de la construction. Voir le journal ci-dessus." -ForegroundColor Red
     exit 1
