@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changement de mot de passe — Akuma</title>
+<link rel="icon" href="favicon.ico">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page">
+  <main class="contenu contenu--etroit" style="display:flex; align-items:center; justify-content:center;">
+    <div class="carte" style="width:100%; max-width:420px;">
+      <div style="text-align:center; margin-bottom:var(--e-4);">
+        <img src="assets/akuma-logo.png" alt="Akuma — Gestion de Quincaillerie"
+             style="width:100%; max-width:200px; min-width:120px;">
+      </div>
+      <h1 style="text-align:center; font-size:var(--t-lg); margin:0;">Nouveau mot de passe</h1>
+      <p style="text-align:center; color:var(--c-texte-doux); margin-bottom:var(--e-5);">
+        Votre mot de passe actuel est provisoire : vous devez le remplacer
+        avant de pouvoir utiliser l'application.
+      </p>
+
+      <form id="form-changement" novalidate>
+        <div class="champ">
+          <label class="champ__label" for="actuel">Mot de passe actuel (provisoire)</label>
+          <input class="champ__saisie" id="actuel" name="actuel" type="password"
+                 autocomplete="current-password" autofocus>
+        </div>
+
+        <div class="champ">
+          <label class="champ__label" for="nouveau">Nouveau mot de passe</label>
+          <input class="champ__saisie" id="nouveau" name="nouveau" type="password"
+                 autocomplete="new-password" aria-describedby="aide-nouveau">
+          <p class="champ__aide" id="aide-nouveau">8 caractères minimum.</p>
+        </div>
+
+        <div class="champ">
+          <label class="champ__label" for="confirmation">Confirmation du nouveau mot de passe</label>
+          <input class="champ__saisie" id="confirmation" name="confirmation" type="password"
+                 autocomplete="new-password">
+        </div>
+
+        <div id="zone-erreur" class="erreur-champ" hidden></div>
+
+        <button class="btn btn--primaire btn--large" id="bouton-valider" type="submit" style="margin-top:var(--e-4);">
+          Changer mon mot de passe
+        </button>
+      </form>
+
+      <button class="btn btn--fantome btn--large" id="bouton-deconnexion" type="button"
+              style="width:100%; margin-top:var(--e-2);">Se déconnecter</button>
+    </div>
+  </main>
+</div>
+
+<script src="api.js"></script>
+<script>
+(async function () {
+  "use strict";
+
+  // Garde volontairement DIFFÉRENTE des autres écrans : exigerSession()
+  // appelle GET /moi, que le serveur refuse (403) tant que le mot de passe
+  // provisoire n'est pas changé — appeler ici bouclerait entre connexion et
+  // cet écran. On se contente d'une session stockée valide ; le jeton lui-
+  // même est vérifié par la route POST /auth/changer-mot-de-passe, et après
+  // le changement l'écran d'accueil refera une vérification complète.
+  const session = Session.lire();
+  if (!session || !session.jeton) {
+    window.location.href = "connexion.html";
+    return;
+  }
+  // Rien à changer (arrivée directe, drapeau déjà repassé à faux) : retour à
+  // l'écran d'accueil du rôle.
+  if (!session.doit_changer_mot_de_passe) {
+    window.location.href = PAGE_ACCUEIL_PAR_ROLE[session.role] || "vente.html";
+    return;
+  }
+
+  const $ = (id) => document.getElementById(id);
+  $("bouton-deconnexion").addEventListener("click", deconnecter);
+
+  const form = $("form-changement");
+  const zoneErreur = $("zone-erreur");
+
+  function montrerErreur(message) {
+    zoneErreur.textContent = message;
+    zoneErreur.hidden = false;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    zoneErreur.hidden = true;
+
+    const actuel = form.actuel.value;
+    const nouveau = form.nouveau.value;
+    const confirmation = form.confirmation.value;
+
+    if (!actuel) { montrerErreur("Saisissez votre mot de passe actuel."); $("actuel").focus(); return; }
+    if (nouveau.length < 8) { montrerErreur("Le nouveau mot de passe fait moins de 8 caractères."); $("nouveau").focus(); return; }
+    if (nouveau !== confirmation) { montrerErreur("La confirmation ne correspond pas au nouveau mot de passe."); $("confirmation").focus(); return; }
+
+    $("bouton-valider").disabled = true;
+    try {
+      await appelApi("/auth/changer-mot-de-passe", {
+        method: "POST",
+        body: JSON.stringify({
+          mot_de_passe_actuel: actuel,
+          nouveau_mot_de_passe: nouveau,
+        }),
+      });
+      // Le serveur relit le drapeau EN BASE à chaque requête : la session
+      // courante redevient utilisable immédiatement, sans nouvelle
+      // connexion.
+      Session.enregistrer(Object.assign({}, Session.lire(), { doit_changer_mot_de_passe: false }));
+      window.location.href = PAGE_ACCUEIL_PAR_ROLE[session.role] || "vente.html";
+    } catch (erreur) {
+      // appelApiBrut efface la session stockée sur tout 401 (protection
+      // générique contre les sessions expirées) — mais sur cette route, un
+      // 401 signifie « mot de passe actuel incorrect » : le jeton reste
+      // valide côté serveur, on le ré-enregistre pour la tentative suivante.
+      if (erreur.statut === 401 && !Session.lire()) Session.enregistrer(session);
+      if (erreur.reseauIndisponible) montrerErreur(RESEAU_INACCESSIBLE);
+      else montrerErreur(erreur.message || "Le changement a échoué. Réessayez.");
+      $("bouton-valider").disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

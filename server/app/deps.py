@@ -52,13 +52,24 @@ def obtenir_session(
     # (securite.py) — jeton_est_revoque(\"\") ne trouve jamais de ligne,
     # comportement inchangé pour lui (jamais révocable, comme avant ce
     # cycle) ; le contrôle d'activité, lui, s'applique à tous les jetons.
+    #
+    # Changement de mot de passe provisoire (chantier C8, cycle 65) : même
+    # mécanisme, via la fonction 050 — l'obligation documentée (« changer le
+    # mot de passe à la première connexion », server/README.md C2) n'était
+    # jusqu'ici portée que par le jeton, que rien n'appliquait. La valeur est
+    # relue EN BASE à chaque requête (pas la valeur figée du jeton) : après
+    # un changement réussi la session redevient utilisable immédiatement, et
+    # une réinitialisation par le responsable coupe un jeton encore valide.
+    # Deux routes restent accessibles sans quoi l'utilisateur serait piégé :
+    # changer son mot de passe, ou se déconnecter.
     bd: BaseDeDonnees = obtenir_bd(request)
     with bd.connexion_anonyme() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT jeton_est_revoque(%s) AS revoque, "
-                "       compte_est_actif(%s) AS actif",
-                (session.jti, session.utilisateur_id),
+                "       compte_est_actif(%s) AS actif, "
+                "       changement_mdp_requis(%s) AS changement_requis",
+                (session.jti, session.utilisateur_id, session.utilisateur_id),
             )
             ligne = cur.fetchone()
             if ligne["revoque"]:
@@ -67,6 +78,14 @@ def obtenir_session(
                 raise HTTPException(
                     status.HTTP_401_UNAUTHORIZED,
                     "Ce compte est désactivé. Voyez le responsable.",
+                )
+            if ligne["changement_requis"] and request.url.path not in (
+                "/auth/changer-mot-de-passe",
+                "/auth/deconnexion",
+            ):
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "Vous devez changer votre mot de passe provisoire avant de continuer.",
                 )
 
     return session

@@ -173,6 +173,15 @@ async function exigerSession(rolesAutorises) {
     const profil = await appelApi("/moi");
     const fusion = Object.assign({}, session, profil);
     Session.enregistrer(fusion);
+    // Mot de passe provisoire non changé (cycle 65) : le serveur refuse
+    // désormais toute route sauf /auth/changer-mot-de-passe et
+    // /auth/deconnexion — l'interface suit, sauf sur l'écran de changement
+    // lui-même (sinon boucle de redirections).
+    if (profil.doit_changer_mot_de_passe
+        && !window.location.pathname.endsWith("changer-mot-de-passe.html")) {
+      window.location.href = "changer-mot-de-passe.html";
+      return null;
+    }
     if (rolesAutorises && !rolesAutorises.includes(profil.role)) {
       window.location.href = PAGE_ACCUEIL_PAR_ROLE[profil.role] || "connexion.html";
       return null;

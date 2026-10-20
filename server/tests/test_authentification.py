@@ -9,6 +9,7 @@ from conftest import (
     MOT_DE_PASSE_AGENT_STOCK,
     MOT_DE_PASSE_RESPONSABLE,
     entete_autorisation,
+    fixer_drapeau_changement_mdp,
     se_connecter,
 )
 
@@ -154,6 +155,11 @@ def test_limitation_de_debit_sur_la_connexion(app):
 
 
 def test_changement_mot_de_passe_a_la_premiere_connexion(client):
+    # Prémisse « première connexion » rendue explicite : les comptes du jeu
+    # d'essai représentent des employés en poste (drapeau faux, cycle 65), on
+    # pose donc le drapeau pour ce scénario — comme le ferait une création
+    # de compte réelle (la création le pose à TRUE par construction).
+    fixer_drapeau_changement_mdp("resp", True)
     session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     assert session["doit_changer_mot_de_passe"] is True
 

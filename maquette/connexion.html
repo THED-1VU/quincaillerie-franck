@@ -56,10 +56,14 @@
 (function () {
   "use strict";
 
-  // Déjà connecté ? Inutile de repasser par cet écran.
+  // Déjà connecté ? Inutile de repasser par cet écran — sauf si le mot de
+  // passe provisoire n'a pas encore été changé : là, c'est vers cet écran
+  // qu'on va (le serveur refuserait toute autre route, 403).
   const session = Session.lire();
   if (session && session.jeton) {
-    window.location.href = PAGE_ACCUEIL_PAR_ROLE[session.role] || "vente.html";
+    window.location.href = session.doit_changer_mot_de_passe
+      ? "changer-mot-de-passe.html"
+      : (PAGE_ACCUEIL_PAR_ROLE[session.role] || "vente.html");
     return;
   }
 
@@ -125,7 +129,9 @@
         site_id: corps.site_id,
         doit_changer_mot_de_passe: corps.doit_changer_mot_de_passe,
       });
-      window.location.href = PAGE_ACCUEIL_PAR_ROLE[corps.role] || "vente.html";
+      window.location.href = corps.doit_changer_mot_de_passe
+        ? "changer-mot-de-passe.html"
+        : (PAGE_ACCUEIL_PAR_ROLE[corps.role] || "vente.html");
     } catch {
       montrerErreur(RESEAU_INACCESSIBLE);
     } finally {

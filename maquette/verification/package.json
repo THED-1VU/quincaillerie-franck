@@ -16,6 +16,7 @@
     "rh": "node verifier-rh-reel.mjs",
     "comptes": "node verifier-comptes-reel.mjs",
     "caisse": "node verifier-caisse-reel.mjs",
+    "roles": "node verifier-roles.mjs",
     "routes": "node verifier-routes-appelees.mjs"
   },
   "devDependencies": {

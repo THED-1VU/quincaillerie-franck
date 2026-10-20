@@ -106,6 +106,14 @@ INSERT INTO utilisateurs (id, nom_complet, identifiant, mot_de_passe_hash, role,
   (5, 'Dina Comptoir',    'comptoir.compta', 'hash_factice', 'agent_comptabilite', 2);
 SELECT setval('utilisateurs_id_seq', 5, TRUE);
 
+-- Comptes de TRAVAIL : représentent des employés en poste, dont le mot de
+-- passe provisoire a déjà été changé (cycle 65 : l'obligation est désormais
+-- appliquée par le serveur, fonction 050 — avec le défaut TRUE de la colonne,
+-- tous les tests métier derrière ces comptes seraient 403). L'obligation
+-- elle-même est prouvée par test_premier_compte (compte créé -> TRUE) et
+-- test_changement_mdp_force (impose le drapeau, vérifie le blocage).
+UPDATE utilisateurs SET doit_changer_mot_de_passe = FALSE;
+
 -- Cumul de rôles (migration 035, chantier C3) : le jeu d'essai ré-amorce
 -- la table à l'identique de la reprise de la migration — un rôle au minimum
 -- (le rôle principal).

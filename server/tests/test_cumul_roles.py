@@ -13,6 +13,7 @@ import json
 from conftest import (
     MOT_DE_PASSE_RESPONSABLE,
     entete_autorisation,
+    fixer_drapeau_changement_mdp,
     se_connecter,
 )
 
@@ -33,6 +34,11 @@ def _creer_agent_cumule(client, session, identifiant, role_principal):
     assert reponse.status_code == 201, reponse.text
     corps = reponse.json()
     assert sorted(corps["roles"]) == ["agent_comptabilite", "agent_stock"]
+    # Compte « en poste » (cycle 65 : un compte créé par l'API a l'obligation
+    # de changement de mot de passe, qui bloquerait toute route métier avant
+    # même la question du cumul — ces tests portent sur les rôles, pas sur
+    # cette obligation ; le 403 du second test doit être un refus de RÔLE).
+    fixer_drapeau_changement_mdp(identifiant, False)
     return corps
 
 
