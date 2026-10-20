@@ -96,9 +96,13 @@
       ligneHaut.style.width = "100%";
 
       const infos = document.createElement("span");
+      // Le paramètre est porté par la FICHE (commune aux deux sites) : la
+      // mention se répète donc sur chaque ligne article+site du responsable,
+      // volontairement — elle décrit l'article, pas la ligne de stock.
+      const suffixeDecimales = a.quantite_decimale_autorisee ? " · quantités décimales" : "";
       const sousTexte = estResponsable
-        ? (LIBELLE_SITE[a.site_id] || "Site " + a.site_id) + " · stock " + a.quantite_stock + " " + a.unite
-        : "stock " + a.quantite_stock + " " + a.unite + " · seuil " + a.seuil_alerte;
+        ? (LIBELLE_SITE[a.site_id] || "Site " + a.site_id) + " · stock " + a.quantite_stock + " " + a.unite + suffixeDecimales
+        : "stock " + a.quantite_stock + " " + a.unite + " · seuil " + a.seuil_alerte + suffixeDecimales;
       infos.appendChild(document.createTextNode(a.nom));
       infos.appendChild(document.createElement("br"));
       const petit = document.createElement("span");
@@ -204,11 +208,41 @@
     boutonValider.type = "button";
     boutonValider.className = "btn btn--primaire btn--large";
 
+    // Case à cocher — même structure que champ()/champSelect(), un <input
+    // type="checkbox"> dans un <label class="champ__case"> (motif déjà
+    // utilisé par comptes.html pour l'autre rôle agent).
+    const champCase = (id, libelle, aide) => {
+      const div = document.createElement("div");
+      div.className = "champ";
+      const label = document.createElement("label");
+      label.className = "champ__case";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.id = id;
+      label.htmlFor = id;
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(" " + libelle));
+      div.appendChild(label);
+      if (aide) {
+        const p = document.createElement("p");
+        p.className = "champ__aide";
+        p.textContent = aide;
+        div.appendChild(p);
+      }
+      contenu.appendChild(div);
+      return input;
+    };
+
     if (action === "creer") {
       $("panneau-titre").textContent = "Nouvel article";
       const nom = champ("f-nom", "Nom");
       const unite = champ("f-unite", "Unité (ex. sac, kg, pièce)");
       const categorie = champ("f-categorie", "Catégorie (optionnel)");
+      const decimale = champCase(
+        "f-quantite-decimale",
+        "Autoriser les quantités décimales",
+        "Pour les articles vendus au poids ou à la mesure (kg, m, L) : jusqu'à 3 décimales. Décoché, la base refuse toute quantité non entière."
+      );
       let prixAchat, prixVente;
       if (estResponsable) {
         prixAchat = champ("f-prix-achat", "Prix d'achat", "number");
@@ -216,7 +250,10 @@
       }
       boutonValider.textContent = "Créer l'article";
       boutonValider.addEventListener("click", async () => {
-        const corps = { nom: nom.value.trim(), unite: unite.value.trim() };
+        const corps = {
+          nom: nom.value.trim(), unite: unite.value.trim(),
+          quantite_decimale_autorisee: decimale.checked,
+        };
         if (categorie.value.trim()) corps.categorie = categorie.value.trim();
         if (estResponsable) {
           if (prixAchat.value) corps.prix_achat = Number(prixAchat.value);
@@ -231,6 +268,12 @@
       const nom = champ("f-nom", "Nom"); nom.value = article.nom;
       const unite = champ("f-unite", "Unité"); unite.value = article.unite;
       const categorie = champ("f-categorie", "Catégorie");
+      const decimale = champCase(
+        "f-quantite-decimale",
+        "Autoriser les quantités décimales",
+        "La base refuse de décocher cette case tant qu'un stock ou un seuil décimal existe déjà pour cet article."
+      );
+      decimale.checked = !!article.quantite_decimale_autorisee;
       let prixAchat, prixVente;
       if (estResponsable) {
         prixAchat = champ("f-prix-achat", "Prix d'achat", "number");
@@ -244,6 +287,12 @@
         if (nom.value.trim()) corps.nom = nom.value.trim();
         if (unite.value.trim()) corps.unite = unite.value.trim();
         if (categorie.value.trim()) corps.categorie = categorie.value.trim();
+        // Envoyé seulement s'il CHANGE : envoyer la valeur actuelle à chaque
+        // enregistrement ferait perdre le refus « Aucun champ à modifier »
+        // quand l'utilisateur valide sans rien toucher (test dédié).
+        if (decimale.checked !== !!article.quantite_decimale_autorisee) {
+          corps.quantite_decimale_autorisee = decimale.checked;
+        }
         if (estResponsable) {
           if (prixAchat.value) corps.prix_achat = Number(prixAchat.value);
           if (prixVente.value) corps.prix_vente = Number(prixVente.value);
