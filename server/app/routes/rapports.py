@@ -212,3 +212,112 @@ def exporter_ventes(
     else:
         contenu = _pdf_tableau("Ventes", colonnes, lignes)
     return _reponse_fichier(contenu, format_, "ventes")
+
+
+# ---------------------------------------------------------------------------
+# Rapport « écarts de prix par vendeur » — point c, question 5, décidé
+# 2026-09-18 : 10 % sous le prix catalogue, en configuration, signale SANS
+# JAMAIS bloquer. JSON lu à l'écran (pas un fichier) ; la vue
+# `ecarts_prix_vendeurs` (migration 048, SECURITY INVOKER) porte la logique
+# et la RLS par site (008) filtre l'agent comptabilité à SON site.
+# ---------------------------------------------------------------------------
+@routeur.get("/ecarts-prix-vendeurs")
+def rapports_ecarts_prix_vendeurs(
+    request: Request,
+    date_debut: str | None = Query(default=None),
+    date_fin: str | None = Query(default=None),
+    session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
+):
+    """Lignes de ventes payées dont le prix payé diffère du prix catalogue,
+    groupées par vendeur (fiche employé, migration 040). L'écart ligne à
+    ligne peut être négatif (upsell, toléré par 037) : il est restitué tel
+    quel, seul le signalement suit la décision — strictement au-delà du
+    seuil SOUS le catalogue. Les dates sont facultatives : absentes, le
+    rapport couvre toute l'histoire (aucune période par défaut inventée).
+    """
+    debut = fin = None
+    if date_debut is not None or date_fin is not None:
+        try:
+            debut = _date.fromisoformat(date_debut) if date_debut else None
+            fin = _date.fromisoformat(date_fin) if date_fin else None
+        except ValueError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "date_debut et date_fin doivent être au format AAAA-MM-JJ.",
+            ) from exc
+        if debut is not None and fin is not None and debut > fin:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "date_debut ne peut pas être postérieure à date_fin.",
+            )
+
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT vente_id, site_id, site_nom, numero_facturier, date_vente,
+                       vendeur_id, vendeur_nom, remise_globale_montant,
+                       article_id, article_nom, quantite,
+                       prix_catalogue, prix_unitaire,
+                       ecart_unitaire, ecart_total, ecart_pct, seuil_pct, signale
+                  FROM ecarts_prix_vendeurs
+                 WHERE ecart_unitaire <> 0
+                   AND (%s IS NULL OR date_vente::date >= %s)
+                   AND (%s IS NULL OR date_vente::date <= %s)
+                 ORDER BY vendeur_nom NULLS LAST, vendeur_id NULLS LAST,
+                          date_vente, vente_id, article_id
+                """,
+                (debut, debut, fin, fin),
+            )
+            lignes = cur.fetchall()
+
+    vendeurs: dict[tuple, dict] = {}
+    seuil_pct = None
+    for l in lignes:
+        seuil_pct = float(l["seuil_pct"])
+        cle = (l["vendeur_id"], l["vendeur_nom"])
+        if cle not in vendeurs:
+            vendeurs[cle] = {
+                "vendeur_id": l["vendeur_id"],
+                "vendeur_nom": l["vendeur_nom"],
+                "nb_lignes": 0,
+                "nb_signalees": 0,
+                "cumul_ecart": 0.0,
+                "lignes": [],
+            }
+        groupe = vendeurs[cle]
+        groupe["nb_lignes"] += 1
+        if l["signale"]:
+            groupe["nb_signalees"] += 1
+        groupe["cumul_ecart"] = round(groupe["cumul_ecart"] + float(l["ecart_total"]), 2)
+        groupe["lignes"].append({
+            "vente_id": l["vente_id"],
+            "site_id": l["site_id"],
+            "site_nom": l["site_nom"],
+            "numero_facturier": l["numero_facturier"],
+            "date_vente": l["date_vente"].isoformat() if l["date_vente"] else None,
+            "article_id": l["article_id"],
+            "article_nom": l["article_nom"],
+            "quantite": float(l["quantite"]),
+            "prix_catalogue": float(l["prix_catalogue"]),
+            "prix_unitaire": float(l["prix_unitaire"]),
+            "ecart_unitaire": float(l["ecart_unitaire"]),
+            "ecart_total": float(l["ecart_total"]),
+            "ecart_pct": float(l["ecart_pct"]),
+            "remise_globale_montant": (
+                float(l["remise_globale_montant"]) if l["remise_globale_montant"] is not None else None
+            ),
+            "signale": l["signale"],
+        })
+
+    return {
+        "seuil_pct": seuil_pct,
+        "vendeurs": sorted(
+            vendeurs.values(),
+            key=lambda g: (g["nb_signalees"] == 0, -(g["cumul_ecart"] or 0),
+                           g["vendeur_nom"] or ""),
+        ),
+    }
