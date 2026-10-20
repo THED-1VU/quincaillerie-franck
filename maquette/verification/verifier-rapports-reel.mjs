@@ -3,13 +3,20 @@
    testés au niveau API depuis le cycle 10 (server/tests/test_rapports.py),
    mais sans aucune interface jusqu'à ce cycle.
 
-   1. Le responsable voit les 3 sections (historique, export articles,
-      export ventes) ; l'historique affiche un comptage réellement fait
-      aujourd'hui, et rien sur une période passée.
-   2. L'agent stock ne voit QUE l'export du catalogue (jamais l'historique
-      ni l'export des ventes) — aucune occurrence de FCFA sur l'écran.
-   3. L'agent comptabilité voit l'export du catalogue et des ventes, jamais
-      l'historique (réservé au responsable).
+   Cycle 58 : rapport « écarts de prix par vendeur » (migration 048, point c
+   question 5, décidé 2026-09-18) — 10 % SOUS le prix catalogue, seuil de
+   configuration, signalement sans blocage. Une vente réelle est semée ici
+   (5 720 = 12 % signalée, 5 980 = 8 % non signalée).
+
+   1. Le responsable voit les 4 sections (historique, export articles,
+      export ventes, écarts de prix) ; l'historique affiche un comptage
+      réellement fait aujourd'hui, et rien sur une période passée. Le
+      rapport des écarts affiche la vente semée, signale la ligne à 12 %,
+      laisse visible celle à 8 %, et le filtre de période l'écarte.
+   2. L'agent stock ne voit QUE l'export du catalogue (jamais l'historique,
+      ni l'export des ventes, ni les écarts) — aucune occurrence de FCFA.
+   3. L'agent comptabilité voit l'export du catalogue, des ventes et les
+      écarts de prix, jamais l'historique (réservé au responsable).
    4. Un clic sur un bouton d'export déclenche un VRAI téléchargement de
       navigateur (pas un lien nu) — fichier non vide, dont les premiers
       octets correspondent au format annoncé (« PK » pour un .xlsx, qui
@@ -67,6 +74,21 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 // un vrai écart, pas seulement une ligne « conforme ».
 psql(`INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_comptee) VALUES (1, 1, 2, 'matin', 28);`);
 
+// Vente réelle avec remises (cycle 58) : deux lignes au catalogue 6 500
+// (Ciment), 5 720 = 12 % sous le catalogue (au-delà du seuil de 10 % →
+// signalée) et 5 980 = 8 % (visible, non signalée), plus la recette
+// cohérente — le même chemin qu'une vente encaissée par POST /ventes.
+psql(`INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+        utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva, total_ttc,
+        date_encaissement, numero_facturier, vendeur_id)
+      VALUES (905, 1, 4, 'payee', 'especes', 1, 11700, 0, 0, 11700, NOW(), 'MAG-UI-ECART', 1);`);
+psql(`INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+      VALUES (905, 1, 1, 5720, 1, 6500, 780);`);
+psql(`INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+      VALUES (905, 1, 1, 5980, 1, 6500, 520);`);
+psql(`INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, vente_id)
+      VALUES (1, 4, 'recette', 11700, 'Vente 905', 905);`);
+
 console.log("Base prête.\n");
 
 const navigateur = await chromium.launch({ channel: "chrome" });
@@ -111,7 +133,7 @@ async function telechargerEtLireEntete(page, idBouton, longueur = 4) {
 const LARGEURS = [360, 390, 768, 1366, 1920];
 
 // ============================================================================
-// 1. Responsable : les 3 sections, historique réel, exports réels
+// 1. Responsable : les 4 sections, historique réel, exports réels, écarts
 // ============================================================================
 {
   const { page } = await nouvellePage();
@@ -119,7 +141,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await page.goto(`${SERVEUR_URL}/app/rapports.html`, { waitUntil: "networkidle" });
   verifier(page.url().endsWith("rapports.html"), "responsable : accès à rapports.html");
 
-  for (const id of ["carte-historique", "carte-export-articles", "carte-export-ventes"]) {
+  for (const id of ["carte-historique", "carte-export-articles", "carte-export-ventes", "carte-ecarts-prix"]) {
     verifier(await page.isVisible(`#${id}`), `responsable : section #${id} visible`);
   }
 
@@ -147,6 +169,30 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
 
   const enteteVentesXlsx = await telechargerEtLireEntete(page, "#export-ventes-xlsx");
   verifier(enteteVentesXlsx.startsWith("PK"), "responsable : export ventes .xlsx réellement téléchargé");
+
+  // Écarts de prix par vendeur (cycle 58) : la vente semée plus haut doit
+  // apparaître — 12 % SIGNALÉE, 8 % visible mais non signalée, seuil 10 %.
+  await page.waitForFunction(
+    () => document.getElementById("liste-ecarts").textContent.includes("Employé Essai"),
+    { timeout: 5000 }
+  );
+  const texteEcarts = await page.textContent("#liste-ecarts");
+  verifier(texteEcarts.includes("MAG-UI-ECART"), "responsable : écarts — la vente réelle apparaît dans le rapport");
+  verifier(texteEcarts.includes("SIGNALÉE"), "responsable : écarts — ligne à 12 % signalée au-delà du seuil");
+  verifier(texteEcarts.includes("10 %"), "responsable : écarts — seuil configuré affiché (10 %)");
+  verifier(texteEcarts.includes("12 %") && texteEcarts.includes("8 %"),
+    "responsable : écarts — les deux écarts (12 % et 8 %) sont affichés");
+  verifier(/\bsous le catalogue\b/.test(texteEcarts), "responsable : écarts — sens de l'écart explicite (sous le catalogue)");
+
+  // Filtre de période réellement branché : une période passée vide la liste.
+  await page.fill("#ecarts-debut", "2000-01-01");
+  await page.fill("#ecarts-fin", "2000-01-02");
+  await page.click("#ecarts-chercher");
+  await page.waitForFunction(
+    () => document.getElementById("liste-ecarts").textContent.includes("Aucun écart"),
+    { timeout: 5000 }
+  );
+  verifier(true, "responsable : écarts — période passée -> aucun écart affiché");
 
   for (const largeur of LARGEURS) {
     await page.setViewportSize({ width: largeur, height: largeur < 700 ? 900 : largeur < 1400 ? 900 : 1000 });
@@ -178,6 +224,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   verifier(await page.isVisible("#carte-export-articles"), "agent stock : export du catalogue visible");
   verifier(!(await page.isVisible("#carte-historique")), "agent stock : historique des comptages absent");
   verifier(!(await page.isVisible("#carte-export-ventes")), "agent stock : export des ventes absent");
+  verifier(!(await page.isVisible("#carte-ecarts-prix")), "agent stock : rapport des écarts de prix absent");
 
   const texteDom = await page.evaluate(() => document.body.innerText);
   verifier(!/FCFA/i.test(texteDom), "agent stock : aucune occurrence de « FCFA » sur rapports.html");
@@ -200,6 +247,15 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   verifier(await page.isVisible("#carte-export-articles"), "agent comptabilité : export du catalogue visible");
   verifier(await page.isVisible("#carte-export-ventes"), "agent comptabilité : export des ventes visible");
   verifier(!(await page.isVisible("#carte-historique")), "agent comptabilité : historique des comptages absent");
+
+  // Écarts de prix : accessibles à la comptabilité (même périmètre que
+  // l'export des ventes), et la vente du site 1 est bien visible.
+  verifier(await page.isVisible("#carte-ecarts-prix"), "agent comptabilité : rapport des écarts visible");
+  await page.waitForFunction(
+    () => document.getElementById("liste-ecarts").textContent.includes("MAG-UI-ECART"),
+    { timeout: 5000 }
+  );
+  verifier(true, "agent comptabilité : écarts — la vente de son site apparaît");
 
   const entete = await telechargerEtLireEntete(page, "#export-ventes-pdf");
   verifier(entete.startsWith("%PDF"), "agent comptabilité : export des ventes .pdf réellement téléchargé");

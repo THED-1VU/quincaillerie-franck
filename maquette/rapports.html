@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="simu">Écran câblé (cycle 12) : historique des comptages et exports Excel/PDF sont réels (<code>server/app/routes/inventaire.py</code>, <code>rapports.py</code>). Aucune bascule vue consolidée/par site, aucune clôture de caisse, aucune numérotation de facturier — hors périmètre de ce cycle.</div>
+<div class="simu">Écran câblé (cycle 12, complété cycle 58) : historique des comptages, exports Excel/PDF et rapport des écarts de prix par vendeur (seuil 10 %, configuration — signale sans jamais bloquer) sont réels (<code>server/app/routes/inventaire.py</code>, <code>rapports.py</code>). Aucune bascule vue consolidée/par site, aucune clôture de caisse — hors périmètre.</div>
 <div class="page">
   <header class="bandeau">
     <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
@@ -66,6 +66,24 @@
           <button class="btn btn--primaire" id="export-ventes-pdf" type="button">PDF</button>
         </div>
         <div id="zone-erreur-export-ventes" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+      </section>
+
+      <section class="carte" id="carte-ecarts-prix" hidden>
+        <h2>Écarts de prix par vendeur</h2>
+        <p class="champ__aide">Lignes vendues à un prix différent du catalogue, groupées par vendeur. Au-delà du seuil configuré (10 % sous le catalogue), la ligne est signalée — aucune vente n'est jamais bloquée.</p>
+        <div style="display:flex; gap:var(--e-3); flex-wrap:wrap; margin:var(--e-4) 0;">
+          <div class="champ" style="flex:1; min-width:150px; margin-bottom:0;">
+            <label class="champ__label" for="ecarts-debut">Du (facultatif)</label>
+            <input class="champ__saisie" id="ecarts-debut" type="date">
+          </div>
+          <div class="champ" style="flex:1; min-width:150px; margin-bottom:0;">
+            <label class="champ__label" for="ecarts-fin">Au (facultatif)</label>
+            <input class="champ__saisie" id="ecarts-fin" type="date">
+          </div>
+        </div>
+        <button class="btn btn--secondaire" id="ecarts-chercher" type="button">Afficher</button>
+        <div id="zone-erreur-ecarts" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+        <ul class="liste-nue" id="liste-ecarts" style="margin-top:var(--e-4);"></ul>
       </section>
 
     </div>
@@ -161,6 +179,61 @@
     }
     $("export-ventes-xlsx").addEventListener("click", () => exporterVentes("xlsx"));
     $("export-ventes-pdf").addEventListener("click", () => exporterVentes("pdf"));
+
+    // --- Écarts de prix par vendeur (point c Q5, cycle 58) ---
+    $("carte-ecarts-prix").hidden = false;
+
+    async function chercherEcartsPrix() {
+      $("zone-erreur-ecarts").hidden = true;
+      const ul = $("liste-ecarts");
+      ul.innerHTML = "";
+      try {
+        const params = new URLSearchParams();
+        if ($("ecarts-debut").value) params.set("date_debut", $("ecarts-debut").value);
+        if ($("ecarts-fin").value) params.set("date_fin", $("ecarts-fin").value);
+        const suffixe = params.toString() ? "?" + params.toString() : "";
+        const donnees = await appelApi("/rapports/ecarts-prix-vendeurs" + suffixe);
+
+        if (donnees.vendeurs.length === 0) {
+          ul.innerHTML = "<li><span>Aucun écart de prix sur ces critères — aucun prix négocié différent du catalogue.</span></li>";
+          return;
+        }
+
+        donnees.vendeurs.forEach((groupe) => {
+          const nomVendeur = groupe.vendeur_nom || "Sans vendeur (vente antérieure au cycle 27)";
+          const entete = groupe.nb_signalees > 0
+            ? groupe.nb_signalees + " ligne(s) SIGNALÉE(S) au-delà du seuil de " + donnees.seuil_pct + " %"
+            : "aucun signalement (seuil " + donnees.seuil_pct + " %)";
+          ul.appendChild(creerLigneListe(
+            nomVendeur,
+            groupe.nb_lignes + " ligne(s) · écart cumulé " + fcfa(groupe.cumul_ecart),
+            entete,
+            groupe.nb_signalees > 0 ? "pastille--alerte" : "pastille--neutre"
+          ));
+
+          groupe.lignes.forEach((l) => {
+            const sens = l.ecart_unitaire < 0 ? "+" : "−";
+            const montantUnitaire = Math.abs(l.ecart_unitaire);
+            const pctAffiche = (Math.abs(l.ecart_pct)).toLocaleString("fr-FR") + " %";
+            ul.appendChild(creerLigneListe(
+              l.article_nom,
+              (LIBELLE_SITE[l.site_id] || l.site_nom || "Site " + l.site_id) + " · vente #" + l.vente_id
+                + (l.numero_facturier ? " (" + l.numero_facturier + ")" : "")
+                + " · " + new Date(l.date_vente).toLocaleDateString("fr-FR")
+                + " · " + l.quantite + " × " + fcfa(l.prix_unitaire) + " (catalogue " + fcfa(l.prix_catalogue) + ")",
+              (sens === "−" ? "sous le catalogue : " : "au-dessus du catalogue : ")
+                + sens + fcfa(montantUnitaire) + "/u · " + pctAffiche,
+              l.signale ? "pastille--alerte" : "pastille--info"
+            ));
+          });
+        });
+      } catch (erreur) {
+        afficherErreurServeur("zone-erreur-ecarts", erreur);
+      }
+    }
+
+    $("ecarts-chercher").addEventListener("click", chercherEcartsPrix);
+    await chercherEcartsPrix();
   }
 })();
 </script>

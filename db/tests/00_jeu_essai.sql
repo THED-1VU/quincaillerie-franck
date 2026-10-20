@@ -86,7 +86,12 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
 ('credit_client_actif', 'oui', 'texte',
  'Active ou désactive la vente à crédit (clients, créances, règlements) '
  'pour cette boutique — produit vendu en gamme, chaque déploiement décide '
- 'indépendamment.', TRUE, FALSE, 'décision du propriétaire, 2026-09-25 (addendum point b)');
+ 'indépendamment.', TRUE, FALSE, 'décision du propriétaire, 2026-09-25 (addendum point b)'),
+('seuil_ecart_prix_vendeur', '10', 'decimal',
+ 'Seuil de signalement (en % sous le prix catalogue) au-delà duquel '
+ 'une ligne de vente figure au signalement dans le rapport « écarts '
+ 'de prix par vendeur ». Signale sans jamais bloquer.',
+ TRUE, FALSE, 'Décision 2026-09-18 (addendum point c, question 5)');
 
 INSERT INTO fournisseurs (id, nom, contact, telephone) VALUES
   (1, 'Cimenterie du Cameroun', 'M. Ateba', '+237 6 99 00 11 22');
