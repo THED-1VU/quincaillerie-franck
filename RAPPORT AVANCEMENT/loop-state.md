@@ -3252,6 +3252,130 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
 
 ---
 
+### Cycle 56 — Phase 0 (remise en ordre) : synchronisation, baseline 047, rejeu Playwright crédit — 2026-10-20
+
+- **Contexte** : reprise demandée par le propriétaire (prompt maître « AKUMA
+  autonomous loop », boucle en cycles contrôlés). Ce cycle couvre la
+  remise en ordre technique complète, préalable à tout chantier — le
+  diagnostic complet du même jour (résumé dans la conversation, non
+  versionné) sert de point de départ.
+- **Synchronisation** : le dépôt local était en retard de **3 commits** sur
+  `origin/main` (dont le correctif 047 — retour client sur vente à crédit).
+  `db/outils/sauvegarder.ps1` était supprimé du disque (non commité — la
+  disparition récurrente documentée dans
+  `db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`, probablement la protection
+  anti-rançongiciel de Windows, s'est reproduite). Restauré par
+  `git restore`, puis `git pull --ff-only` : `main` local = `a6ac2be`
+  (`origin/main`), arbre propre, migration 047 présente (dernière :
+  047, prochain numéro libre : 048, registre inchangé).
+- **Baseline reproductible sur main à jour** (bases isolées recréées de
+  zéro, puis supprimées après preuve) :
+  - **pytest complet : 297 passed / 0 échec / exit 0** (11 min 42 s) sur
+    base vierge (schéma d'origine + migrations 000→047). Compteur 297 vs
+    266 au cycle 51 : le point j (041), le crédit client (045), le
+    correctif 044 et le correctif 047 (+106 lignes de tests dans
+    `test_stock.py`) ont grossi la suite depuis.
+  - **Suite SQL complète (`db/tests/executer_tests.sh`) : toutes les
+    étapes passées / exit 0** — protections (sections 16 « Crédit client »
+    et 17 « Retour client sur une vente à crédit » comprises),
+    habilitations, concurrence, puis toutes les migrations inverses et
+    comparaison de schéma (10 différences cosmétiques connues et
+    documentées dans `db/README.md`).
+  - CI GitHub vérifiée verte sur `origin/main` (dernier run du 2026-09-28).
+- **Rejeu de la suite Playwright crédit (branche session A débloquée)** :
+  la branche `cycle-54-c13-credit-client` (session A) avait enrichi
+  `verifier-vente-reelle.mjs` du parcours crédit complet et l'avait
+  laissée « 2 contrôles rouges tant que `valider_retour_client` n'est pas
+  corrigé » (`RAPPORT AVANCEMENT/REPRISE_SESSION_B.md` §4). Le correctif
+  047 étant fusionné, rejeu depuis un worktree dédié
+  (`_worktrees/cycle-56-c13-rejeu-credit`, branche
+  `cycle-56-c13-rejeu-credit`), serveur réel port 8010, base
+  `quincaillerie_test` :
+  - **Passage 1 (suite session A telle quelle) : 31 contrôles, 30 OK,
+    1 échec** — « le retour ne produit AUCUNE dépense fantôme (dépenses
+    0 → 1) ». Analyse de cause racine (état de base relu après passage) :
+    **ce n'est pas un bug de 047** — le scénario fait un retour complet
+    (6 500 FCFA) sur une créance au restant dû 3 250 (acompte déjà
+    versé) ; 047 a réduit la créance du restant dû
+    (`montant_retourne = 3250`) et créé une dépense de **3 250
+    exactement** — l'excédent réellement payé, conforme à la règle du
+    propriétaire du 2026-09-26 (le cas du « maçon avec acompte »). Le
+    contrôle, écrit par la session A AVANT cette règle, attendait une
+    absence totale de dépense : attente périmée, pas code défectueux.
+  - **Passage 2 (contrôle réécrit : remboursement = acompte exact +
+    réduction de créance du restant dû) : 32 contrôles, 29 OK, 3
+    échecs nouveaux** — pollution d'état entre passages : `clients`
+    n'est PAS purgé par le jeu d'essai, le client marqueur du passage 1
+    (id 16) détourne le `LIMIT 1` de la suite (vente sur le nouveau
+    client id 17, contrôles lus sur l'ancien, encours 0). Correctif :
+    purge du client marqueur en préparation de la suite.
+  - **Passage 3 (base volontairement polluée par les deux passages
+    précédents — pire cas) : 32/32 contrôles, 0 échec, exit 0.**
+  - **PR #73 ouverte** (suite enrichie + les deux correctifs, 26
+    insertions / 10 délétions au-dessus de la version session A) —
+    fusion laissée au propriétaire. La branche session A n'a pas été
+    modifiée.
+- **Environnement de test** : le symlink `%TEMP%\pytest-of-USER\
+  pytest-current` (cyclique, `[..]`) casse le nettoyage de fin de session
+  pytest (`PermissionError WinError 5`). `rmdir` et `fsutil reparsepoint
+  delete` refusés (accès refusé) — **suppression réelle bloquée, élévation
+  administrateur requise**. Contournement documenté et appliqué à toutes
+  les exécutions du cycle : `--basetemp` vers un dossier frais ; aucun
+  impact sur les résultats de tests. À traiter une fois par un compte
+  admin.
+- **Hygiène Git (inventaire, aucune suppression sans autorisation)** :
+  - Branches réellement contenues dans `main` (fusionnées) :
+    `cycle-5-cablage-ux`, `cycle-6-vente-fiscalite-antisurvente`,
+    `cycle-7-inventaire-ecarts`, `cycle-8-corrections-c7`.
+  - Branches dont la PR distante est déjà MERGED (rebasée) mais le nom
+    local diverge de `main` : `credit-client-point-b`, `point-j-import-
+    stock-initial`, `reservation-046`, `doc-incident-annulation-vente-
+    credit`, `fix-retour-client-credit`, `doc-reservation-migrations`,
+    `doc-chantier-c-deja-livre`, `cycle-42-point-f-remises`,
+    `cycle-38-c2-session-reset`, `cycle-38-point-f-remises-unites`,
+    `cycle-54-c13-credit-client` (base de la PR #73). Nettoyage proposé,
+    à autoriser.
+  - Worktree `piste-point-f` (H:) : dossier absent du disque, entrée
+    `prunable` — élagage proposé (`git worktree prune`), à autoriser.
+  - Dossiers `_worktrees/piste-ux` et `_worktrees/piste-point-f` :
+    résidus de worktrees supprimés, sans `.git` — suppression proposée,
+    à autoriser.
+  - **PR #60** (doc « chantier C déjà livré », CI verte) : toujours
+    OUVERTE, **décision de fusion laissée au propriétaire** — pas
+    d'action technique.
+- **Score** : inchangé — ce cycle n'est qu'un préalable (aucun chantier
+  visé). La couverture Playwright du parcours crédit (PR #73) ne sera
+  comptée dans C13 qu'une fois fusionnée. Moyenne indicative ≈ 76 %.
+- **Prochaine tâche** : Phase 2 (finalisation fonctionnelle), première
+  tâche = **invariant comptable global** (recommandation post-incident,
+  `db/tests/01_protections.sql` : toute écriture `depense` de
+  contre-passation doit avoir sa `recette` en face, balayage de TOUTES
+  les ventes annulées) — indépendante des décisions métier. Les travaux
+  dépendant de décisions du propriétaire restent `BLOCKED_OWNER`
+  (détail au tableau de pilotage ci-dessous).
+
+---
+
+## Tableau de pilotage — reprise du 2026-10-20 (après cycle 56)
+
+| Cycle | Chantier | Tâche | Responsable | Statut | Tests | Dépendance | Prochaine action |
+|---|---|---|---|---|---|---|---|
+| 56 | C0/C13 | Synchronisation main + restauration sauvegarder.ps1 | QODER | DONE | pull --ff-only OK, arbre propre | — | — |
+| 56 | C13 | Baseline pytest complète sur 047 | QODER | DONE | 297/297, exit 0 | — | — |
+| 56 | C1 | Baseline SQL complète (inverses comprises) sur 047 | QODER | DONE | toutes étapes OK, exit 0 | — | — |
+| 56 | C13 | Rejeu suite Playwright crédit (session A) + correctifs suite | QODER | READY_FOR_REVIEW | 32/32 (3 passages documentés) | correctif 047 (levé) | fusion PR #73 par le propriétaire |
+| 56 | C13 | Suppression symlink %TEMP% pytest-current | QODER | BLOCKED_TECHNICAL | accès refusé sans admin | élévation administrateur | à traiter par le propriétaire |
+| 56 | C0 | Nettoyage branches/worktrees obsolètes (inventaire au journal) | QODER | BLOCKED_OWNER | inventaire établi | autorisation de suppression | décision du propriétaire |
+| 56 | C14 | Fusion PR #60 (doc chantier C) | PROPRIÉTAIRE | BLOCKED_OWNER | CI verte | décision | fusionner ou fermer |
+| — | C5 | Rapport écarts de prix par vendeur (seuil 10 %, non bloquant) | QODER | TODO | — | chantier B livré (040) | à planifier |
+| — | C5 | Saisie des remises dans vente.html | QODER | TODO | — | backend cycle 42 | à planifier |
+| — | C4 | Case décimale sur fiche article | QODER | TODO | — | colonne 034 livrée | à planifier |
+| — | C13 | Invariant comptable global (audit toutes ventes annulées) | QODER | TODO | — | — | **première tâche Phase 2** |
+| — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
+| — | C5/C6 | Décisions métier (HT/TTC, paiements mixtes, seuil caisse…) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire |
+
+---
+
 ## Candidats pour un cycle ultérieur (non démarrés, choix laissé au propriétaire)
 
 Le lot de 3 chantiers validé après le cycle 13 (cycles 14, 15, 16) est
