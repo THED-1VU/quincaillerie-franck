@@ -32,7 +32,8 @@ if (!existsSync(PGDEV)) {
   // principal, deux niveaux au-dessus de _worktrees/<piste>/.
   PGDEV = resolve(RACINE_DEPOT, "..", "..", "_pgdev");
 }
-const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
+// `_pgdev` n'existe que sur le poste Windows ; en CI, `psql` est sur le PATH.
+const PSQL = process.env.PSQL || (existsSync(resolve(PGDEV, "pgsql", "bin", "psql.exe")) ? resolve(PGDEV, "pgsql", "bin", "psql.exe") : "psql");
 
 const MDP_AGENT_STOCK = "AgentStockTest123";
 const MDP_AGENT_COMPTA = "AgentComptaTest123";
@@ -57,7 +58,7 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_RESPONSABLE}', gen_salt('bf', 12)) WHERE identifiant='resp';`);
 console.log("Base prête.\n");
 
-const navigateur = await chromium.launch({ channel: "chrome" });
+const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });
 
 async function seConnecter(page, identifiant, motDePasse) {
   await page.goto(`${SERVEUR_URL}/app/connexion.html`, { waitUntil: "networkidle" });
@@ -71,6 +72,20 @@ async function seConnecter(page, identifiant, motDePasse) {
     await page.waitForURL((u) => !u.pathname.endsWith("connexion.html"), { timeout: 10000 });
     await page.waitForLoadState("networkidle");
   }
+}
+
+// Le clic « Matin » relance chargerListe() : sans attendre la fin du GET, la
+// liste « soir » encore affichée est remplacée pendant les clics suivants
+// (trouvé au cycle 62 : la saisie a été enregistrée sur un autre article,
+// laissant « Ciment » non compté et un écart +21 sur « Article rare »).
+async function choisirMatin(page) {
+  const reponse = page.waitForResponse(
+    (r) => r.url().includes("/inventaire/articles-a-compter?moment=matin") && r.request().method() === "GET",
+    { timeout: 10000 }
+  );
+  await page.click("#btn-matin");
+  await reponse;
+  await page.waitForLoadState("networkidle");
 }
 
 const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\s*:/i;
@@ -99,8 +114,7 @@ const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\
   // correctif de fuseau horaire — "matin"/"soir" par défaut a changé de
   // valeur avec l'heure locale correcte, ce que ce script supposait figé).
   await page.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
-  await page.click("#btn-matin");
-  await page.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
+  await choisirMatin(page);
   const nomAffiche = await page.textContent("#art-nom");
   verifier(!!nomAffiche && nomAffiche !== "—", "inventaire : un article réel est affiché");
 
@@ -226,10 +240,8 @@ const motifsInterdits = /quantite_attendue|quantité attendue|"attendu"|attendu\
   await pageB.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
   // Moment forcé (mêmes raisons que la section 1) : les deux onglets sur
   // "matin" explicitement, pas sur le choix par défaut de l'heure du jour.
-  await pageA.click("#btn-matin");
-  await pageA.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
-  await pageB.click("#btn-matin");
-  await pageB.waitForFunction(() => !document.getElementById("bloc-comptage").hidden, { timeout: 10000 });
+  await choisirMatin(pageA);
+  await choisirMatin(pageB);
 
   async function allerA(page, nomCible) {
     let tours = 0;
