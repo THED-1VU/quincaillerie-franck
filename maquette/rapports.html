@@ -49,6 +49,16 @@
         <div id="zone-erreur-export-articles" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
       </section>
 
+      <section class="carte" id="carte-export-stock" hidden>
+        <h2>Exporter le stock (valorisé)</h2>
+        <p class="champ__aide">Quantités par site, valorisation aux prix d'achat et de vente, alertes de seuil — le classeur Excel ajoute les totaux par site. Responsable uniquement.</p>
+        <div style="display:flex; gap:var(--e-3); margin-top:var(--e-4);">
+          <button class="btn btn--primaire" id="export-stock-xlsx" type="button">Excel (.xlsx)</button>
+          <button class="btn btn--primaire" id="export-stock-pdf" type="button">PDF</button>
+        </div>
+        <div id="zone-erreur-export-stock" class="erreur-champ" hidden style="margin-top:var(--e-3);"></div>
+      </section>
+
       <section class="carte" id="carte-export-ventes" hidden>
         <h2>Exporter les ventes</h2>
         <div style="display:flex; gap:var(--e-3); flex-wrap:wrap; margin:var(--e-4) 0;">
@@ -161,6 +171,22 @@
   }
   $("export-articles-xlsx").addEventListener("click", () => exporterArticles("xlsx"));
   $("export-articles-pdf").addEventListener("click", () => exporterArticles("pdf"));
+
+  // --- Export du stock valorisé : responsable seulement (cycle 67) ---
+  if (session.role === "responsable") {
+    $("carte-export-stock").hidden = false;
+
+    async function exporterStock(format) {
+      $("zone-erreur-export-stock").hidden = true;
+      try {
+        await telechargerFichier("/rapports/stock?format=" + format, "stock." + format);
+      } catch (erreur) {
+        afficherErreurServeur("zone-erreur-export-stock", erreur);
+      }
+    }
+    $("export-stock-xlsx").addEventListener("click", () => exporterStock("xlsx"));
+    $("export-stock-pdf").addEventListener("click", () => exporterStock("pdf"));
+  }
 
   // --- Export des ventes : responsable et agent comptabilité ---
   if (session.role === "responsable" || session.role === "agent_comptabilite") {

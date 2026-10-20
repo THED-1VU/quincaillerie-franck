@@ -10,11 +10,16 @@ que ``GET /articles``, cycle 3). Un agent stock ne reçoit tout simplement
 jamais les colonnes de prix depuis PostgreSQL : il n'y a rien à retirer du
 fichier parce qu'elles n'ont jamais existé dans les lignes en mémoire.
 
-Deux exports, correspondant chacun au périmètre déjà établi pour ce rôle
+Trois exports, correspondant chacun au périmètre déjà établi pour ce rôle
 ailleurs dans l'application :
   * ``/rapports/articles`` — catalogue articles/stock, les 3 rôles (mêmes
     colonnes que ``GET /articles``), aucune notion de période (un
     catalogue est un instantané, pas un historique).
+  * ``/rapports/stock`` — stock valorisé par site (quantités, valorisation
+    aux prix d'achat et de vente, alertes de seuil), RESPONSABLE SEULEMENT
+    (cycle 67, écart C4-02) : ``prix_achat`` n'est un privilège que du rôle
+    responsable (migration 008), et l'agent stock conserve son export
+    catalogue sans ce prix (``/rapports/articles``).
   * ``/rapports/ventes`` — ventes payées sur une période, responsable et
     agent comptabilité seulement (mêmes rôles que ``GET
     /ventes/synthese-jour`` — un agent stock n'a de toute façon aucun
@@ -157,6 +162,88 @@ def exporter_articles(
     else:
         contenu = _pdf_tableau("Catalogue articles", colonnes, lignes)
     return _reponse_fichier(contenu, format_, "articles")
+
+
+@routeur.get("/stock")
+def exporter_stock(
+    request: Request,
+    format: str = Query(...),  # noqa: A002
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Stock valorisé par site — responsable seulement (cycle 67, écart
+    C4-02 du registre). Une ligne par (article, site) portant quantités,
+    seuil, prix d'achat, prix de vente, valorisations calculées EN SQL et
+    état d'alerte (RUPTURE / SOUS_SEUIL / OK). Le xlsx ajoute une feuille
+    « totaux par site » (valorisation globale, nombres de ruptures et de
+    lignes sous le seuil) ; le PDF reste le tableau plat, comme les autres
+    exports. L'agent stock conserve son export catalogue sans prix d'achat
+    (``/rapports/articles``) : ``prix_achat`` n'est jamais restitué à un
+    rôle qui n'en a pas le privilège en base (migration 008)."""
+    format_ = _valider_format(format)
+    colonnes = [
+        "id", "nom", "unite", "site_id", "quantite_stock", "seuil_alerte",
+        "prix_achat", "prix_vente", "valorisation_achat", "valorisation_vente",
+        "alerte",
+    ]
+    colonnes_totaux = ["site_id", "total_achat", "total_vente", "nb_ruptures", "nb_sous_seuil"]
+
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT a.id, a.nom, a.unite, s.site_id, s.quantite_stock, s.seuil_alerte,
+                       a.prix_achat, a.prix_vente,
+                       s.quantite_stock * a.prix_achat AS valorisation_achat,
+                       s.quantite_stock * a.prix_vente AS valorisation_vente,
+                       CASE
+                           WHEN s.quantite_stock <= 0 THEN 'RUPTURE'
+                           WHEN s.quantite_stock <= s.seuil_alerte THEN 'SOUS_SEUIL'
+                           ELSE 'OK'
+                       END AS alerte
+                  FROM articles a
+                  JOIN stocks_sites s ON s.article_id = a.id
+                 WHERE a.actif = TRUE
+                 ORDER BY s.site_id, a.nom
+                """
+            )
+            lignes = cur.fetchall()
+            cur.execute(
+                """
+                SELECT s.site_id,
+                       SUM(s.quantite_stock * a.prix_achat) AS total_achat,
+                       SUM(s.quantite_stock * a.prix_vente) AS total_vente,
+                       COUNT(*) FILTER (WHERE s.quantite_stock <= 0) AS nb_ruptures,
+                       COUNT(*) FILTER (WHERE s.quantite_stock > 0
+                                         AND s.quantite_stock <= s.seuil_alerte) AS nb_sous_seuil
+                  FROM articles a
+                  JOIN stocks_sites s ON s.article_id = a.id
+                 WHERE a.actif = TRUE
+                 GROUP BY s.site_id
+                 ORDER BY s.site_id
+                """
+            )
+            totaux = cur.fetchall()
+
+    if format_ == "xlsx":
+        classeur = Workbook()
+        feuille = classeur.active
+        feuille.title = "stock"
+        feuille.append(colonnes)
+        for ligne in lignes:
+            feuille.append([_valeur_cellule(ligne[c]) for c in colonnes])
+        feuille_totaux = classeur.create_sheet("totaux par site")
+        feuille_totaux.append(colonnes_totaux)
+        for total in totaux:
+            feuille_totaux.append([_valeur_cellule(total[c]) for c in colonnes_totaux])
+        tampon = BytesIO()
+        classeur.save(tampon)
+        contenu = tampon.getvalue()
+    else:
+        contenu = _pdf_tableau("Stock valorisé par site", colonnes, lignes)
+    return _reponse_fichier(contenu, format_, "stock")
 
 
 @routeur.get("/ventes")
