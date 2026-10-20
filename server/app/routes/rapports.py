@@ -265,8 +265,8 @@ def rapports_ecarts_prix_vendeurs(
                        ecart_unitaire, ecart_total, ecart_pct, seuil_pct, signale
                   FROM ecarts_prix_vendeurs
                  WHERE ecart_unitaire <> 0
-                   AND (%s IS NULL OR date_vente::date >= %s)
-                   AND (%s IS NULL OR date_vente::date <= %s)
+                   AND (%s::date IS NULL OR date_vente::date >= %s::date)
+                   AND (%s::date IS NULL OR date_vente::date <= %s::date)
                  ORDER BY vendeur_nom NULLS LAST, vendeur_id NULLS LAST,
                           date_vente, vente_id, article_id
                 """,
