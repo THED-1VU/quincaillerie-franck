@@ -133,8 +133,14 @@ async function ouvrirArticle(page, nomPartiel, action) {
   await page.waitForSelector("#carte-panneau:not([hidden])", { timeout: 5000 });
 }
 
+// appeler() affiche « succès » PUIS recharge la liste : sans attendre la fin
+// du GET /articles, les contrôles suivants lisent l'ANCIENNE liste (trouvé au
+// cycle 62 : la mention « quantités décimales » semblait subsister après sa
+// désactivation, 1 échec/50 sous charge). networkidle est sûr ici : la page ne
+// fait aucun sondage périodique et le GET part dans la même tâche que le texte.
 async function attendreSucces(page) {
   await page.waitForSelector("#zone-succes-panneau:not([hidden])", { timeout: 10000 });
+  await page.waitForLoadState("networkidle");
 }
 
 // Clique le bouton de validation du panneau — jamais un sélecteur "text="
