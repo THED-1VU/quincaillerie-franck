@@ -224,6 +224,12 @@ a { color: var(--c-primaire); }
   border-bottom: 1px solid var(--c-bordure);
 }
 .panier__nom { font-weight: var(--poids-demi); }
+/* Cycle 59 : remise de la ligne (écart au prix catalogue, déduite du prix
+   négocié) — visible avant validation, sous l'article concerné. */
+.panier__remise {
+  font-size: var(--t-sm); color: var(--c-attention);
+  font-variant-numeric: tabular-nums;
+}
 .panier__mini {
   width: 84px; height: var(--champ-hauteur); text-align: right;
   padding: 0 var(--e-2); font-size: var(--t-base); font-family: inherit;

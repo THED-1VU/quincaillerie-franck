@@ -12,6 +12,10 @@
    5. Le reçu PDF (cycle 19) apparaît après une vente réussie et se
       télécharge réellement (en-tête %PDF, jamais une simple vérification
       du code HTTP).
+   6. Remises (cycle 59) : écart au catalogue affiché par ligne après un
+      prix négocié, remise globale saisie et répercutée sur l'aperçu, remise
+      atteignant le total refusée AVANT tout envoi, puis vente réelle avec
+      les deux remises contrôlée en base et dans la réponse serveur.
 
    Prérequis : serveur démarré sur SERVEUR_URL, servant /app (cycle 5).
    Réinitialise elle-même la base (jeu d'essai + mots de passe réels).
@@ -56,6 +60,12 @@ function psql(sql) {
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }
 
+function psqlValeur(sql) {
+  return execFileSync(PSQL, [
+    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE, "-tAc", sql,
+  ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" }, encoding: "utf8" }).trim();
+}
+
 console.log("== Préparation de la base (jeu d'essai + comptes de test) ==");
 execFileSync(PSQL, [
   "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
@@ -90,9 +100,19 @@ async function seConnecter(page, identifiant, motDePasse) {
   await seConnecter(page, "magasin.compta", MDP_AGENT_COMPTA);
   verifier(page.url().endsWith("vente.html"), "comptable : connexion -> vente.html");
 
-  // Le crédit client n'est même pas proposable.
+  // Le crédit client (point b, activé le 2026-09-25) suit le paramètre de
+  // boutique : présent dans la liste SEULEMENT si `credit_client_actif` vaut
+  // 'oui'. L'ancien contrôle « jamais proposé » contredisait 045 — remplacé
+  // par une vérification du paramètre réel (toujours vraie, quel que soit
+  // le réglage de la boutique testée).
+  const creditActif = psqlValeur(
+    "SELECT valeur FROM parametres WHERE cle = 'credit_client_actif'"
+  ) === "oui";
   const optionsPaiement = await page.locator("#paiement option").allTextContents();
-  verifier(!optionsPaiement.some((t) => /crédit/i.test(t)), "vente : crédit client absent des options de paiement");
+  verifier(
+    optionsPaiement.some((t) => /crédit/i.test(t)) === creditActif,
+    `vente : présence du crédit client conforme au paramètre serveur (${creditActif ? "actif" : "inactif"})`
+  );
 
   // Ajoute "Ciment CIM II 50 kg" (site 1, stock 30) au panier.
   await page.fill("#recherche", "ciment");
@@ -120,6 +140,8 @@ async function seConnecter(page, identifiant, motDePasse) {
   ]);
   verifier(reponseVente.ok(), "vente réelle : POST /ventes -> 201");
   const corpsVente = await reponseVente.json();
+  verifier(corpsVente.remise_totale === 0 && !(await page.isVisible("#ligne-remise-globale")),
+    "vente sans remise : aucune remise en base, aucune ligne de remise affichée");
   verifier(
     apercuTotalTtc === fcfaAttendu(corpsVente.total_ttc) && apercuMontantTva === fcfaAttendu(corpsVente.montant_tva),
     `aperçu avant validation = confirmation serveur (aperçu : ${apercuTotalTtc} / ${apercuMontantTva}, `
@@ -140,6 +162,103 @@ async function seConnecter(page, identifiant, motDePasse) {
   ]);
   const enteteRecu = readFileSync(await telechargement.path()).subarray(0, 4).toString("latin1");
   verifier(enteteRecu === "%PDF", `reçu réel : PDF réellement téléchargé (en-tête « ${enteteRecu}» )`);
+
+  await contexte.close();
+}
+
+// ============================================================================
+// 1 bis. Comptable : remises (cycle 59) — par ligne et globale
+// ============================================================================
+{
+  const contexte = await navigateur.newContext({ viewport: { width: 1366, height: 900 } });
+  const page = await contexte.newPage();
+  await seConnecter(page, "magasin.compta", MDP_AGENT_COMPTA);
+
+  await page.fill("#recherche", "ciment");
+  await page.waitForFunction(() => !document.getElementById("suggestions").hidden, { timeout: 5000 });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.getElementById("panier").textContent.includes("Ciment"), { timeout: 5000 });
+
+  // Remise PAR LIGNE : F3 (raccourci validé UX-2) puis prix négocié
+  // 6 200 contre 6 500 au catalogue -> 300 FCFA d'écart affichés sous la
+  // ligne, exactement la valeur que le serveur enregistrera en remise.
+  await page.keyboard.press("F3");
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("6200");
+  await page.keyboard.press("Enter");
+  const texteLigne = await page.textContent("#panier");
+  verifier(texteLigne.includes("remise 300 FCFA (4,6 %)"),
+    `remise par ligne : écart au catalogue affiché sous l'article ("${texteLigne.trim()}")`);
+
+  await page.fill("#numero-facturier", "MAG-REMISE01");
+  await page.selectOption("#vendeur", "1");
+
+  // Remise GLOBALE : 1 000 FCFA -> lignes d'aperçu et total réduit, avant
+  // toute validation (même formule que le serveur, TVA extraite du total).
+  await page.fill("#remise-globale", "1000");
+  verifier(await page.isVisible("#ligne-remise-globale"), "remise globale : ligne « Remise sur la vente » visible");
+  const texteRemiseGlobale = await page.textContent("#ligne-remise-globale");
+  verifier(/1\s000 FCFA/.test(texteRemiseGlobale), `remise globale : montant affiché ("${texteRemiseGlobale.trim()}")`);
+  verifier(await page.isVisible("#ligne-total-articles"), "remise globale : total articles TTC affiché avant remise");
+  const apercuTotalRemise = await page.textContent("#total-ttc");
+  const apercuTvaRemise = await page.textContent("#montant-tva");
+  verifier(apercuTotalRemise === fcfaAttendu(5200),
+    `remise globale : total réduit avant validation (${apercuTotalRemise})`);
+
+  // Remise atteignant le total : refusée AVANT tout envoi — même règle que
+  // le serveur (décision 2026-09-23 : c'est l'article offert qui couvre ce cas).
+  let envoisVentes = 0;
+  page.on("request", (r) => {
+    if (r.url().endsWith("/ventes") && r.method() === "POST") envoisVentes++;
+  });
+  await page.fill("#remise-globale", "6200");
+  verifier(await page.isVisible("#zone-erreur-remise"),
+    "remise globale : avertissement immédiat quand elle atteint le total");
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const messageRemiseRefusee = await page.textContent("#zone-confirmation");
+  verifier(/remise globale/i.test(messageRemiseRefusee),
+    `remise globale refusée : message explicite ("${messageRemiseRefusee}")`);
+  verifier(envoisVentes === 0, "remise globale refusée : aucun POST /ventes envoyé");
+
+  // Remise valide : 1 000 FCFA -> double F9, vente réelle.
+  await page.fill("#remise-globale", "1000");
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const messageConfirmation = await page.textContent("#zone-confirmation");
+  verifier(/après remise de 1\s000 FCFA/.test(messageConfirmation),
+    `remise globale : confirmation avec le montant ("${messageConfirmation}")`);
+  const [reponseRemise] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/ventes") && r.request().method() === "POST", { timeout: 10000 }),
+    page.keyboard.press("F9"),
+  ]);
+  verifier(reponseRemise.ok(), "vente avec remises : POST /ventes -> 201");
+  const corpsRemise = await reponseRemise.json();
+  verifier(corpsRemise.remise_totale === 1300,
+    `vente avec remises : remise totale serveur = 1 300 FCFA (300 ligne + 1 000 globale) (${corpsRemise.remise_totale})`);
+  verifier(
+    apercuTotalRemise === fcfaAttendu(corpsRemise.total_ttc) && apercuTvaRemise === fcfaAttendu(corpsRemise.montant_tva),
+    `vente avec remises : aperçu avant validation = confirmation serveur `
+    + `(${apercuTotalRemise} / ${apercuTvaRemise} vs ${fcfaAttendu(corpsRemise.total_ttc)} / ${fcfaAttendu(corpsRemise.montant_tva)})`
+  );
+  await page.waitForFunction(() => !document.getElementById("zone-succes").hidden, { timeout: 10000 });
+  const messageSuccesRemise = await page.textContent("#zone-succes");
+  verifier(/Remise totale : 1\s300 FCFA/.test(messageSuccesRemise),
+    `vente avec remises : message de succès avec la remise ("${messageSuccesRemise}")`);
+
+  // Base réelle : les deux mécanismes sont bien distincts et persistés.
+  const remiseGlobaleDb = psqlValeur(
+    "SELECT remise_globale_montant FROM ventes WHERE numero_facturier = 'MAG-REMISE01'"
+  );
+  verifier(parseFloat(remiseGlobaleDb) === 1000,
+    `base réelle : ventes.remise_globale_montant = 1 000 (${remiseGlobaleDb})`);
+  const ligneDb = psqlValeur(
+    "SELECT prix_catalogue || '|' || remise_montant || '|' || prix_unitaire "
+    + "FROM ventes_lignes vl JOIN ventes v ON v.id = vl.vente_id "
+    + "WHERE v.numero_facturier = 'MAG-REMISE01'"
+  );
+  verifier(/^6500\.00\|300\.00\|6200\.00$/.test(ligneDb),
+    `base réelle : ligne catalogue/remise/payé = 6500/300/6200 (${ligneDb})`);
 
   await contexte.close();
 }

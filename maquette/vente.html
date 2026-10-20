@@ -21,7 +21,7 @@
 </style>
 </head>
 <body>
-<div class="simu">Écran câblé (cycles 6, 27 et chantier A) : catalogue, prix, TVA, numéro de facturier et vendeur <strong>sont tous réels et obligatoires</strong> (<code>POST /ventes</code>, addendum point c, décidé le 2026-09-13). « Offrir un article » (point f) est une <strong>déclaration</strong>, sans effet sur le stock tant que le responsable ne l'a pas validée.</div>
+<div class="simu">Écran câblé (cycles 6, 27, chantier A et cycle 59) : catalogue, prix, TVA, remises, numéro de facturier et vendeur <strong>sont tous réels et obligatoires</strong> (<code>POST /ventes</code>, addendum point c, décidé le 2026-09-13). « Offrir un article » (point f) est une <strong>déclaration</strong>, sans effet sur le stock tant que le responsable ne l'a pas validée.</div>
 <div class="page">
   <header class="bandeau bandeau--vente">
     <img class="bandeau__marque" src="assets/akuma-logo-compact.png" alt="Akuma">
@@ -106,16 +106,37 @@
             <span class="lien-petit" id="compteur-lignes">0 ligne</span>
           </div>
 
+          <p class="champ__aide" style="margin-bottom:var(--e-2);">
+            Pour une remise sur une ligne, ajustez son prix unitaire : l'écart au prix catalogue s'affiche sous l'article.
+          </p>
+
           <div id="panier"></div>
 
+          <div class="total-ligne" id="ligne-total-articles" hidden>
+            <span>Total articles (TTC)</span><span class="montant" id="total-articles">0 FCFA</span>
+          </div>
+          <div class="total-ligne" id="ligne-remise-globale" hidden>
+            <span>Remise sur la vente</span><span class="montant" id="remise-globale-affichee">0 FCFA</span>
+          </div>
           <div class="total-ligne">
-            <span>Sous-total</span><span class="montant" id="sous-total">0 FCFA</span>
+            <span>Sous-total (HT)</span><span class="montant" id="sous-total">0 FCFA</span>
           </div>
           <div class="total-ligne">
             <span>TVA (<span id="taux-tva">0</span> %)</span><span class="montant" id="montant-tva">0 FCFA</span>
           </div>
           <div class="total-ligne total-ligne--grand">
             <span>Total à payer</span><span class="montant" id="total-ttc">0 FCFA</span>
+          </div>
+
+          <div class="champ" style="margin-top:var(--e-5);">
+            <label class="champ__label" for="remise-globale">Remise sur la vente (FCFA, facultatif)</label>
+            <input class="champ__saisie" id="remise-globale" type="number" min="0" step="50"
+                   inputmode="numeric" placeholder="ex. 1 000">
+            <p class="champ__aide">
+              S'applique au total de la vente, en plus des prix négociés ligne par ligne (cycle 42).
+              Une remise qui atteindrait le total est refusée : utiliser « Offrir un article ».
+            </p>
+            <div id="zone-erreur-remise" class="erreur-champ" hidden style="margin-top:var(--e-2);"></div>
           </div>
 
           <div class="champ" id="champ-site" style="margin-top:var(--e-5);" hidden>
@@ -216,6 +237,7 @@
   const siteVenteEl = $("site-vente");
   const facturierEl = $("numero-facturier");
   const vendeurEl   = $("vendeur");
+  const remiseGlobaleEl = $("remise-globale");
 
   // Le responsable couvre les deux sites : il doit choisir celui de CETTE
   // vente. Un agent comptabilité a déjà un site en session, la question ne
@@ -474,6 +496,10 @@
       panier.push({
         id: article.id, nom: article.nom, unite: article.unite,
         quantite: quantite, prixUnitaire: article.prixCatalogue,
+        // Prix catalogue conservé pour afficher la remise de la ligne : le
+        // serveur applique exactement la même règle (cycle 42) — la remise
+        // est l'écart entre catalogue et prix négocié, jamais un champ séparé.
+        prixCatalogue: article.prixCatalogue,
       });
     }
     dernierArticleAjouteId = article.id;
@@ -494,6 +520,22 @@
     panier = panier.filter((l) => l.id !== id);
     rendrePanier();
     recherche.focus();
+  }
+
+  // Remise d'une ligne = écart au prix catalogue (règle du serveur, cycle
+  // 42). Affichée sous l'article pour que la remise issue du prix négocié
+  // soit visible AVANT validation, au lieu de n'exister que sur le reçu.
+  function texteRemiseLigne(l) {
+    if (!l.prixCatalogue || l.prixUnitaire >= l.prixCatalogue) return "";
+    const remise = l.prixCatalogue - l.prixUnitaire;
+    const pct = Math.round((remise / l.prixCatalogue) * 1000) / 10;
+    return "Catalogue " + fcfa(l.prixCatalogue) + " · remise " + fcfa(remise)
+      + " (" + pct.toLocaleString("fr-FR") + " %)";
+  }
+
+  function remiseGlobaleValeur() {
+    const valeur = parseInt(remiseGlobaleEl.value || "0", 10);
+    return Number.isFinite(valeur) && valeur > 0 ? valeur : 0;
   }
 
   function rendrePanier() {
@@ -519,8 +561,14 @@
         uniteDiv.style.color = "var(--c-texte-doux)";
         uniteDiv.style.fontSize = "var(--t-sm)";
         uniteDiv.textContent = l.unite;
+        const remiseDiv = document.createElement("div");
+        remiseDiv.className = "panier__remise";
+        const texteRemise = texteRemiseLigne(l);
+        remiseDiv.textContent = texteRemise;
+        remiseDiv.hidden = !texteRemise;
         infos.appendChild(nomDiv);
         infos.appendChild(uniteDiv);
+        infos.appendChild(remiseDiv);
 
         const qteInput = document.createElement("input");
         qteInput.className = "panier__mini";
@@ -555,7 +603,13 @@
         ligne.appendChild(btnSup);
 
         qteInput.addEventListener("input", () => { l.quantite = Math.max(1, parseInt(qteInput.value || "1", 10)); majTotaux(); });
-        prixInput.addEventListener("input", () => { l.prixUnitaire = Math.max(0, parseInt(prixInput.value || "0", 10)); majTotaux(); });
+        prixInput.addEventListener("input", () => {
+          l.prixUnitaire = Math.max(0, parseInt(prixInput.value || "0", 10));
+          const texte = texteRemiseLigne(l);
+          remiseDiv.textContent = texte;
+          remiseDiv.hidden = !texte;
+          majTotaux();
+        });
         [qteInput, prixInput].forEach((inp) => inp.addEventListener("keydown", (e) => {
           if (e.key === "Enter") { e.preventDefault(); recherche.focus(); }
           if (e.key === "Escape") { e.preventDefault(); recherche.focus(); }
@@ -571,8 +625,12 @@
     // Les prix saisis sont TTC (addendum, point d, décidé cycle 6) : la TVA
     // s'EXTRAIT du total, elle ne s'ajoute pas par-dessus — même formule que
     // server/app/routes/ventes.py, pour que cet aperçu corresponde exactement
-    // à ce que le serveur confirmera après validation.
-    const totalTtc = panier.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+    // à ce que le serveur confirmera après validation. La remise globale
+    // (cycle 42, mécanisme distinct des prix négociés) réduit d'abord le TTC
+    // de la vente ; la TVA est ensuite extraite de ce total réduit.
+    const totalArticles = panier.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+    const remiseGlobale = remiseGlobaleValeur();
+    const totalTtc = Math.max(0, totalArticles - remiseGlobale);
     const tva = TAUX_TVA > 0 ? Math.round(totalTtc * TAUX_TVA / (100 + TAUX_TVA)) : 0;
     const sousTotalHt = totalTtc - tva;
     $("sous-total").textContent  = fcfa(sousTotalHt);
@@ -580,7 +638,28 @@
     $("montant-tva").textContent = fcfa(tva);
     $("total-ttc").textContent   = fcfa(totalTtc);
     $("compteur-lignes").textContent = panier.length + (panier.length > 1 ? " lignes" : " ligne");
+
+    // Les deux lignes « avant remise » n'apparaissent que si une remise
+    // globale est réellement saisie — sinon l'écran reste exactement celui
+    // d'avant le cycle 59.
+    const remiseAffichee = remiseGlobale > 0 && panier.length > 0;
+    $("ligne-total-articles").hidden = !remiseAffichee;
+    $("ligne-remise-globale").hidden = !remiseAffichee;
+    $("total-articles").textContent = fcfa(totalArticles);
+    $("remise-globale-affichee").textContent = fcfa(remiseGlobale);
+
+    const remiseTropGrande = remiseAffichee && remiseGlobale >= totalArticles;
+    const zoneRemise = $("zone-erreur-remise");
+    zoneRemise.hidden = !remiseTropGrande;
+    if (remiseTropGrande) {
+      zoneRemise.textContent = "La remise globale ne peut pas atteindre ni dépasser le total de la vente.";
+    }
   }
+
+  remiseGlobaleEl.addEventListener("input", majTotaux);
+  remiseGlobaleEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); recherche.focus(); }
+  });
 
   // --- Validation (au plus une confirmation), RÉELLE (POST /ventes) ---
   let enAttenteConfirmation = false;
@@ -602,6 +681,14 @@
     if (panier.length === 0) {
       zoneConfirmation.hidden = false;
       zoneConfirmation.textContent = "Le panier est vide : rien à valider.";
+      return;
+    }
+    const totalArticles = panier.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+    const remiseGlobale = remiseGlobaleValeur();
+    if (remiseGlobale > 0 && remiseGlobale >= totalArticles) {
+      zoneConfirmation.hidden = false;
+      zoneConfirmation.textContent = "La remise globale ne peut pas atteindre ni dépasser le total de la vente.";
+      remiseGlobaleEl.focus();
       return;
     }
     if (!session.site_id && !siteVenteEl.value) {
@@ -629,10 +716,11 @@
       enAttenteConfirmation = true;
       zoneConfirmation.hidden = false;
       const estCredit = paiementEl.value === "credit_client";
+      const mentionRemise = remiseGlobale > 0 ? " après remise de " + fcfa(remiseGlobale) : "";
       zoneConfirmation.textContent =
         (estCredit
-          ? "Confirmer la vente à crédit de " + $("total-ttc").textContent
-          : "Confirmer l'encaissement de " + $("total-ttc").textContent
+          ? "Confirmer la vente à crédit de " + $("total-ttc").textContent + mentionRemise
+          : "Confirmer l'encaissement de " + $("total-ttc").textContent + mentionRemise
             + " (" + paiementEl.options[paiementEl.selectedIndex].text + ")")
         + " ? Appuyez de nouveau sur F9 ou sur le bouton.";
       btnValider.textContent = estCredit ? "Confirmer la vente à crédit" : "Confirmer l'encaissement";
@@ -643,24 +731,32 @@
     envoiEnCours = true;
     btnValider.disabled = true;
     try {
+      const corpsEnvoi = {
+        site_id: session.site_id || Number(siteVenteEl.value),
+        mode_paiement: paiementEl.value,
+        numero_facturier: facturierEl.value.trim(),
+        vendeur_id: Number(vendeurEl.value),
+        client_id: paiementEl.value === "credit_client" ? Number(clientEl.value) : null,
+        // Remise PAR LIGNE : le prix négocié la porte déjà — le serveur la
+        // déduit du catalogue (cycle 42), un champ de remise séparé ferait
+        // doublon. La remise globale, elle, est un mécanisme distinct.
+        lignes: panier.map((l) => ({
+          article_id: l.id, quantite: l.quantite, prix_unitaire: l.prixUnitaire,
+        })),
+      };
+      if (remiseGlobale > 0) corpsEnvoi.remise_globale_montant = remiseGlobale;
       const corps = await appelApi("/ventes", {
         method: "POST",
-        body: JSON.stringify({
-          site_id: session.site_id || Number(siteVenteEl.value),
-          mode_paiement: paiementEl.value,
-          numero_facturier: facturierEl.value.trim(),
-          vendeur_id: Number(vendeurEl.value),
-          client_id: paiementEl.value === "credit_client" ? Number(clientEl.value) : null,
-          lignes: panier.map((l) => ({
-            article_id: l.id, quantite: l.quantite, prix_unitaire: l.prixUnitaire,
-          })),
-        }),
+        body: JSON.stringify(corpsEnvoi),
       });
 
       zoneConfirmation.hidden = true;
       zoneSucces.hidden = false;
       let message = "Vente n°" + corps.vente_id + " enregistrée — " + fcfa(corps.total_ttc)
         + " (dont TVA " + fcfa(corps.montant_tva) + " à " + corps.taux_tva + " %).";
+      if (corps.remise_totale > 0) {
+        message += " Remise totale : " + fcfa(corps.remise_totale) + ".";
+      }
       if (corps.ecarts.length > 0) {
         message += " Stock insuffisant sur " + corps.ecarts.length
           + " article(s) : la vente est quand même enregistrée, l'écart est remonté au responsable.";
@@ -676,6 +772,7 @@
       );
 
       panier = [];
+      remiseGlobaleEl.value = "";
       rendrePanier();
       $("dernier-ajout").textContent = "Aucun article ajouté pour le moment.";
       // Le numéro de facturier identifie UNE ligne du carnet papier — jamais
