@@ -98,10 +98,10 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C10 | Mobile et API web *(priorité 1)* | **58 %** | Cycle 5, complété au cycle 15, réévalué à la hausse le 2026-09-13 par la première campagne sur un vrai téléphone physique, puis **de nouveau à la hausse au cycle 24** (piste UX, travail en parallèle) : 3 des 5 constats mobiles corrigés et vérifiés par exécution réelle — UX-3 (débordement du tableau de bord : cause CSS identifiée et corrigée — `grid-template-columns` sans `minmax(0, ...)` laissait un contenu long, non couvert par le jeu d'essai de test, pousser la grille hors écran ; 0 px de débordement mesuré aux 5 largeurs avec un nom d'article réellement long et non sécable), UX-4 (taille de police minimale garantie sur les chiffres des cartes, mesurée ≥ 16px à 360/390px), UX-7 — **le plus sérieux constat de la campagne** — (coupure réseau en cours de requête : `AbortController` à 20 s autour de `fetch()`, message français affiché, formulaire réutilisable sans recharger la page). UX-6 (clavier numérique) était en réalité **déjà correct** à l'inspection (`type="number"` + `inputmode="numeric"` déjà posés) — pas un vrai défaut, confirmé par lecture directe du DOM rendu. **Honnêteté conservée sur UX-3/4** : l'identité exacte du téléphone/navigateur du testeur original n'a jamais été renseignée ; un facteur non reproductible propre à cet appareil n'est pas formellement exclu comme cause additionnelle — seule la cause CSS a pu être diagnostiquée et corrigée par exécution. **Cycle 36 (2026-09-22)** : UX-5 (saisie d'une recette au téléphone, 1 min 02 mesuré contre un objectif de 45 s) — cause structurelle probable corrigée : la carte « Saisie rapide » de `tableau-bord.html`, 5e sur 7 sous 3 listes de longueur variable, est remontée en tête **uniquement sous 700px** (`order: -1`, DOM inchangé, PC de caisse non affecté) ; prouvé par `verifier-cablage.mjs` 94/94 et un relevé Playwright dédié (ordre visuel confirmé aux deux largeurs). **La cible < 45 s elle-même reste à reconfirmer par un vrai testeur humain** — ce n'est pas une nouvelle mesure humaine, seulement une friction structurelle plausible supprimée. Une deuxième campagne sur un vrai téléphone physique reste nécessaire pour confirmer UX-3/4/5 dans les conditions réelles d'origine. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **85 %** | Cycle 3, complété au cycle 22. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse, erreurs SQL jamais renvoyées telles quelles au client. **Cycle 22** : révocation de session (migration 018, `POST /auth/deconnexion`, `deps.obtenir_session()` vérifie la révocation à chaque requête — un jeton révoqué signature-valide et non expiré est quand même refusé, prouvé en le rejouant après déconnexion) ; en-têtes HTTP de sécurité (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) sur toute réponse. Vérifié par exécution : 4/4 tests pytest dédiés (144/144 au total, 0 régression, coût mesuré ~13 % de temps d'exécution en plus), `verifier-cablage.mjs` +3 (80/80, jeton intercepté avant déconnexion puis rejoué → refusé). Reste : limiteur de débit partagé entre processus (délibérément pas fait ce cycle — mérite sa propre vérification, pas glissé à la suite de deux autres changements de sécurité), audit plus large (dépendances, TLS — hors périmètre local de dev).  **Cycle 44 (C11, 2026-09-24)** : limiteur de débit PARTAGÉ entre processus — migration 038 `limitations_debit` + `tentative_autorisee()` (upsert atomique + `FOR UPDATE`, fenêtre glissante, `SECURITY DEFINER`) + `reinitialiser_limitation()`, `GRANT EXECUTE` à `qf_app` ; la connexion appelle la base à chaque tentative (repli en mémoire si la base ne répond pas), réinitialise le compteur après succès ; seuil 10 tentatives/minute INCHANGÉ (décision propriétaire). Prouvé : pytest 247/248 (4 dédiés, 1 flaky test_caisse non lié — passe isolément), suite SQL 000-038 + inverses verte, Playwright câblage 94/94. Reste : audit de dépendances/TLS (documenté comme limite, hors périmètre local).  **Cycle 47 (C11, 2026-09-24)** : audit de dépendances/TLS — `pip-audit` sur le lockfile : `python-multipart 0.0.20 → 0.0.31` (corrigé + lockfile régénéré + test_configuration 11/11) ; starlette 0.48.0 (fix 1.1.0, couplé FastAPI) et pytest 8.3.5 (fix 9.0.3, outil de test) documentés comme risques acceptés (décision propriétaire) avec plan de traitement après fusion du point f ; posture TLS documentée (HTTP local, hachage bcrypt en base, TLS à la passerelle du tunnel si un jour utilisé). Rapport : `RAPPORT AVANCEMENT/audit-dependances.md`.  **Cycle 49 (C11, 2026-09-25)** : montée majeure décidée — fastapi 0.117.1 → **0.141.1**, starlette 0.48.0 → **1.7.0**, pytest 8.3.5 → **9.1.1** (dernières disponibles), pydantic 2.13.5 ; validée dans un venv séparé (`server/.venv-upgrade`) sans aucune modification de code — pytest **261/261**, Playwright câblage **94/94**, `pip-audit` **« No known vulnerabilities found »** ; `requirements.in` épingle starlette en direct (fastapi la laisse libre) + lockfile régénéré avec hachages. Risques starlette/pytest du rapport d'audit : **traités**. |
 | C12 | Sauvegarde et exploitation | **92 %** | Cycle 21, complété au cycle 26 (piste C12, travail en parallèle, addendum point i — RPO cible 1 heure décidé le 2026-09-13). `sauvegarder.ps1` étendu : `-DossierDistant` (copie hors-site vérifiée par `Test-Path` après copie), `-RetentionJours` (purge glissante, testée avec des fichiers réellement vieillis), **fichier d'état daté** (`dernier_etat_sauvegarde.json`, écrasé à chaque tentative succès/échec — durcissement explicitement exigé : « une sauvegarde qui échoue en silence est pire que pas de sauvegarde »), **trace dans le journal d'événements Windows** (source dédiée si enregistrée par un administrateur, repli sur la source générique sinon — vérifié dans le XML brut de l'événement). `planifier_sauvegarde.ps1` : tâche planifiée Windows, deux déclencheurs (horaire pendant les heures d'ouverture + un déclenchement de fin de journée), **déclenchement réel prouvé** (pas seulement l'enregistrement de la tâche — fichiers produits par CE déclenchement, tâche de test supprimée après preuve). Route `GET /exploitation/derniere-sauvegarde` (réservée au responsable) : **donnée prête pour le voyant du tableau de bord**, câblée visuellement au cycle 27. Exécutable reconstruit (26 Mo, `openpyxl`/`reportlab`/`pypdf`), testé **isolé** (dossier hors dépôt) : export Excel et PDF réels, reçu de vente PDF relu avec son contenu vérifié. **Preuve de restauration non négociable** : sauvegarde avec copie hors-site puis restauration **depuis la copie hors-site elle-même** (pas le fichier local) — comptes de lignes et droits par colonne identiques, contenu réel vérifié ligne à ligne, base de preuve supprimée après coup. **Cycle 28** — trois manques identifiés comme bloquant une mise en service réelle, réglés : **chiffrement du fichier de sauvegarde** (AES-256-CBC + HMAC-SHA256, PowerShell/.NET natif, phrase de passe saisie par le responsable et jamais versionnée — inclut désormais le logo de la boutique, cf. ci-dessous) ; **sauvegarde sans session Windows ouverte** (`planifier_sauvegarde.ps1 -CompteSysteme`, tâche sous `NT AUTHORITY\SYSTEM`) ; **PostgreSQL enregistré comme service Windows** avec redémarrage automatique après un arrêt brutal (`enregistrer_service_pg.ps1`, mécanisme écrit et vérifié syntaxiquement, **enregistrement réel non exécuté faute de droits administrateur dans cette session** — reste à faire exécuter par le propriétaire). Diagnostic par exécution réelle (PostgreSQL arrêté/relancé avec autorisation explicite) : une requête vers une base injoignable restait bloquée **2 min 10 s** avant d'échouer, faute de `connect_timeout` — corrigé (`connect_timeout=5`) — et affichait une erreur technique brute ; remplacé par un message français clair, sans jargon ni code visible, satisfaisant les quatre exigences posées (base non jointe, pas la faute du vendeur, saisie non perdue, qui prévenir). Manquent : **enregistrement réel du service PostgreSQL et de la tâche planifiée sous compte SYSTEM** (scripts prêts, admin requis) ; cause racine des plantages PostgreSQL non éliminée (seul le redémarrage automatique l'est) ; alerte WhatsApp/e-mail réelle (hors de portée sans compte réel à notifier) ; test de restauration sur un second poste physique ; onduleur, mise à jour des postes (addendum i) ; un risque opérationnel découvert par exécution (disparition répétée du script de sauvegarde sur ce poste de dev, très probablement la protection anti-rançongiciel de Windows — voir `db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`) reste à surveiller sur le poste réel de la boutique. |
-| C13 | Tests automatisés et qualité | **68 %** | Cycle 20, complété au **cycle 27** : **172 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **9 suites Playwright** (261 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant. `db/outils/verifier_tout.sh` enchaîne les trois couches en une seule commande. **Cycle 27** : un des deux points bloquant une CI Linux, cité depuis le cycle 20, est corrigé — `server/tests/conftest.py` cherchait `psql.exe` en dur dans `_pgdev/pgsql/bin/` (distribution portable Windows, absente de tout runner CI) ; cherche désormais `psql` sur le `PATH` en premier (`shutil.which`), ne retombant sur le chemin Windows que s'il est introuvable — comportement du poste de développement inchangé (vérifié : aucun `psql` sur son `PATH`, le repli s'active toujours), 172/172 tests toujours au vert. Reste, non traité ce cycle : `PGHOST`/`PGPORT` (5433, instance portable) et le mot de passe de test en dur restent, eux aussi, propres à ce poste — un runner CI aurait besoin de ses propres variables d'environnement ; aucun pipeline CI (fichier de workflow) n'existe encore. Couverture des parcours nécessitant une imprimante ou un téléphone réels toujours hors de portée d'une suite automatisée.  **Cycle 48 (C13, 2026-09-24)** : le seul test flaky constaté (`test_cloture_ne_se_supprime_pas_meme_en_sql_direct`) est marqué `@pytest.mark.flaky(reruns=2, reruns_delay=5)` — reprise automatique en cas d'échec transitoire, sans masquer un échec déterministe ; `pytest.ini` enregistre le marqueur ; `pytest-rerunfailures==16.0` ajouté au lockfile avec hachages. Prouvé : lock 37 paquets / 0 sans hachage, test_caisse 19/19. Aucune autre suite de test touchée.  **Cycle 52 (C13, 2026-09-25)** : chasse aux trous de couverture — `verifier-stock-reel.mjs` RÉÉCRIT (il testait encore la casse et le retour client à un seul temps et affirmait que l'agent stock n'a pas de bouton Casse — contredisait le point f/chantier A, suite rouge invisible car la CI n'exécute que pytest) : 38/38 dont déclarations sans effet stock + validation sur `declarations.html` (casse décrémente, retour revendable réintègre, offert décrémente) ; nouveau `verifier-exploitation-reel.mjs` (12/12) : voyant sauvegarde par la VRAIE route `/exploitation/derniere-sauvegarde` (le câblage mimait le fichier), carte Ventes du jour, carte Articles offerts, logo téléversé/affiché/supprimé depuis l'écran, 403 agent stock ; ajouté à `verifier_tout.sh` et `package.json` ; `verifier-routes-appelees.mjs` 55/55. |
+| C13 | Tests automatisés et qualité | **71 %** | Cycle 20, complété au **cycle 27** : **172 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **9 suites Playwright** (261 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant. `db/outils/verifier_tout.sh` enchaîne les trois couches en une seule commande. **Cycle 27** : un des deux points bloquant une CI Linux, cité depuis le cycle 20, est corrigé — `server/tests/conftest.py` cherchait `psql.exe` en dur dans `_pgdev/pgsql/bin/` (distribution portable Windows, absente de tout runner CI) ; cherche désormais `psql` sur le `PATH` en premier (`shutil.which`), ne retombant sur le chemin Windows que s'il est introuvable — comportement du poste de développement inchangé (vérifié : aucun `psql` sur son `PATH`, le repli s'active toujours), 172/172 tests toujours au vert. Reste, non traité ce cycle : `PGHOST`/`PGPORT` (5433, instance portable) et le mot de passe de test en dur restent, eux aussi, propres à ce poste — un runner CI aurait besoin de ses propres variables d'environnement ; aucun pipeline CI (fichier de workflow) n'existe encore. Couverture des parcours nécessitant une imprimante ou un téléphone réels toujours hors de portée d'une suite automatisée.  **Cycle 48 (C13, 2026-09-24)** : le seul test flaky constaté (`test_cloture_ne_se_supprime_pas_meme_en_sql_direct`) est marqué `@pytest.mark.flaky(reruns=2, reruns_delay=5)` — reprise automatique en cas d'échec transitoire, sans masquer un échec déterministe ; `pytest.ini` enregistre le marqueur ; `pytest-rerunfailures==16.0` ajouté au lockfile avec hachages. Prouvé : lock 37 paquets / 0 sans hachage, test_caisse 19/19. Aucune autre suite de test touchée.  **Cycle 52 (C13, 2026-09-25)** : chasse aux trous de couverture — `verifier-stock-reel.mjs` RÉÉCRIT (il testait encore la casse et le retour client à un seul temps et affirmait que l'agent stock n'a pas de bouton Casse — contredisait le point f/chantier A, suite rouge invisible car la CI n'exécute que pytest) : 38/38 dont déclarations sans effet stock + validation sur `declarations.html` (casse décrémente, retour revendable réintègre, offert décrémente) ; nouveau `verifier-exploitation-reel.mjs` (12/12) : voyant sauvegarde par la VRAIE route `/exploitation/derniere-sauvegarde` (le câblage mimait le fichier), carte Ventes du jour, carte Articles offerts, logo téléversé/affiché/supprimé depuis l'écran, 403 agent stock ; ajouté à `verifier_tout.sh` et `package.json` ; `verifier-routes-appelees.mjs` 55/55.  **Cycle 57 (C13, 2026-10-20)** : invariant comptable global — section 18 de `01_protections.sql`, 12 contrôles `INV` qui BALAYENT toutes les ventes/transactions/créances par simple lecture au lieu de contrôler chaque fonction isolément (le piètre précédent : la « dépense fantôme » de `annuler_vente` n'a été vue qu'au cycle 54). Règle directrice : une vente ne fait jamais sortir plus d'espèces qu'elle n'en a encaissées (recette + règlements FIFO, même formule que 047) ; plus unicité recette, jamais de recette sur crédit, recette = total_ttc, annulations adossées et exactes, créance annulée si vente crédit annulée, remboursements adossés à un retour validé et bornés par la vente. Preuve de détection : 2 violations plantées volontairement (dépense fantôme 999 999, recette sur vente à crédit) → 2 détectées. 178/178 SQL, suite complète verte, pytest 297/297. PR #74. |
 | C14 | Documentation et livrables | **65 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration.  **Cycle 45 (C14, 2026-09-24)** : livrables CDC §7 tous présents et documentés — code source (dépôt Git, `OWNERSHIP.md`), schéma + migrations 000-038 (+ inverses), scripts de fabrication (`server/fabrication/construire.ps1` + `.spec` PyInstaller), sauvegarde/restauration (`db/outils` + guide, RPO 1 h / RTO 2 h / AES-256), jeux de tests (pytest 248, suite SQL, Playwright), CI GitHub Actions, documentation d'installation et d'exploitation ; `README.md` racine remis à jour (état cycle 44 + liste des livrables §7 + résumé opérationnel). Reste : étiqueter une version (tag) lors de la première livraison réelle, clause contractuelle d'escrow (hors périmètre technique, point l).  **Cycle 50 (C14, 2026-09-25)** : premier tag de version **`v0.1.0`** posé et poussé sur `main` (commit de la montée majeure C11, moyenne ≈ 74 %). Reste : clause contractuelle d'escrow (hors périmètre technique, point l). |
 
-**Moyenne indicative après le cycle 55 (C1 normalisation des noms) : ≈ 76 %** (C0 78, C1 92, C2 77, C3 77, C4 89, C5 72, C6 85, C7 65, C8 72, C9 60, C10 58, C11 85, C12 92, C13 68, C14 65).
+**Moyenne indicative après le cycle 57 (C13 invariant comptable global, PR #74) : ≈ 76 %** (C0 78, C1 92, C2 77, C3 77, C4 89, C5 72, C6 85, C7 65, C8 72, C9 60, C10 58, C11 85, C12 92, C13 71, C14 65).
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -3356,7 +3356,109 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
 
 ---
 
-## Tableau de pilotage — reprise du 2026-10-20 (après cycle 56)
+### Cycle 57 — Phase 2 : invariant comptable global (balayage de toutes les ventes) — 2026-10-20
+
+- **CYCLE** : 57. **DATE** : 2026-10-20. **PHASE** : 2 (finalisation
+  fonctionnelle). **CHANTIER** : C13 (tests automatisés et qualité),
+  consolidation comptable C5/C6.
+- **OBJECTIF** : première tâche de la Phase 2 du prompt maître —
+  « Invariant comptable global sur les ventes annulées, les recettes, les
+  contre-passations et les opérations à crédit ». Au lieu de contrôler
+  chaque fonction isolément (ce qui a laissé passer la « dépense fantôme »
+  de `annuler_vente` jusqu'au cycle 54), la suite doit BALAYER toutes les
+  ventes par simple lecture : toute future écriture aberrante, même dans
+  une fonction pas encore écrite, fera échouer la suite.
+- **BRANCHE GIT** : `cycle-57-c13-invariant-comptable` (depuis `main`
+  `c05f11d`). **COMMIT DE BASE** : `c05f11d`. **COMMIT LIVRÉ** :
+  `a521abf`. **PR** : **#74** (ouverte, fusion par le propriétaire).
+- **FICHIERS MODIFIÉS** : `db/tests/01_protections.sql` (+159 lignes,
+  aucun autre fichier, aucun changement applicatif). **MIGRATIONS** :
+  aucune (test pur — le registre n'est pas consommé, prochain numéro
+  libre inchangé : 048).
+- **IMPLÉMENTATION** : nouvelle **section 18** « Invariant comptable
+  global », 12 contrôles préfixés `INV` :
+  unicité de la recette par vente ; jamais de recette sur vente à
+  crédit ; jamais de recette sur vente non encaissée ; au plus une
+  créance active par vente ; toute vente payée non-crédit porte
+  exactement UNE recette ; toute recette vaut exactement `total_ttc` ;
+  toute dépense d'annulation est adossée à une vente annulée non-crédit ;
+  une dépense d'annulation vaut exactement la recette contre-passée ;
+  toute vente à crédit annulée a sa créance annulée ; toute dépense de
+  remboursement correspond à un retour validé `remboursement_especes` ;
+  aucun remboursement ne dépasse la valeur totale de la vente ; et la
+  **règle directrice** — une vente ne fait jamais sortir plus d'espèces
+  qu'elle n'en a encaissées (recette + règlements de créance attribuables
+  en FIFO, même formule que `valider_retour_client`/047, requête en
+  `LATERAL`). Fixture **vente 904** ajoutée (espèces « propre », écrite
+  exactement comme `POST /ventes`) : aucune fixture n'était dans ce cas
+  (900 et 903 sont annulées, 901/902/960/961/962 à crédit) — sans elle,
+  l'invariant « payée non-crédit → exactement une recette » n'était
+  jamais vérifié sur un exemplaire positif.
+- **EXCLUSIONS DOCUMENTÉES** (faux positifs évités, commentées dans le
+  fichier) : la vente 900 est annulée par `UPDATE` direct (section 5,
+  chemin légitime sans contre-passation) — la réciproque « toute vente
+  annulée non-crédit porte une dépense d'annulation » n'est donc PAS un
+  invariant, seul le sens « toute dépense d'annulation a sa recette en
+  face » l'est (c'est lui qui attrape la dépense fantôme) ; la créance
+  papier de 15 000 sur la vente espèces 900 (section 16, reprise cahier)
+  n'enfreint « credit_client → jamais de recette » que dans le sens
+  vérifié ; le repli 047 (créance absente/annulée → tout remboursé en
+  espèces, cas non attendu) produirait une sortie non couverte qu'aucune
+  fixture n'exerce — le balayage la signalerait, comportement voulu.
+- **TESTS EXÉCUTÉS / COMMANDES / RÉSULTATS** (base isolée
+  `qf_c57_test`, _pgdev 5433, recréée de zéro : schéma d'origine +
+  migrations 000→047 + jeu d'essai) :
+  - `psql -f db/tests/01_protections.sql` seul : **178 contrôles, 178 OK,
+    0 échec, code de sortie 0** (166 avant — les 12 `INV` s'ajoutent sans
+    toucher aux 166 existants).
+  - **Preuve que le balayage a des dents** (base jetable dédiée, puis
+    supprimée) : deux violations plantées volontairement — dépense
+    fantôme de 999 999 sur la vente 904 et recette illégitime de 6 500
+    sur la vente à crédit 902. Requête phare : **count = 1, vente 904
+    `sorties=999999 > entrées=2000`** ; contrôle crédit : **count = 1**.
+    Les deux anomalies sont détectées, aucune n'est masquée.
+  - Suite SQL complète (`executer_tests.sh`, `BASE_TEST=qf_c57_test`) :
+    **toutes les étapes OK, exit 0** — protections 178/178,
+    habilitations 53/53, concurrence OK, migrations aller-retour OK,
+    10 lignes de diff cosmétique connues (inchangées, `db/README.md`).
+  - pytest complet en non-régression (`QF_TEST_DBNAME=qf_c57_pytest`,
+    base isolée dédiée, `--basetemp` hors `%TEMP%` cassé) :
+    **297 passed / 0 échec / exit 0** (10 min 37 s).
+- **ANOMALIE** (résolue) : premier passage pytest 289 erreurs de setup —
+  `FATAL: database "qf_c57_pytest" does not exist` : la base surchargée
+  par `QF_TEST_DBNAME` doit être créée et migrée AVANT la suite (le
+  fixture recharge le jeu d'essai mais ne migre pas). Créée (schéma +
+  000→047), suite repassée verte. Pas un défaut du code.
+- **ANOMALIE** (mineure, sans impact) : les `-c` psql en ligne de
+  commande Windows avec accents (é) échouent en `invalid byte sequence
+  for encoding "UTF8"` — descriptions ASCII pour la plantation de
+  violations ; les fichiers SQL restent en UTF-8, aucun impact sur la
+  suite.
+- **RISQUES RÉSIDUELS** : les invariants sont des requêtes de lecture —
+  aucun risque comptable ; la détection fine dépend des descriptions de
+  transactions (`'Annulation de la vente #N'`, `'Remboursement espèces —
+  retour vente #N'`), convention stable depuis 017/036/047, mais une
+  future fonction écrivant une dépense de vente avec une AUTRE
+  description n'entrerait dans la règle directrice que par le montant
+  (sorties vs entrées) — suffisant pour l'objectif anti-fantôme.
+- **SCORE AVANT → APRÈS** : C13 **68 % → 71 %**. Justification : la
+  suite SQL passe de contrôles locaux (une fonction, une fixture) à un
+  **audit global par propriétés** sur toutes les ventes — 12 contrôles
+  supplémentaires qui attraperaient automatiquement une future dépense
+  fantôme ou recette illégitime même sans test dédié, avec preuve de
+  détection réelle (2 violations plantées, 2 détectées) et régression
+  complète verte. Précédents comparables : +3 (cycle 48, gestion flaky),
+  +5 (cycle 52, réécriture d'une suite + nouvelle suite). Moyenne
+  indicative ≈ **76 %** (inchangée après arrondi).
+- **STATUT** : `READY_FOR_REVIEW` (PR #74). **PROCHAINE TÂCHE** :
+  rapport des écarts de prix par vendeur (seuil 10 % configurable,
+  signalement non bloquant — Phase 2, tâche 2), indépendante des
+  décisions métier. **VALIDATION HUMAINE REQUISE** : fusion des PR #73
+  et #74 par le propriétaire (aucune auto-fusion).
+
+---
+
+## Tableau de pilotage — reprise du 2026-10-20 (après cycle 57)
 
 | Cycle | Chantier | Tâche | Responsable | Statut | Tests | Dépendance | Prochaine action |
 |---|---|---|---|---|---|---|---|
@@ -3367,10 +3469,10 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
 | 56 | C13 | Suppression symlink %TEMP% pytest-current | QODER | BLOCKED_TECHNICAL | accès refusé sans admin | élévation administrateur | à traiter par le propriétaire |
 | 56 | C0 | Nettoyage branches/worktrees obsolètes (inventaire au journal) | QODER | BLOCKED_OWNER | inventaire établi | autorisation de suppression | décision du propriétaire |
 | 56 | C14 | Fusion PR #60 (doc chantier C) | PROPRIÉTAIRE | BLOCKED_OWNER | CI verte | décision | fusionner ou fermer |
-| — | C5 | Rapport écarts de prix par vendeur (seuil 10 %, non bloquant) | QODER | TODO | — | chantier B livré (040) | à planifier |
+| 57 | C13 | Invariant comptable global : section 18, balayage de toutes les ventes (12 contrôles INV + vente 904) | QODER | READY_FOR_REVIEW | 178/178 SQL, détection prouvée (2 violations plantées détectées), pytest 297/297 | — | fusion PR #74 par le propriétaire |
+| — | C5 | Rapport écarts de prix par vendeur (seuil 10 %, non bloquant) | QODER | TODO | — | chantier B livré (040) | **prochaine tâche Phase 2** |
 | — | C5 | Saisie des remises dans vente.html | QODER | TODO | — | backend cycle 42 | à planifier |
 | — | C4 | Case décimale sur fiche article | QODER | TODO | — | colonne 034 livrée | à planifier |
-| — | C13 | Invariant comptable global (audit toutes ventes annulées) | QODER | TODO | — | — | **première tâche Phase 2** |
 | — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
 | — | C5/C6 | Décisions métier (HT/TTC, paiements mixtes, seuil caisse…) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire |
 
