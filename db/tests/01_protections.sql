@@ -1036,6 +1036,165 @@ SELECT t_valeur('047 · tout part réellement en espèces (l''argent avait vraim
   $$SELECT montant::TEXT FROM transactions WHERE vente_id = 962 AND type = 'depense'$$, '10000.00');
 
 -- ============================================================================
+-- 18. Invariant comptable global (cycle 57, chantier C13, Phase 2) —
+--     recommandation directe de l'incident « dépense fantôme » (migration
+--     045) : au lieu de contrôler chaque fonction isolément, on BALAYE
+--     TOUTES les ventes de la base et on vérifie des propriétés comptables
+--     globales, par simple lecture. Toute fixture de vente ajoutée plus
+--     haut dans ce fichier (ou dans un futur fichier de tests) qui
+--     enfreindrait une règle fera échouer la section, même sans test dédié.
+--
+--     Règle directrice : une vente ne peut jamais faire sortir de la caisse
+--     plus d'espèces qu'elle n'en a fait entrer — recette encaissée ou
+--     règlements de créance attribuables en FIFO.
+--
+--     Exclusions documentées (pour éviter tout faux positif) :
+--     * La vente 900 (section 5) est annulée par UPDATE direct du
+--       responsable, chemin légitime SANS contre-passation : la réciproque
+--       « toute vente annulée non-crédit porte une dépense d'annulation »
+--       n'est donc PAS un invariant (exclue volontairement). Seul le sens
+--       « toute dépense d'annulation est adossée à une recette réelle » est
+--       vérifié — c'est lui qui attrape la dépense fantôme.
+--     * La créance de 15 000 adossée à la vente 900 (section 16) est une
+--       écriture directe hors parcours crédit (vente espèces, comme
+--       l'encours papier) : les invariants liant créance et mode de
+--       paiement ne sont vérifiés que dans le sens credit_client → jamais
+--       de recette, créance annulée si la vente est annulée.
+--     * Le repli de 047 (« créance absente ou annulée → tout remboursé en
+--       espèces », cas non attendu) produirait une sortie non couverte :
+--       aucune fixture ne l'exerce ; le balayage la signalerait comme
+--       anomalie, ce qui est le comportement voulu.
+-- ============================================================================
+
+-- Vente 904 : vente espèces « propre », exactement ce que fait POST /ventes
+-- (server/app/routes/ventes.py) — exemplaire positif pour l'invariant
+-- « toute vente payée non-crédit porte exactement une recette » : sans lui,
+-- aucune fixture ne serait dans ce cas (900 et 903 sont annulées).
+INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+                     utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
+                     total_ttc, date_encaissement, numero_facturier, vendeur_id)
+VALUES (904, 1, 4, 'payee', 'especes', 1, 2000, 0, 0, 2000, NOW(), 'MAG-9004', 1);
+INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, vente_id)
+VALUES (1, 4, 'recette', 2000, 'Vente 904', 904);
+
+-- --- Structure : une recette au plus, jamais sur du crédit ------------------
+SELECT t_valeur('INV · aucune vente ne porte deux recettes (double comptage)',
+  $$SELECT count(*)::TEXT FROM (
+       SELECT vente_id FROM transactions
+        WHERE type = 'recette' AND vente_id IS NOT NULL
+        GROUP BY vente_id HAVING count(*) > 1) s$$, '0');
+
+SELECT t_valeur('INV · aucune vente à crédit ne porte de recette encaissée',
+  $$SELECT count(*)::TEXT
+     FROM ventes v JOIN transactions t ON t.vente_id = v.id AND t.type = 'recette'
+    WHERE v.mode_paiement = 'credit_client'$$, '0');
+
+SELECT t_valeur('INV · aucune vente non encaissée ne porte de recette',
+  $$SELECT count(*)::TEXT
+     FROM ventes v JOIN transactions t ON t.vente_id = v.id AND t.type = 'recette'
+    WHERE v.statut NOT IN ('payee', 'annulee')$$, '0');
+
+SELECT t_valeur('INV · au plus une créance active par vente',
+  $$SELECT count(*)::TEXT FROM (
+       SELECT vente_id FROM creances
+        WHERE vente_id IS NOT NULL AND NOT annulee
+        GROUP BY vente_id HAVING count(*) > 1) s$$, '0');
+
+-- --- Recette : présence et montant -------------------------------------------
+SELECT t_valeur('INV · toute vente payée non-crédit porte exactement une recette',
+  $$SELECT count(*)::TEXT
+     FROM ventes v
+    WHERE v.statut = 'payee' AND v.mode_paiement <> 'credit_client'
+      AND (SELECT count(*) FROM transactions t
+            WHERE t.vente_id = v.id AND t.type = 'recette') <> 1$$, '0');
+
+SELECT t_valeur('INV · toute recette vaut exactement le total de sa vente',
+  $$SELECT count(*)::TEXT
+     FROM transactions t JOIN ventes v ON v.id = t.vente_id
+    WHERE t.type = 'recette' AND t.montant <> v.total_ttc$$, '0');
+
+-- --- Contre-passations : jamais de dépense fantôme ---------------------------
+SELECT t_valeur('INV · toute dépense d''annulation est adossée à une vente annulée non-crédit',
+  $$SELECT count(*)::TEXT
+     FROM transactions t JOIN ventes v ON v.id = t.vente_id
+    WHERE t.type = 'depense' AND t.description LIKE 'Annulation de la vente #%'
+      AND (v.statut <> 'annulee' OR v.mode_paiement = 'credit_client')$$, '0');
+
+SELECT t_valeur('INV · une dépense d''annulation vaut exactement la recette contre-passée',
+  $$SELECT count(*)::TEXT
+     FROM ventes v
+    WHERE EXISTS (SELECT 1 FROM transactions t
+                   WHERE t.vente_id = v.id AND t.type = 'depense'
+                     AND t.description LIKE 'Annulation de la vente #%')
+      AND (SELECT COALESCE(SUM(t.montant), 0) FROM transactions t
+            WHERE t.vente_id = v.id AND t.type = 'depense'
+              AND t.description LIKE 'Annulation de la vente #%')
+       <> (SELECT COALESCE(SUM(t.montant), 0) FROM transactions t
+            WHERE t.vente_id = v.id AND t.type = 'recette')$$, '0');
+
+SELECT t_valeur('INV · toute vente à crédit annulée a sa créance annulée (aucun encours résiduel)',
+  $$SELECT count(*)::TEXT
+     FROM ventes v
+    WHERE v.statut = 'annulee' AND v.mode_paiement = 'credit_client'
+      AND EXISTS (SELECT 1 FROM creances c
+                   WHERE c.vente_id = v.id AND NOT c.annulee)$$, '0');
+
+-- --- Remboursements : adossés à un retour réel, bornés par la vente ----------
+SELECT t_valeur('INV · toute dépense de remboursement correspond à un retour validé de la vente',
+  $$SELECT count(*)::TEXT
+     FROM transactions t
+    WHERE t.type = 'depense'
+      AND t.description LIKE 'Remboursement espèces — retour vente #%'
+      AND NOT EXISTS (SELECT 1 FROM declarations_retour_client d
+                       WHERE d.vente_id = t.vente_id
+                         AND d.statut = 'validee'
+                         AND d.issue = 'remboursement_especes')$$, '0');
+
+SELECT t_valeur('INV · aucun remboursement ne dépasse la valeur totale de la vente',
+  $$SELECT count(*)::TEXT
+     FROM transactions t JOIN ventes v ON v.id = t.vente_id
+    WHERE t.type = 'depense'
+      AND t.description LIKE 'Remboursement espèces — retour vente #%'
+      AND t.montant > v.total_ttc$$, '0');
+
+-- --- La règle directrice : sorties <= entrées, vente par vente --------------
+-- Encaissements réels d'une vente = sa recette + les règlements attribuables
+-- à sa créance en FIFO (même formule que valider_retour_client, migration
+-- 047 : total réglé par le client, moins ce qui échoit aux créances
+-- antérieures actives). Vente 903 l'exerce à l'égalité exacte ; 960/962 avec
+-- des acomptes partiels ; 900 avec le chemin direct (remboursement = recette).
+SELECT t_valeur('INV · une vente ne fait jamais sortir plus d''espèces qu''elle n''en a encaissées',
+  $$SELECT count(*)::TEXT
+     FROM ventes v
+     LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(t.montant), 0) AS sorties
+           FROM transactions t
+          WHERE t.vente_id = v.id AND t.type = 'depense'
+     ) dep ON TRUE
+     LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(t.montant), 0) AS entrees
+           FROM transactions t
+          WHERE t.vente_id = v.id AND t.type = 'recette'
+     ) rec ON TRUE
+     LEFT JOIN LATERAL (
+         SELECT GREATEST(
+                    0,
+                    (SELECT COALESCE(SUM(r.montant), 0)
+                       FROM reglements_creances r
+                      WHERE r.client_id = c.client_id)
+                  - (SELECT COALESCE(SUM(c2.montant - c2.montant_retourne), 0)
+                       FROM creances c2
+                      WHERE c2.client_id = c.client_id AND NOT c2.annulee
+                        AND (c2.date_creance, c2.id) < (c.date_creance, c.id))
+                ) AS reglements
+           FROM creances c
+          WHERE c.vente_id = v.id AND NOT c.annulee
+          ORDER BY c.date_creance, c.id
+          LIMIT 1
+     ) reg ON TRUE
+    WHERE COALESCE(dep.sorties, 0) > COALESCE(rec.entrees, 0) + COALESCE(reg.reglements, 0)$$, '0');
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''
