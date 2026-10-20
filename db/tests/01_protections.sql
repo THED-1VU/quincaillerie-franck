@@ -1195,6 +1195,85 @@ SELECT t_valeur('INV · une vente ne fait jamais sortir plus d''espèces qu''ell
     WHERE COALESCE(dep.sorties, 0) > COALESCE(rec.entrees, 0) + COALESCE(reg.reglements, 0)$$, '0');
 
 -- ============================================================================
+-- 19. Rapport « écarts de prix par vendeur » (migration 048, point c
+--     question 5, décision du propriétaire 2026-09-18) : 10 % SOUS le prix
+--     catalogue, en configuration, SIGNALE sans jamais bloquer. La vue est
+--     SECURITY INVOKER — la RLS par site (008) s'applique au rôle lecteur.
+-- ============================================================================
+
+-- Vente 905 : trois lignes à prix_catalogue connu + une ligne legacy sans
+-- catalogue, recette cohérente (18720 = 5720 + 5980 + 7020) pour rester
+-- conforme à l'invariant comptable de la section 18 si le balayage venait
+-- à rejouer.
+--   ligne A : 6 500 -> 5 720  (12 % sous le catalogue) → SIGNALÉE
+--   ligne B : 6 500 -> 5 980  (8 %)                    → non signalée
+--   ligne C : 6 500 -> 7 020  (upsell, toléré par 037) → écart négatif
+--   ligne D : sans prix_catalogue (legacy, tolérance 037) → hors rapport
+INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+                     utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
+                     total_ttc, date_encaissement, numero_facturier, vendeur_id)
+VALUES (905, 1, 4, 'payee', 'especes', 1, 18720, 0, 0, 18720, NOW(), 'MAG-9005', 1);
+INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+VALUES (905, 1, 1, 5720, 1, 6500, 780);
+INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+VALUES (905, 1, 1, 5980, 1, 6500, 520);
+INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
+VALUES (905, 1, 1, 7020, 1, 6500, 0);
+-- Ligne D : antérieure au cycle 42 ou écrite hors route applicative —
+-- prix_catalogue NULL toléré par 037, la vue ne le rétro-invente jamais.
+INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id)
+VALUES (905, 2, 1, 1000, 1);
+INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, vente_id)
+VALUES (1, 4, 'recette', 18720, 'Vente 905', 905);
+
+SELECT t_valeur('048 · seuil de signalement lisible en configuration (10, décision 2026-09-18)',
+  $$SELECT parametre_numerique('seuil_ecart_prix_vendeur')::TEXT$$, '10');
+
+SELECT t_valeur('048 · la vue expose exactement les 3 lignes à catalogue connu (la ligne legacy NULL, jamais rétro-inventée, exclue)',
+  $$SELECT count(*)::TEXT FROM ecarts_prix_vendeurs WHERE vente_id = 905$$, '3');
+
+SELECT t_valeur('048 · écart à 12 % sous le catalogue SIGNALÉ',
+  $$SELECT signale::TEXT FROM ecarts_prix_vendeurs
+     WHERE vente_id = 905 AND prix_unitaire = 5720$$, 'true');
+
+SELECT t_valeur('048 · l''écart_pct est exact (12 %, arrondi à 2 décimales)',
+  $$SELECT ecart_pct::TEXT FROM ecarts_prix_vendeurs
+     WHERE vente_id = 905 AND prix_unitaire = 5720$$, '12.00');
+
+SELECT t_valeur('048 · écart à 8 % sous le catalogue : visible mais NON signalé (seuil 10)',
+  $$SELECT signale::TEXT FROM ecarts_prix_vendeurs
+     WHERE vente_id = 905 AND prix_unitaire = 5980$$, 'false');
+
+SELECT t_valeur('048 · upsell (prix AU-DESSUS du catalogue) : écart négatif restitué, jamais signalé',
+  $$SELECT ecart_unitaire::TEXT || '/' || signale::TEXT FROM ecarts_prix_vendeurs
+     WHERE vente_id = 905 AND prix_unitaire = 7020$$, '-520.00/false');
+
+SELECT t_valeur('048 · le vendeur est la fiche EMPLOYÉ (migration 040), pas un compte utilisateur',
+  $$SELECT vendeur_nom FROM ecarts_prix_vendeurs WHERE vente_id = 905 LIMIT 1$$,
+  'Employé Essai');
+
+SELECT t_valeur('048 · vente ANNULÉE exclue (ses lignes de remise ont un prix_catalogue, mais l''argent a été restitué)',
+  $$SELECT count(*)::TEXT FROM ecarts_prix_vendeurs WHERE vente_id = 900$$, '0');
+
+-- Valeur de configuration, pas une constante figée : abaissée à 5 %, la
+-- ligne à 8 % bascule au signalement sans aucun changement de code.
+UPDATE parametres SET valeur = '5' WHERE cle = 'seuil_ecart_prix_vendeur';
+SELECT t_valeur('048 · seuil abaissé à 5 % : la ligne à 8 % devient signalée',
+  $$SELECT signale::TEXT FROM ecarts_prix_vendeurs
+     WHERE vente_id = 905 AND prix_unitaire = 5980$$, 'true');
+UPDATE parametres SET valeur = '10' WHERE cle = 'seuil_ecart_prix_vendeur';
+
+SELECT t_valeur('048 · la vue est lisible par qf_responsable',
+  $$SELECT has_table_privilege('qf_responsable', 'ecarts_prix_vendeurs', 'SELECT')::TEXT$$, 'true');
+SELECT t_valeur('048 · la vue est lisible par qf_agent_comptabilite',
+  $$SELECT has_table_privilege('qf_agent_comptabilite', 'ecarts_prix_vendeurs', 'SELECT')::TEXT$$, 'true');
+SELECT t_valeur('048 · la vue est REFUSÉE à qf_agent_stock (aucun privilège sur les ventes, 008)',
+  $$SELECT has_table_privilege('qf_agent_stock', 'ecarts_prix_vendeurs', 'SELECT')::TEXT$$, 'false');
+SELECT t_valeur('048 · SECURITY INVOKER : la vue s''exécute avec les droits du rôle lecteur (RLS active)',
+  $$SELECT reloptions::TEXT FROM pg_class WHERE relname = 'ecarts_prix_vendeurs'$$,
+  '{security_invoker=true}');
+
+-- ============================================================================
 -- Résultat
 -- ============================================================================
 \echo ''
