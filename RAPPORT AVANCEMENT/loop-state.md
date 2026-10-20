@@ -3705,7 +3705,8 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
   persistée, mention en liste, réception 2,5 acceptée, réception 1,5
   refusée sur article entier sans créer de ligne, case pré-cochée,
   désactivation refusée avec message métier propre (422), acceptation
-  après correction en entiers, mention disparue ; câblage **94/94**.
+  après correction en entiers, mention disparue ; câblage **94/94** ;
+  CI GitHub de la PR #77 : **pytest vert** (8 min 36 s).
   **ANOMALIES CORRIGÉES, NON MASQUÉES** : (1) la section 034 de
   `01_protections.sql` remettait le drapeau à FALSE avant de restaurer
   le stock/seuil décimaux qu'elle venait de créer — refusée par le
