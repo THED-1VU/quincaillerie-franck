@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
+import psycopg
 from openpyxl import load_workbook
 from pypdf import PdfReader
 
@@ -18,6 +19,7 @@ from conftest import (
     MOT_DE_PASSE_AGENT_COMPTA,
     MOT_DE_PASSE_AGENT_STOCK,
     MOT_DE_PASSE_RESPONSABLE,
+    PG_ADMIN_DSN,
     entete_autorisation,
     se_connecter,
 )
@@ -243,3 +245,165 @@ def test_export_ventes_date_invalide_refusee(client):
         headers=entete_autorisation(session["jeton"]),
     )
     assert reponse.status_code == 422, reponse.text
+
+
+# ---------------------------------------------------------------------------
+# /rapports/ecarts-prix-vendeurs (cycle 58, point c Q5, décidé 2026-09-18) :
+# 10 % sous le prix catalogue, en configuration, signale SANS jamais bloquer.
+# ---------------------------------------------------------------------------
+
+def _vendre(client, session, *, prix_unitaire, vendeur_id=1, site_id=1,
+            numero="MAG-ECART01", article_id=1):
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json={
+            "site_id": site_id,
+            "mode_paiement": "especes",
+            "numero_facturier": numero,
+            "vendeur_id": vendeur_id,
+            "lignes": [{"article_id": article_id, "quantite": 1,
+                        "prix_unitaire": prix_unitaire}],
+        },
+    )
+    assert reponse.status_code == 201, reponse.text
+
+
+def test_ecarts_prix_signale_au_dela_du_seuil_pas_en_deca(client):
+    """Ciment catalogue 6 500 : 5 720 payé = 12 % sous le catalogue →
+    SIGNALÉ ; 5 980 payé = 8 % → écart visible mais NON signalé (10 %)."""
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    _vendre(client, session, prix_unitaire=5720, numero="MAG-ECART01")
+    _vendre(client, session, prix_unitaire=5980, numero="MAG-ECART02")
+
+    reponse = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert reponse.status_code == 200, reponse.text
+    corps = reponse.json()
+    assert corps["seuil_pct"] == 10
+    assert len(corps["vendeurs"]) == 1
+    groupe = corps["vendeurs"][0]
+    assert groupe["nb_signalees"] == 1
+    assert groupe["nb_lignes"] == 2
+    par_prix = {l["prix_unitaire"]: l for l in groupe["lignes"]}
+    assert par_prix[5720]["signale"] is True
+    assert par_prix[5720]["ecart_pct"] == 12
+    assert par_prix[5980]["signale"] is False
+    assert par_prix[5980]["ecart_pct"] == 8
+
+
+def test_ecarts_prix_seuil_reellement_configurable(client):
+    """Le seuil est une VALEUR DE CONFIGURATION (décision 2026-09-18) : le
+    faire passer à 5 % fait basculer l'écart de 8 % au signalement, sans
+    aucun changement de code."""
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    _vendre(client, session, prix_unitaire=5980, numero="MAG-ECART03")  # 8 %
+
+    reponse = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert reponse.json()["vendeurs"][0]["lignes"][0]["signale"] is False
+
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE parametres SET valeur = '5' WHERE cle = 'seuil_ecart_prix_vendeur'"
+            )
+        conn.commit()
+
+    reponse = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        headers=entete_autorisation(session["jeton"]),
+    )
+    corps = reponse.json()
+    assert corps["seuil_pct"] == 5
+    assert corps["vendeurs"][0]["lignes"][0]["signale"] is True
+
+
+def test_ecarts_prix_prix_au_dessus_du_catalogue_visible_jamais_signale(client):
+    """Upsell toléré (037, point d) : 7 020 payé contre 6 500 de catalogue
+    = écart NÉGATIF restitué tel quel, jamais signalé — la décision ne vise
+    que les prix négociés SOUS le catalogue."""
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    _vendre(client, session, prix_unitaire=7020, numero="MAG-ECART04")
+
+    reponse = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        headers=entete_autorisation(session["jeton"]),
+    )
+    groupe = reponse.json()["vendeurs"][0]
+    ligne = groupe["lignes"][0]
+    assert ligne["ecart_unitaire"] == -520
+    assert ligne["signale"] is False
+    assert groupe["nb_signalees"] == 0
+
+
+def test_ecarts_prix_agent_stock_refuse(client):
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert reponse.status_code == 403, reponse.text
+
+
+def test_ecarts_prix_agent_comptabilite_autorise_et_limite_a_son_site(client):
+    """RLS PAR LA VUE (migration 048, SECURITY INVOKER) : un agent
+    comptabilité du Magasin voit les écarts de SON site et JAMAIS ceux du
+    Comptoir — une vue classique (security definer) contournerait la RLS
+    et montrerait les deux sites."""
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    _vendre(client, session_resp, prix_unitaire=5720, vendeur_id=1, site_id=1,
+            numero="MAG-ECART05")
+    _vendre(client, session_resp, prix_unitaire=700, vendeur_id=2, site_id=2,
+            numero="CPT-ECART06", article_id=3)  # Clou 5 cm, catalogue 800 = 12,5 %
+
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert reponse.status_code == 200, reponse.text
+    corps = reponse.json()
+    numeros = {
+        l["numero_facturier"] for g in corps["vendeurs"] for l in g["lignes"]
+    }
+    assert "MAG-ECART05" in numeros
+    assert "CPT-ECART06" not in numeros
+
+
+def test_ecarts_prix_periode_et_dates_invalides(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    _vendre(client, session, prix_unitaire=5720, numero="MAG-ECART07")
+
+    hors_periode = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        params={"date_debut": "2000-01-01", "date_fin": "2000-01-02"},
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert hors_periode.status_code == 200, hors_periode.text
+    assert hors_periode.json()["vendeurs"] == []
+
+    bonne_periode = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        params={"date_debut": "2000-01-01", "date_fin": "2999-12-31"},
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert len(bonne_periode.json()["vendeurs"]) == 1
+
+    invalide = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        params={"date_debut": "n'importe quoi"},
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert invalide.status_code == 422, invalide.text
+
+    inversee = client.get(
+        "/rapports/ecarts-prix-vendeurs",
+        params={"date_debut": "2999-12-31", "date_fin": "2000-01-01"},
+        headers=entete_autorisation(session["jeton"]),
+    )
+    assert inversee.status_code == 422, inversee.text

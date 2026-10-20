@@ -101,6 +101,8 @@ SELECT d_refus('lire les ventes',
   $$SELECT count(*) FROM ventes$$);
 SELECT d_refus('lire les transactions comptables',
   $$SELECT count(*) FROM transactions$$);
+SELECT d_refus('lire le rapport des écarts de prix par vendeur (vue 048, dérive des ventes)',
+  $$SELECT count(*) FROM ecarts_prix_vendeurs$$);
 SELECT d_refus('lire les salaires des employés',
   $$SELECT salaire_mensuel FROM employes LIMIT 1$$);
 SELECT d_refus('lire un hachage de mot de passe',
@@ -165,6 +167,11 @@ SELECT d_refus('lire les avances sur salaire',
 
 SELECT d_succes('lire nom et prix de vente d''un article',
   $$SELECT nom, prix_vente FROM articles LIMIT 1$$);
+-- Vue 048 : security_invoker → RLS par site s'applique, la compta ne voit
+-- que SON site (contrôle de privilège ici ; le cloisonnement par site est
+-- prouvé dans 01_protections section 19).
+SELECT d_succes('lire le rapport des écarts de prix par vendeur (vue 048)',
+  $$SELECT count(*) FROM ecarts_prix_vendeurs$$);
 SELECT d_succes('enregistrer une recette',
   $$INSERT INTO transactions (site_id, utilisateur_id, type, montant, description)
     VALUES (1, 4, 'recette', 1000, 'Essai habilitation')$$);
