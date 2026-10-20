@@ -233,6 +233,7 @@ dû renuméroter sa migration en 047 après coup. D'où la règle 5 ci-dessus.
 | 045 | Crédit client (point b) : clients, créances, règlements | session B, 2026-09-25 |
 | 046 | Normalisation noms articles (C1) : insensible aux accents/casse/espaces/tirets | session A, 2026-09-26 |
 | 047 | Correctif retour client sur vente à crédit (`montant_retourne`) — renumérotée depuis 046, collision avec la session A | session B, 2026-09-26 |
+| 048 | Rapport écarts de prix par vendeur (point c Q5, décidé 2026-09-18) : paramètre `seuil_ecart_prix_vendeur` + vue `ecarts_prix_vendeurs` | QODER (session principale, cycle 58), 2026-10-20 |
 
 *(Ces deux lignes consignent l'incident du 2026-09-25 — deux 040 déjà
 fusionnés sur `main` sans collision de contenu. À partir de maintenant, le
