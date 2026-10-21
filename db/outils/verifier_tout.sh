@@ -12,12 +12,15 @@
 #   2. reconstruction de quincaillerie_test (l'étape précédente la supprime
 #      délibérément à sa dernière étape, pour comparer le schéma réversible)
 #   3. suite pytest du serveur          (server/tests/)
-#   4. démarrage temporaire d'uvicorn, puis les suites Playwright de
+#   4. démarrage temporaire d'uvicorn, puis les 13 suites Playwright de
 #      maquette/verification/ qui n'exigent qu'un serveur réel sur
-#      SERVEUR_URL (cablage, vente, inventaire, stock, rapports,
-#      echappement, rh) — PAS `affichage`/`flux`, qui exigent un second
-#      serveur STATIQUE séparé (`py -m http.server 8080`, cycle 1, jamais
-#      automatisé, hors périmètre de ce script)
+#      SERVEUR_URL (routes, cablage, vente, stock, rapports, inventaire, ux,
+#      comptes, caisse, rh, exploitation, echappement, roles — cycle 71,
+#      écart C13-02 : la liste était restée à 8 suites alors que 13
+#      existent ; la correspondance complète suites↔chantiers est dans
+#      maquette/verification/SUITES_CHANTIERS.md) — PAS `affichage`/`flux`,
+#      suites héritées du mode statique, inutilisables sur écrans connectés
+#      (backend requis, limite documentée depuis le cycle 59)
 #   5. arrêt du serveur temporaire, jeu d'essai rechargé une dernière fois
 #      pour laisser la base dans un état propre
 #
@@ -94,12 +97,18 @@ recreer_base_test
 verdict $? "base reconstruite"
 
 titre "3. Suite pytest du serveur"
-( cd "$RACINE/server" && "$PYTHON" -m pytest -q )
+# --basetemp : le dossier par défaut %TEMP%\pytest-of-USER\pytest-current
+# contient un symlink résiduel inaccessibles sans élévation (constat du
+# cycle 56, BLOCKED_TECHNICAL signalé au propriétaire) — pytest crashe en
+# nettoyage de fin de session avec PermissionError et rend un code 1 alors
+# que les tests passent. Le basetemp dédié contourne ce défaut d'environnement,
+# comme chaque cycle le fait depuis le cycle 57.
+( cd "$RACINE/server" && "$PYTHON" -m pytest -q --basetemp "$TEMP/verifier_tout_pytest" )
 verdict $? "pytest"
 
-titre "4. Suites Playwright (serveur réel, cablage/vente/inventaire/stock/rapports/echappement/rh)"
+titre "4. Suites Playwright (serveur réel, 13 suites — SUITES_CHANTIERS.md)"
 # config.ini de dev limite à 10 connexions/minute (protection anti-force
-# brute, voir securite.py) — bien trop bas pour enchaîner 7 suites qui se
+# brute, voir securite.py) — bien trop bas pour enchaîner 13 suites qui se
 # reconnectent chacune plusieurs fois en quelques minutes (trouvé en
 # écrivant ce script : les suites 2 et suivantes échouaient toutes avec
 # une session nulle, silencieusement rejetées par le serveur). Une copie
@@ -123,10 +132,29 @@ if [ "$PRET" -ne 0 ]; then
     echo ">>> le serveur temporaire n'a jamais répondu sur ${SERVEUR_URL}/sante"
     verdict 1 "suites Playwright"
 else
+    # PGDATABASE_PISTE : les suites réinitialisent le jeu d'essai elles-
+    # mêmes (chaque fichier .mjs le documente dans son en-tête) et tombent
+    # par défaut sur quincaillerie_test ; l'exporter ici lie les réinitialisations
+    # à BASE_TEST si un appelant surcharge cette dernière.
+    # Délai maximal par suite (DELAI_SUITE_S, défaut 600 s) : une suite qui
+    # se bloque ne doit pas immobiliser la régression — constat réel du
+    # cycle 71, la suite comptes, terminée mais sans navigateur.close()
+    # (défaut corrigé), a rendu son code de sortie jamais : 20 minutes
+    # d'attente avant intervention manuelle. Même philosophie que
+    # executer_suites_reelles.sh (PR #79, cycle 62). Code 124 = délai dépassé.
     CODE_PW=0
-    for suite in cablage vente inventaire stock rapports echappement rh exploitation; do
-        ( cd "$RACINE/maquette/verification" && SERVEUR_URL="$SERVEUR_URL" npm run "$suite" )
+    DELAI_SUITE_S="${DELAI_SUITE_S:-600}"
+    export PGDATABASE_PISTE="$BASE_TEST"
+    for suite in routes cablage vente stock rapports inventaire ux comptes caisse rh exploitation echappement roles; do
+        ( cd "$RACINE/maquette/verification" && \
+          SERVEUR_URL="$SERVEUR_URL" timeout "$DELAI_SUITE_S" npm run "$suite" )
         CODE_SUITE=$?
+        if [ "$CODE_SUITE" -eq 124 ]; then
+            echo ">>> suite $suite : ÉCHEC (délai de ${DELAI_SUITE_S}s dépassé, processus tué)"
+            ETAPES_KO=$((ETAPES_KO + 1))
+            CODE_PW=1
+            continue
+        fi
         verdict "$CODE_SUITE" "  suite $suite"
         [ "$CODE_SUITE" -ne 0 ] && CODE_PW=1
     done
