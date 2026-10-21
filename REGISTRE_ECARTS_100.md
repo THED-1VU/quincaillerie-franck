@@ -22,25 +22,25 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **7 clôturés par vérification ou livraison** (C4-01 et
+40 écarts recensés, dont **8 clôturés par vérification ou livraison** (C4-01 et
 C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ; C1-04, C7-02 et C7-03
-livrés au cycle 68 ; C8-01 soldé au cycle 69).
-33 écarts ouverts :
+livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04 reconstruit au cycle 70).
+32 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
 | P1 | **17** | 11 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
 | P2 | **11** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 3 |
-| P3 | **5** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 2 |
-| **Total ouverts** | **33** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 7 EN_COURS/OUVERT | **5** |
+| P3 | **4** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 1 |
+| **Total ouverts** | **32** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 6 EN_COURS/OUVERT | **4** |
 
 Lecture : **aucun écart d'intégrité**. Le chemin vers 99–100 % se joue sur
 trois catégories : (1) décisions du propriétaire déjà répertoriées dans
 `DECISIONS_PROPRIETAIRE.md` (D1–D13) ; (2) validations humaines (campagnes,
 impression, 2ᵉ poste) ; (3) sept fusions Git réservées au propriétaire
-(#78 → #82 + #83, #84). Le développement garde **5 écarts actionnables**
-(C0-04, C12-03, C13-02, C14-03, C11-02) traités cycle par cycle ;
+(#78 → #82 + #83, #84). Le développement garde **4 écarts actionnables**
+(C12-03, C13-02, C14-03, C11-02) traités cycle par cycle ;
 les correctifs codables mais suspendus à une décision
 (C1-01, C1-02, C2-02, C5-01, C5-02, C6-01, C6-02) démarreront dès que les
 décisions D2–D5, D9, D10 tombent.
@@ -84,14 +84,15 @@ décisions D2–D5, D9, D10 tombent.
 
 ### C0-04 — Journal d'avancement : trou des cycles 61–64
 - **Exigence source :** convention du dépôt (un cycle = une section de `loop-state.md`) ; divergence D5 (cycle 65).
-- **État :** `RAPPORT AVANCEMENT/loop-state.md` ne contient aucune section « Cycle 61/62/63/64 » ; les scores C0 78→86, C12 92→95, C13 71→76 n'y sont pas justifiés.
-- **Preuve :** `grep -n "Cycle 6[1-4]" loop-state.md` → vide ; tableau « Scores de départ » obsolète vs scores de référence du cycle 64.
+- **État :** *corrigé (cycle 70)* — les sections 61, 62 et 63 existaient mot pour mot dans les commits de documentation de leurs branches (`dbf3e64`, `1cbcdea`, `aed8931`, jamais fusionnées) ; la section 64 a été rédigée depuis les preuves réelles de la PR #81 (simulation d'installation, parité `migrer.ps1`/`migrer.sh`, 306/306). Toutes quatre insérées dans `loop-state.md` entre les cycles 60 et 65.
+- **Preuve (exécutée ce cycle) :** `grep -n "^### Cycle 6[0-9]" loop-state.md` → sections 60 à 69 présentes et dans l'ordre, aucun trou depuis la baseline du cycle 56 ; lignes de scores C0 (78→**86**), C12 (92→**95**), C13 (71→**76**) resynchronisées sur la référence post-cycle-64 (leurs en-têtes n'avaient jamais été bougés dans les branches d'origine) ; moyennes indicatives 61-64 rétablies.
 - **Gravité / risque métier :** P3 — l'auditabilité des preuves s'érode (un score qui monte sans journal est une promesse, pas une preuve).
-- **Correction :** rédiger les sections rétrospectives 61–64 (preuves = PR #78–#81 + journaux de régression) ou un encart d'archivage pointant vers les PR.
+- **Correction (exécutée cycle 70) :** sections rétrospectives insérées + tableau des scores synchronisé (ci-dessus).
 - **Dépendances :** aucune. **Responsable :** développement (lot D).
 - **Critère d'acceptation :** `loop-state.md` sans trou de cycle depuis la baseline du cycle 56.
 - **Tests requis :** relecture — une section datée par cycle, un tableau de scores synchronisé.
-- **Statut :** OUVERT.
+- **Preuves (cycle 70) :** relecture structurelle (grep sections + scores) ; PR #87.
+- **Statut :** CLOS (cycle 70).
 
 ---
 
