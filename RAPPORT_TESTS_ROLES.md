@@ -96,6 +96,16 @@ reste une action propriétaire (décision déjà consignée).
 | D4 | P2 | Visibilité des prix du caissier : vérifiée en inspection (aucun `prix_achat` ni à l'écran ni dans les rapports), confirmation formelle requise | `DECISIONS_PROPRIETAIRE.md` D1 |
 | D5 | P3 | Journal `loop-state.md` : sections des cycles 61-64 absentes (branches et PR #78-#81 existent) | à reconstituer au cycle 66 si le propriétaire le demande |
 
+**Statuées au cycle 69 (écart C8-01 clôturé, preuves d'exécution : pytest
+6/6 sur `test_cumul_roles.py` + `test_matrice_roles.py`, Playwright
+`verifier-cablage.mjs` 94/94, inspection `ventes.py:220-227`)** : D1 et D2
+**acceptées en l'état** (gates UI volontaires, recommandations D8/D7 option 1 —
+confirmation réservée au propriétaire) ; D3 tracée vers l'écart C5-01
+(BLOQUE_PROPRIETAIRE, décision D9) ; D4 tracée vers C3-01 (BLOQUE_PROPRIETAIRE,
+décision D1) ; D5 tracée vers C0-04 (OUVERT, développement — journal des
+cycles 61-64). Détail : `MATRICE_ROLES_AKUMA.md` §9 ; `REGISTRE_ECARTS_100.md`
+C8-01.
+
 ## 6. Captures (22) — `maquette/captures/roles/`
 
 - `00-connexion.png` — écran de connexion.
