@@ -57,6 +57,11 @@ MATRICE: list[tuple[str, str, object]] = [
     ("GET", "/inventaire/ecarts-ventes", {R}),
     ("POST", "/inventaire/ecarts-ventes/{id}/regulariser", {R}),
     ("POST", "/inventaire/ecarts/{id}/regulariser", {R}),
+    # Exports responsable seul (cycle 67 /rapports/stock — ajouté à la matrice
+    # au cycle 68, omis au cycle 67 ; cycle 68 /rapports/ecarts-comptage,
+    # écart C7-03) : portent prix_achat (008) et quantite_attendue/ecart (012).
+    ("GET", "/rapports/stock", {R}),
+    ("GET", "/rapports/ecarts-comptage", {R}),
     ("POST", "/stock/casse/declarations/{id}/valider", {R}),
     ("POST", "/stock/retours-client/declarations/{id}/valider", {R}),
     ("POST", "/stock/articles-offerts/declarations/{id}/valider", {R}),

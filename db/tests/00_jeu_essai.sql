@@ -38,7 +38,14 @@ TRUNCATE TABLE
     utilisateurs
 RESTART IDENTITY CASCADE;
 
--- Réamorçage de parametres — copie de la migration 006, voir ce commentaire.
+-- Réamorçage de parametres — COUVERTURE AUDITÉE (cycle 68, écart C1-04) :
+-- chaque clé insérée par une migration (006, 019, 021, 022, 032, 037, 040,
+-- 045, 048) y figure, à l'état DÉCIDÉ de cette migration. Seule exception
+-- justifiée : logo_boutique_extension (021) — état d'exécution volatile
+-- (écrite à chaque téléversement/suppression de logo), incohérente sans le
+-- binaire correspondant, que ce fichier ne sème pas. RÈGLE : toute nouvelle
+-- migration ajoutant un paramètre doit être reflétée ici — sinon la base de
+-- test diverge d'une installation réelle par migrations seules.
 INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_decider, reference_decision) VALUES
 ('boutique_nom', 'Ets Quincaillerie Franck', 'texte',
  'Raison sociale, imprimée sur les tickets et factures.', TRUE, FALSE, NULL),
@@ -48,6 +55,10 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
  'Téléphone imprimé sur les tickets et factures.', TRUE, TRUE, 'à fournir par le propriétaire'),
 ('boutique_numero_contribuable', 'a_definir', 'texte',
  'Numéro de contribuable, si les mentions légales l''exigent.', TRUE, TRUE, 'addendum point d'),
+('contact_support_technique', 'a_definir', 'texte',
+ 'Personne ou numéro à prévenir quand l''application affiche « la base de '
+ 'données ne répond pas » (cycle 28). Affiché tel quel dans ce message une '
+ 'fois fixé — jamais inventé.', TRUE, TRUE, 'à fournir par le propriétaire'),
 ('regime_fiscal', 'reel', 'texte',
  'Régime fiscal réel : impot_liberatoire, simplifie ou reel (assujetti TVA). '
  'Tant que ce point n''est pas tranché, aucune TVA n''est appliquée.', TRUE, FALSE, 'addendum point d, décidé cycle 6'),
@@ -91,7 +102,13 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
  'Seuil de signalement (en % sous le prix catalogue) au-delà duquel '
  'une ligne de vente figure au signalement dans le rapport « écarts '
  'de prix par vendeur ». Signale sans jamais bloquer.',
- TRUE, FALSE, 'Décision 2026-09-18 (addendum point c, question 5)');
+ TRUE, FALSE, 'Décision 2026-09-18 (addendum point c, question 5)'),
+('seuil_remise_validation_pct', 'a_definir', 'decimal',
+ 'Pourcentage de remise (ligne ou globale) au-delà duquel seul un '
+ 'responsable peut enregistrer la vente. Aucune remise bloquée tant '
+ 'que non fixé. Distinct du seuil d''écart de prix vendeur (point c, '
+ 'question 5, jamais construit) : usages différents.',
+ TRUE, TRUE, 'décision propriétaire 2026-09-22/23 — valeur à fixer');
 
 INSERT INTO fournisseurs (id, nom, contact, telephone) VALUES
   (1, 'Cimenterie du Cameroun', 'M. Ateba', '+237 6 99 00 11 22');

@@ -330,6 +330,7 @@ nouvelle migration de schéma n'a été nécessaire.
 | `GET /inventaire/historique-comptages` | responsable | tous les comptages (pas seulement les écarts) sur une période `date_debut`/`date_fin`, tous sites (CDC §3.3/§3.13) |
 | `GET /rapports/articles?format=xlsx\|pdf` | responsable, agent stock, agent comptabilité | catalogue articles/stock, colonnes gatées **en SQL** par la même liste blanche que `GET /articles` (`app/colonnes.py`) |
 | `GET /rapports/ventes?format=xlsx\|pdf&date_debut=&date_fin=` | responsable, agent comptabilité | ventes payées sur une période ; un agent stock est refusé avant même la base (comme `GET /ventes/synthese-jour`) |
+| `GET /rapports/ecarts-comptage?format=xlsx\|pdf&date_debut=&date_fin=` | responsable | écarts de comptage (non nuls) sur une période, valorisés à prix d'achat, avec la régularisation associée le cas échéant et les totaux cumulés (cycle 68, écart C7-03) |
 
 **Gating du prix à l'export (CDC §3.7)** : la colonne de prix n'est jamais
 lue par PostgreSQL pour un agent stock (`COLONNES_ARTICLES["agent_stock"]`

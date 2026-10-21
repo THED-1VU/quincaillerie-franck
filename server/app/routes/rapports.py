@@ -10,7 +10,7 @@ que ``GET /articles``, cycle 3). Un agent stock ne reçoit tout simplement
 jamais les colonnes de prix depuis PostgreSQL : il n'y a rien à retirer du
 fichier parce qu'elles n'ont jamais existé dans les lignes en mémoire.
 
-Trois exports, correspondant chacun au périmètre déjà établi pour ce rôle
+Quatre exports, correspondant chacun au périmètre déjà établi pour ce rôle
 ailleurs dans l'application :
   * ``/rapports/articles`` — catalogue articles/stock, les 3 rôles (mêmes
     colonnes que ``GET /articles``), aucune notion de période (un
@@ -28,10 +28,12 @@ ailleurs dans l'application :
     non tranché. ``numero_facturier`` (référence du carnet papier, point c
     de l'addendum, décidé le 2026-09-13, cycle 27) est obligatoire sur
     toute vente depuis ce cycle, NULL pour les ventes antérieures.
+  * ``/rapports/ecarts-comptage`` — écarts de comptage valorisés au prix
+    d'achat sur une période (régularisations comprises), RESPONSABLE
+    SEULEMENT (cycle 68, écart C7-03) : ``quantite_attendue``/``ecart``
+    (012) et ``prix_achat`` (008) ne sont lisibles par aucun autre rôle.
 
-Hors périmètre, volontairement : clôture de caisse (point g, non tranché),
-export de l'historique de comptages (route JSON seule, pas de fichier ce
-cycle-ci).
+Hors périmètre, volontairement : clôture de caisse (point g, non tranché).
 """
 
 from __future__ import annotations
@@ -408,3 +410,104 @@ def rapports_ecarts_prix_vendeurs(
                            g["vendeur_nom"] or ""),
         ),
     }
+
+
+@routeur.get("/ecarts-comptage")
+def exporter_ecarts_comptage(
+    request: Request,
+    date_debut: str,
+    date_fin: str,
+    format: str = Query(...),  # noqa: A002
+    session: Session = Depends(exiger_role("responsable")),
+):
+    """Écarts de comptage sur une période — RESPONSABLE SEULEMENT (cycle 68,
+    écart C7-03 du registre) : les colonnes ``quantite_attendue``/``ecart``
+    ne sont lisibles par aucun autre rôle (migration 012, défense en
+    profondeur posée en base) et la valorisation porte ``prix_achat``
+    (privilège responsable, migration 008). Usage déclaré : l'inventaire
+    valorisé est souvent exigé pour la déclaration fiscale — la valorisation
+    est donc faite au PRIX D'ACHAT, signée (un écart négatif = manquant
+    valorisé négativement). Chaque ligne porte la régularisation le cas
+    échéant (traçabilité pure de 032, jamais d'effet stock) : un écart
+    régularisé reste visible, sa résolution est rappelée."""
+    format_ = _valider_format(format)
+    try:
+        debut = _date.fromisoformat(date_debut)
+        fin = _date.fromisoformat(date_fin)
+    except ValueError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "date_debut et date_fin doivent être au format AAAA-MM-JJ.",
+        ) from exc
+    if debut > fin:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "date_debut ne peut pas être postérieure à date_fin.",
+        )
+
+    colonnes = [
+        "id", "nom", "site_id", "moment", "date_comptage",
+        "quantite_comptee", "quantite_attendue", "ecart",
+        "prix_achat", "valorisation_ecart",
+        "type_resolution", "motif", "date_regularisation",
+    ]
+    colonnes_totaux = [
+        "nb_ecarts", "ecart_cumule", "valorisation_cumulee", "nb_sans_regularisation",
+    ]
+
+    bd = obtenir_bd(request)
+    with bd.connexion_pour(
+        role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT a.id, a.nom, c.site_id, c.moment,
+                       c.date_comptage::date AS date_comptage,
+                       c.quantite_comptee, c.quantite_attendue, c.ecart,
+                       a.prix_achat, c.ecart * a.prix_achat AS valorisation_ecart,
+                       r.type_resolution, r.motif,
+                       r.date_regularisation::date AS date_regularisation
+                  FROM comptages_stock c
+                  JOIN articles a ON a.id = c.article_id
+                  LEFT JOIN regularisations_ecarts_comptage r ON r.comptage_id = c.id
+                 WHERE c.ecart <> 0
+                   AND c.date_comptage::date BETWEEN %s AND %s
+                 ORDER BY c.date_comptage, c.site_id, a.nom
+                """,
+                (debut, fin),
+            )
+            lignes = cur.fetchall()
+            cur.execute(
+                """
+                SELECT COUNT(*) AS nb_ecarts,
+                       COALESCE(SUM(c.ecart), 0) AS ecart_cumule,
+                       COALESCE(SUM(c.ecart * a.prix_achat), 0) AS valorisation_cumulee,
+                       COUNT(*) FILTER (WHERE r.id IS NULL) AS nb_sans_regularisation
+                  FROM comptages_stock c
+                  JOIN articles a ON a.id = c.article_id
+                  LEFT JOIN regularisations_ecarts_comptage r ON r.comptage_id = c.id
+                 WHERE c.ecart <> 0
+                   AND c.date_comptage::date BETWEEN %s AND %s
+                """,
+                (debut, fin),
+            )
+            totaux = cur.fetchall()
+
+    if format_ == "xlsx":
+        classeur = Workbook()
+        feuille = classeur.active
+        feuille.title = "écarts de comptage"
+        feuille.append(colonnes)
+        for ligne in lignes:
+            feuille.append([_valeur_cellule(ligne[c]) for c in colonnes])
+        feuille_totaux = classeur.create_sheet("totaux")
+        feuille_totaux.append(colonnes_totaux)
+        for total in totaux:
+            feuille_totaux.append([_valeur_cellule(total[c]) for c in colonnes_totaux])
+        tampon = BytesIO()
+        classeur.save(tampon)
+        contenu = tampon.getvalue()
+    else:
+        contenu = _pdf_tableau("Écarts de comptage", colonnes, lignes)
+    return _reponse_fichier(contenu, format_, "ecarts-comptage")

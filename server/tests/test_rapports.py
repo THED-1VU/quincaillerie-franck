@@ -347,6 +347,154 @@ def test_export_stock_format_invalide_refuse(client):
     assert reponse.status_code == 422, reponse.text
 
 
+# ---------------------------------------------------------------------------
+# /rapports/ecarts-comptage (cycle 68, écart C7-03 du REGISTRE_ECARTS_100.md) :
+# écarts de comptage valorisés au prix d'achat sur une période, régularisations
+# comprises, RESPONSABLE SEULEMENT — quantite_attendue/ecart (012) et prix_achat
+# (008) ne sont lisibles par aucun autre rôle. Données : comptages réels via
+# l'API (magasin.stock, site 1) — Ciment 30 attendus, 25 comptés (écart -5,
+# valorisation -25 000 au prix d'achat 5 000) puis régularisé ; Fer 40 attendus,
+# 42 comptés (écart +2, valorisation +5 600 au prix d'achat 2 800), non
+# régularisé.
+# ---------------------------------------------------------------------------
+
+def _semencer_deux_ecarts_de_comptage(client) -> None:
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    ciment = client.post(
+        "/inventaire/comptages",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "moment": "matin", "quantite_comptee": 25},
+    )
+    assert ciment.status_code == 201, ciment.text
+    fer = client.post(
+        "/inventaire/comptages",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 2, "moment": "matin", "quantite_comptee": 42},
+    )
+    assert fer.status_code == 201, fer.text
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    regularisation = client.post(
+        f"/inventaire/ecarts/{ciment.json()['comptage_id']}/regulariser",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"type_resolution": "erreur_de_comptage"},
+    )
+    assert regularisation.status_code == 201, regularisation.text
+
+
+def _lignes_export_ecarts_comptage(reponse) -> dict:
+    classeur = load_workbook(BytesIO(reponse.content))
+    feuille = classeur["écarts de comptage"]
+    entetes = [c.value for c in next(feuille.iter_rows(min_row=1, max_row=1))]
+    lignes = {}
+    for row in feuille.iter_rows(min_row=2):
+        ligne = {entetes[i]: row[i].value for i in range(len(entetes))}
+        lignes[(ligne["nom"], ligne["site_id"])] = ligne
+    return classeur, lignes
+
+
+_PERIODE_TOUTE = {"date_debut": "2000-01-01", "date_fin": "2999-12-31"}
+
+
+def test_export_ecarts_comptage_responsable_xlsx_valorisation_et_regularisation(client):
+    _semencer_deux_ecarts_de_comptage(client)
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    params = {**_PERIODE_TOUTE, "format": "xlsx"}
+    reponse = client.get("/rapports/ecarts-comptage", params=params,
+                         headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    classeur, lignes = _lignes_export_ecarts_comptage(reponse)
+
+    ciment = lignes[("Ciment CIM II 50 kg", 1)]
+    assert ciment["quantite_comptee"] == 25 and ciment["quantite_attendue"] == 30
+    assert ciment["ecart"] == -5
+    assert ciment["prix_achat"] == 5000
+    assert ciment["valorisation_ecart"] == -25000
+    assert ciment["type_resolution"] == "erreur_de_comptage"
+
+    fer = lignes[("Fer à béton 8 mm", 1)]
+    assert fer["ecart"] == 2
+    assert fer["valorisation_ecart"] == 5600
+    assert not fer["type_resolution"]  # non régularisé -> cellule vide
+
+    # Feuille de synthèse : totaux cohérents avec les lignes.
+    feuille_totaux = classeur["totaux"]
+    entetes = [c.value for c in next(feuille_totaux.iter_rows(min_row=1, max_row=1))]
+    total = {entetes[i]: row[i].value for row in feuille_totaux.iter_rows(min_row=2, max_row=2)
+             for i in range(len(entetes))}
+    assert total["nb_ecarts"] == 2
+    assert total["ecart_cumule"] == -3
+    assert total["valorisation_cumulee"] == -19400
+    assert total["nb_sans_regularisation"] == 1
+
+
+def test_export_ecarts_comptage_responsable_pdf_avec_valorisation(client):
+    _semencer_deux_ecarts_de_comptage(client)
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    params = {**_PERIODE_TOUTE, "format": "pdf"}
+    reponse = client.get("/rapports/ecarts-comptage", params=params,
+                         headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    texte = _texte_pdf(reponse.content)
+    assert "valorisation_ecart" in texte
+    assert "25000" in texte
+    assert "erreur_de_comptage" in texte
+
+
+def test_export_ecarts_comptage_hors_periode_vide(client):
+    _semencer_deux_ecarts_de_comptage(client)
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    params = {"date_debut": "2000-01-01", "date_fin": "2000-01-02", "format": "xlsx"}
+    reponse = client.get("/rapports/ecarts-comptage", params=params,
+                         headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 200, reponse.text
+    classeur = load_workbook(BytesIO(reponse.content))
+    feuille = classeur["écarts de comptage"]
+    assert feuille.max_row == 1  # en-têtes seuls
+    feuille_totaux = classeur["totaux"]
+    entetes = [c.value for c in next(feuille_totaux.iter_rows(min_row=1, max_row=1))]
+    total = {entetes[i]: row[i].value for row in feuille_totaux.iter_rows(min_row=2, max_row=2)
+             for i in range(len(entetes))}
+    assert total["nb_ecarts"] == 0
+
+
+def test_export_ecarts_comptage_agent_stock_refuse(client):
+    _semencer_deux_ecarts_de_comptage(client)
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    params = {**_PERIODE_TOUTE, "format": "xlsx"}
+    reponse = client.get("/rapports/ecarts-comptage", params=params,
+                         headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 403, reponse.text
+
+
+def test_export_ecarts_comptage_agent_comptabilite_refuse(client):
+    _semencer_deux_ecarts_de_comptage(client)
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    params = {**_PERIODE_TOUTE, "format": "xlsx"}
+    reponse = client.get("/rapports/ecarts-comptage", params=params,
+                         headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 403, reponse.text
+
+
+def test_export_ecarts_comptage_format_invalide_refuse(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    params = {**_PERIODE_TOUTE, "format": "csv"}
+    reponse = client.get("/rapports/ecarts-comptage", params=params,
+                         headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 422, reponse.text
+
+
+def test_export_ecarts_comptage_dates_invalides_refusees(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    params = {"date_debut": "pas-une-date", "date_fin": "2026-10-21", "format": "xlsx"}
+    reponse = client.get("/rapports/ecarts-comptage", params=params,
+                         headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 422, reponse.text
+    params = {"date_debut": "2026-10-22", "date_fin": "2026-10-21", "format": "xlsx"}
+    reponse = client.get("/rapports/ecarts-comptage", params=params,
+                         headers=entete_autorisation(session["jeton"]))
+    assert reponse.status_code == 422, reponse.text
+
+
 
 # ---------------------------------------------------------------------------
 # /rapports/ecarts-prix-vendeurs (cycle 58, point c Q5, décidé 2026-09-18) :
