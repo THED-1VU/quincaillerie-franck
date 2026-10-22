@@ -185,6 +185,11 @@ _PORT_COURANT = [PORT_PAR_DEFAUT]
 
 
 def main() -> int:
+    # Mode serveur seul, pour les tests automatisés de l'exécutable et un
+    # démarrage sans navigateur (poste serveur) : le double-clic reste, lui,
+    # en mode kiosque par défaut.
+    sans_navigateur = "--sans-navigateur" in sys.argv[1:]
+
     print("Akuma — démarrage du serveur local...")
 
     try:
@@ -205,9 +210,10 @@ def main() -> int:
         _pause_avant_fermeture()
         return 1
 
-    threading.Thread(
-        target=_ouvrir_navigateur_apres_demarrage, args=(url,), daemon=True
-    ).start()
+    if not sans_navigateur:
+        threading.Thread(
+            target=_ouvrir_navigateur_apres_demarrage, args=(url,), daemon=True
+        ).start()
 
     print(f"Serveur démarré sur {HOTE}:{port}. Fermez cette fenêtre pour arrêter l'application.")
     adresse_lan = _adresse_lan()
