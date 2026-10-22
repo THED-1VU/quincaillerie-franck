@@ -1,5 +1,9 @@
-# CI minimale (cycle 33) — « vert/rouge » sur GitHub, sans dépendre de la
-# vérification manuelle du poste de développement.
+# CI (cycle 33, étendue au cycle 62) — « vert/rouge » sur GitHub, sans
+# dépendre de la vérification manuelle du poste de développement.
+#
+# Deux jobs indépendants : `pytest` (inchangé depuis le cycle 33) et
+# `playwright` (cycle 62 : 12 suites sur serveur et PostgreSQL réels). Un
+# échec Playwright ne masque jamais le verdict pytest, et réciproquement.
 #
 # Porté par le service PostgreSQL officiel (image postgres:17, qui inclut
 # pgcrypto et pg_trgm), mappé sur 127.0.0.1:5433 — le port sur lequel
@@ -9,13 +13,14 @@
 #   1. server/config.ini (gitignoré) — recréé avec des valeurs de TEST ;
 #   2. le mot de passe du rôle qf_app (db/outils/definir_mot_de_passe_app.sql,
 #      qui n'est jamais exécuté par les migrations, par conception).
-name: CI — tests pytest
+name: CI — pytest et Playwright
 
 on:
   push:
     branches: [main]
+  # Toutes les PR, y compris les PR empilées (base ≠ main) : une PR doit être
+  # vérifiée avant sa fusion, pas seulement après son retarget vers main.
   pull_request:
-    branches: [main]
 
 jobs:
   pytest:
@@ -88,3 +93,131 @@ jobs:
 
       - name: Suite pytest complète
         run: python -m pytest server/tests -q
+
+  # --------------------------------------------------------------------------
+  # Suites Playwright sur serveur et PostgreSQL RÉELS (cycle 62).
+  # Même topologie que le job pytest (service postgres:17 sur 5433, base et
+  # rôles recréés, config.ini de test non versionné). Les 12 suites sont
+  # exécutées séquentiellement par executer_suites_reelles.sh, avec un délai
+  # maximal par suite ; leurs journaux sont publiés en artefact si le job
+  # échoue. `affichage`/`flux` sont exclues (suites héritées du mode statique).
+  # --------------------------------------------------------------------------
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: qf_dev_local
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Installer Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: maquette/verification/package-lock.json
+
+      - name: Installer les dépendances Python
+        run: pip install -r server/requirements.txt
+
+      - name: Installer le client PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Installer les dépendances Node (lockfile)
+        working-directory: maquette/verification
+        run: npm ci
+
+      # Chromium est celui livré par la version de Playwright figée dans le
+      # lockfile : installation reproductible, sans dépendre du Chrome du
+      # runner. Les suites le choisissent via PLAYWRIGHT_CHANNEL=chromium.
+      - name: Installer Chromium (version figée par le lockfile)
+        working-directory: maquette/verification
+        run: npx playwright install --with-deps chromium
+
+      - name: Créer la base de test (schéma d'origine)
+        env:
+          PGPASSWORD: qf_dev_local
+        run: |
+          psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE quincaillerie_test;"
+          psql -h 127.0.0.1 -p 5433 -U postgres -d quincaillerie_test -v ON_ERROR_STOP=1 \
+            -f QuincaillerieFranck_Test/creation_base_donnees.sql
+
+      - name: Appliquer les migrations, le jeu d'essai et le mot de passe de qf_app
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5433
+          PGUSER: postgres
+          PGPASSWORD: qf_dev_local
+          PGDATABASE: quincaillerie_test
+        run: |
+          PSQL=psql bash db/outils/migrer.sh appliquer
+          psql -v ON_ERROR_STOP=1 -q -f db/tests/00_jeu_essai.sql
+          psql -v ON_ERROR_STOP=1 -q -v mdp="'qf_app_dev_local'" -f db/outils/definir_mot_de_passe_app.sql
+
+      - name: Préparer la configuration de test (config.ini non versionné)
+        run: |
+          cat > server/config.ini <<'EOF'
+          [database]
+          host = 127.0.0.1
+          port = 5433
+          dbname = quincaillerie_test
+          user = qf_app
+          password = qf_app_dev_local
+
+          [api]
+          secret_key = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          duree_session_minutes = 480
+          tentatives_max_par_minute = 1000
+          EOF
+
+      # Serveur et suites dans la MÊME étape : le serveur est tué par le trap
+      # quel que soit le verdict, jamais laissé orphelin entre deux étapes.
+      - name: Suites Playwright (serveur et PostgreSQL réels)
+        env:
+          SERVEUR_URL: http://127.0.0.1:8010
+          PGDATABASE_PISTE: quincaillerie_test
+          PLAYWRIGHT_CHANNEL: chromium
+        run: |
+          python -m uvicorn app.main:app --app-dir server --host 127.0.0.1 --port 8010 \
+            > rapports-playwright-serveur.log 2>&1 &
+          PID_SERVEUR=$!
+          trap 'kill "$PID_SERVEUR" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            if curl -sf -o /dev/null http://127.0.0.1:8010/sante; then break; fi
+            sleep 1
+          done
+          if ! curl -sf -o /dev/null http://127.0.0.1:8010/sante; then
+            echo "Le serveur n'a jamais répondu sur http://127.0.0.1:8010/sante" >&2
+            cat rapports-playwright-serveur.log >&2
+            exit 1
+          fi
+          bash maquette/verification/executer_suites_reelles.sh
+
+      - name: Conserver les journaux en cas d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-playwright
+          path: |
+            maquette/verification/rapports-playwright/
+            rapports-playwright-serveur.log
+          retention-days: 7
