@@ -1,4 +1,4 @@
-# Dernier résultat d'exécution — chantier C0, cycle 63
+# Dernier résultat d'exécution — chantier C0, cycle 64
 
 Exécuté le **2026-10-20**, PyInstaller **6.11.1**, Python **3.13.3**
 (venv `server/.venv/` monté sur le lockfile haché
@@ -12,6 +12,40 @@ powershell -NoProfile -ExecutionPolicy Bypass -File server\fabrication\construir
 ```
 
 ---
+
+## Cycle 64 — reconstruction avec correctif voyant (2026-10-20)
+
+Reconstruction après deux défauts trouvés PAR EXÉCUTION lors de la
+simulation d'installation complète du dossier `INSTALLATION/` (dossier
+isolé `%TEMP%\akuma_c64_sim`, base `quincaillerie_sim` sur le port 5434,
+preuves dans `INSTALLATION/PREUVE_SIMULATION.md`) :
+
+- **`server/app/routes/exploitation.py`** : la racine du dépôt était
+  calculée `Path(__file__).parent × 4` — valide dans l'arbre source, mais
+  sous PyInstaller (`sys.frozen`) elle résolvait vers `%TEMP%\_MEIPASS`…,
+  donc `%TEMP%\_pgdev\sauvegardes\` au lieu du dossier réel. Le voyant
+  « dernière sauvegarde » exigeait alors la variable
+  `QF_FICHIER_ETAT_SAUVEGARDE` (contournement documenté au cycle 63).
+  Correctif : `RACINE_DEPOT = Path(sys.executable).parent` quand
+  l'application est figée, sinon l'arbre source comme avant.
+- **`server/fabrication/construire.ps1`** : construction via
+  `python -m PyInstaller` (le shim `pyinstaller.exe` du venv sort en
+  code 1 sans aucune sortie — correctif du cycle 63, porté ici à
+  l'identique pour une fusion propre).
+
+Résultat : `Akuma.exe`, **30 200 586 octets (28,8 Mo)**.
+
+Prouvé par exécution dans la simulation : l'exe reconstruit résout le
+fichier d'état `_pgdev\sauvegardes\dernier_etat_sauvegarde.json` **à côté
+de l'exécutable** et répond `{"configure": true, ...}` avec le contenu
+réel du fichier, **sans aucune variable d'environnement** — l'exigence
+`QF_FICHIER_ETAT_SAUVEGARDE` du cycle 63 tombe pour les exe ≥ cycle 64.
+`GET /sante` → `{"etat":"ok","base":"joignable"}` ; connexion réelle
+(`POST /connexion`, jeton obtenu). Régression : pytest **306/306**.
+
+---
+
+## Cycle 63 (2026-10-20)
 
 ## Ce qui a été prouvé, par exécution réelle
 
@@ -88,3 +122,4 @@ propriétaire dans `RAPPORT AVANCEMENT/loop-state.md`, cycle 63).
 | 2026-09-20 | 30 | Akuma.exe | 26,4 Mo | C0-A : ouvre `/app/connexion.html`, maquette embarquée |
 | 2026-09-25 | 53 | Akuma.exe | 28,8 Mo | Kiosque + pile FastAPI/starlette à jour |
 | **2026-10-20** | **63** | **Akuma.exe** | **28,8 Mo** | **3 écrans 404 corrigés (clients/comptes/declarations), `--sans-navigateur`, build via `python -m PyInstaller`, 12 suites Playwright 431/431 contre l'exe** |
+| **2026-10-20** | **64** | **Akuma.exe** | **28,8 Mo** | **Voyant : racine figée → dossier de l'exe (fin de l'exigence `QF_FICHIER_ETAT_SAUVEGARDE`), vérifié en simulation d'installation complète** |
