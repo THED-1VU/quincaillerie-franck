@@ -98,7 +98,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C10 | Mobile et API web *(priorité 1)* | **58 %** | Cycle 5, complété au cycle 15, réévalué à la hausse le 2026-09-13 par la première campagne sur un vrai téléphone physique, puis **de nouveau à la hausse au cycle 24** (piste UX, travail en parallèle) : 3 des 5 constats mobiles corrigés et vérifiés par exécution réelle — UX-3 (débordement du tableau de bord : cause CSS identifiée et corrigée — `grid-template-columns` sans `minmax(0, ...)` laissait un contenu long, non couvert par le jeu d'essai de test, pousser la grille hors écran ; 0 px de débordement mesuré aux 5 largeurs avec un nom d'article réellement long et non sécable), UX-4 (taille de police minimale garantie sur les chiffres des cartes, mesurée ≥ 16px à 360/390px), UX-7 — **le plus sérieux constat de la campagne** — (coupure réseau en cours de requête : `AbortController` à 20 s autour de `fetch()`, message français affiché, formulaire réutilisable sans recharger la page). UX-6 (clavier numérique) était en réalité **déjà correct** à l'inspection (`type="number"` + `inputmode="numeric"` déjà posés) — pas un vrai défaut, confirmé par lecture directe du DOM rendu. **Honnêteté conservée sur UX-3/4** : l'identité exacte du téléphone/navigateur du testeur original n'a jamais été renseignée ; un facteur non reproductible propre à cet appareil n'est pas formellement exclu comme cause additionnelle — seule la cause CSS a pu être diagnostiquée et corrigée par exécution. **Cycle 36 (2026-09-22)** : UX-5 (saisie d'une recette au téléphone, 1 min 02 mesuré contre un objectif de 45 s) — cause structurelle probable corrigée : la carte « Saisie rapide » de `tableau-bord.html`, 5e sur 7 sous 3 listes de longueur variable, est remontée en tête **uniquement sous 700px** (`order: -1`, DOM inchangé, PC de caisse non affecté) ; prouvé par `verifier-cablage.mjs` 94/94 et un relevé Playwright dédié (ordre visuel confirmé aux deux largeurs). **La cible < 45 s elle-même reste à reconfirmer par un vrai testeur humain** — ce n'est pas une nouvelle mesure humaine, seulement une friction structurelle plausible supprimée. Une deuxième campagne sur un vrai téléphone physique reste nécessaire pour confirmer UX-3/4/5 dans les conditions réelles d'origine. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
 | C11 | Sécurité applicative | **85 %** | Cycle 3, complété au cycle 22. Le « Sécurité : 100 % » du diagnostic d'origine était un artefact (mots-clés trouvés dans le script de diagnostic lui-même) — désormais vérifié réellement : démarrage refuse `postgres` et toute clé d'exemple, requêtes systématiquement paramétrées (injection SQL testée), jetons signés HMAC vérifiés à temps constant, aucun hachage ne fuit dans aucune réponse, erreurs SQL jamais renvoyées telles quelles au client. **Cycle 22** : révocation de session (migration 018, `POST /auth/deconnexion`, `deps.obtenir_session()` vérifie la révocation à chaque requête — un jeton révoqué signature-valide et non expiré est quand même refusé, prouvé en le rejouant après déconnexion) ; en-têtes HTTP de sécurité (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) sur toute réponse. Vérifié par exécution : 4/4 tests pytest dédiés (144/144 au total, 0 régression, coût mesuré ~13 % de temps d'exécution en plus), `verifier-cablage.mjs` +3 (80/80, jeton intercepté avant déconnexion puis rejoué → refusé). Reste : limiteur de débit partagé entre processus (délibérément pas fait ce cycle — mérite sa propre vérification, pas glissé à la suite de deux autres changements de sécurité), audit plus large (dépendances, TLS — hors périmètre local de dev).  **Cycle 44 (C11, 2026-09-24)** : limiteur de débit PARTAGÉ entre processus — migration 038 `limitations_debit` + `tentative_autorisee()` (upsert atomique + `FOR UPDATE`, fenêtre glissante, `SECURITY DEFINER`) + `reinitialiser_limitation()`, `GRANT EXECUTE` à `qf_app` ; la connexion appelle la base à chaque tentative (repli en mémoire si la base ne répond pas), réinitialise le compteur après succès ; seuil 10 tentatives/minute INCHANGÉ (décision propriétaire). Prouvé : pytest 247/248 (4 dédiés, 1 flaky test_caisse non lié — passe isolément), suite SQL 000-038 + inverses verte, Playwright câblage 94/94. Reste : audit de dépendances/TLS (documenté comme limite, hors périmètre local).  **Cycle 47 (C11, 2026-09-24)** : audit de dépendances/TLS — `pip-audit` sur le lockfile : `python-multipart 0.0.20 → 0.0.31` (corrigé + lockfile régénéré + test_configuration 11/11) ; starlette 0.48.0 (fix 1.1.0, couplé FastAPI) et pytest 8.3.5 (fix 9.0.3, outil de test) documentés comme risques acceptés (décision propriétaire) avec plan de traitement après fusion du point f ; posture TLS documentée (HTTP local, hachage bcrypt en base, TLS à la passerelle du tunnel si un jour utilisé). Rapport : `RAPPORT AVANCEMENT/audit-dependances.md`.  **Cycle 49 (C11, 2026-09-25)** : montée majeure décidée — fastapi 0.117.1 → **0.141.1**, starlette 0.48.0 → **1.7.0**, pytest 8.3.5 → **9.1.1** (dernières disponibles), pydantic 2.13.5 ; validée dans un venv séparé (`server/.venv-upgrade`) sans aucune modification de code — pytest **261/261**, Playwright câblage **94/94**, `pip-audit` **« No known vulnerabilities found »** ; `requirements.in` épingle starlette en direct (fastapi la laisse libre) + lockfile régénéré avec hachages. Risques starlette/pytest du rapport d'audit : **traités**. |
 | C12 | Sauvegarde et exploitation | **92 %** | Cycle 21, complété au cycle 26 (piste C12, travail en parallèle, addendum point i — RPO cible 1 heure décidé le 2026-09-13). `sauvegarder.ps1` étendu : `-DossierDistant` (copie hors-site vérifiée par `Test-Path` après copie), `-RetentionJours` (purge glissante, testée avec des fichiers réellement vieillis), **fichier d'état daté** (`dernier_etat_sauvegarde.json`, écrasé à chaque tentative succès/échec — durcissement explicitement exigé : « une sauvegarde qui échoue en silence est pire que pas de sauvegarde »), **trace dans le journal d'événements Windows** (source dédiée si enregistrée par un administrateur, repli sur la source générique sinon — vérifié dans le XML brut de l'événement). `planifier_sauvegarde.ps1` : tâche planifiée Windows, deux déclencheurs (horaire pendant les heures d'ouverture + un déclenchement de fin de journée), **déclenchement réel prouvé** (pas seulement l'enregistrement de la tâche — fichiers produits par CE déclenchement, tâche de test supprimée après preuve). Route `GET /exploitation/derniere-sauvegarde` (réservée au responsable) : **donnée prête pour le voyant du tableau de bord**, câblée visuellement au cycle 27. Exécutable reconstruit (26 Mo, `openpyxl`/`reportlab`/`pypdf`), testé **isolé** (dossier hors dépôt) : export Excel et PDF réels, reçu de vente PDF relu avec son contenu vérifié. **Preuve de restauration non négociable** : sauvegarde avec copie hors-site puis restauration **depuis la copie hors-site elle-même** (pas le fichier local) — comptes de lignes et droits par colonne identiques, contenu réel vérifié ligne à ligne, base de preuve supprimée après coup. **Cycle 28** — trois manques identifiés comme bloquant une mise en service réelle, réglés : **chiffrement du fichier de sauvegarde** (AES-256-CBC + HMAC-SHA256, PowerShell/.NET natif, phrase de passe saisie par le responsable et jamais versionnée — inclut désormais le logo de la boutique, cf. ci-dessous) ; **sauvegarde sans session Windows ouverte** (`planifier_sauvegarde.ps1 -CompteSysteme`, tâche sous `NT AUTHORITY\SYSTEM`) ; **PostgreSQL enregistré comme service Windows** avec redémarrage automatique après un arrêt brutal (`enregistrer_service_pg.ps1`, mécanisme écrit et vérifié syntaxiquement, **enregistrement réel non exécuté faute de droits administrateur dans cette session** — reste à faire exécuter par le propriétaire). Diagnostic par exécution réelle (PostgreSQL arrêté/relancé avec autorisation explicite) : une requête vers une base injoignable restait bloquée **2 min 10 s** avant d'échouer, faute de `connect_timeout` — corrigé (`connect_timeout=5`) — et affichait une erreur technique brute ; remplacé par un message français clair, sans jargon ni code visible, satisfaisant les quatre exigences posées (base non jointe, pas la faute du vendeur, saisie non perdue, qui prévenir). Manquent : **enregistrement réel du service PostgreSQL et de la tâche planifiée sous compte SYSTEM** (scripts prêts, admin requis) ; cause racine des plantages PostgreSQL non éliminée (seul le redémarrage automatique l'est) ; alerte WhatsApp/e-mail réelle (hors de portée sans compte réel à notifier) ; test de restauration sur un second poste physique ; onduleur, mise à jour des postes (addendum i) ; un risque opérationnel découvert par exécution (disparition répétée du script de sauvegarde sur ce poste de dev, très probablement la protection anti-rançongiciel de Windows — voir `db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`) reste à surveiller sur le poste réel de la boutique. **Cycle 63 (2026-10-20, PR #80) : ce risque est devenu un fait prouvé** — la disparition répétée de `db/outils/sauvegarder.ps1` est causée par Kaspersky (AVP21.26) qui le détecte en `PDM:Trojan.Win32.Generic` (heuristique, faux positif) et le met en quarantaine à chaque exécution : détection tuant le processus à 19:03:56.412, fichier quarantainé à 19:04:20.344 (surveillance du disque au dixième de seconde près), même verdict sur une copie `H:\` dès le 2026-09-22 — un mois de disparitions enfin expliqué. Chaîne sauvegarde/restauration re-prouvée sur l'environnement du candidat : dump chiffré AES-256+HMAC produit par `sauvegarder.ps1` (358 000 o), restauration par `restaurer.ps1` vers une base NEUVE **identique à la source** (37 tables, 49 migrations max 049, mêmes comptes par table, mêmes totaux), relecture des rôles conforme (« already exists » attendus et tolérés). `restaurer.ps1` n'est pas détecté par l'AV. **Action requise du propriétaire (jamais de contournement de l'AV)** : restaurer l'objet depuis la quarantaine Kaspersky + exclusion pour le dépôt, ou signalement du faux positif ; le script reste intact dans Git (blob `3dc797b6`, `git checkout -- db/outils/sauvegarder.ps1`). |
-| C13 | Tests automatisés et qualité | **71 %** | Cycle 20, complété au **cycle 27** : **172 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **9 suites Playwright** (261 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant. `db/outils/verifier_tout.sh` enchaîne les trois couches en une seule commande. **Cycle 27** : un des deux points bloquant une CI Linux, cité depuis le cycle 20, est corrigé — `server/tests/conftest.py` cherchait `psql.exe` en dur dans `_pgdev/pgsql/bin/` (distribution portable Windows, absente de tout runner CI) ; cherche désormais `psql` sur le `PATH` en premier (`shutil.which`), ne retombant sur le chemin Windows que s'il est introuvable — comportement du poste de développement inchangé (vérifié : aucun `psql` sur son `PATH`, le repli s'active toujours), 172/172 tests toujours au vert. Reste, non traité ce cycle : `PGHOST`/`PGPORT` (5433, instance portable) et le mot de passe de test en dur restent, eux aussi, propres à ce poste — un runner CI aurait besoin de ses propres variables d'environnement ; aucun pipeline CI (fichier de workflow) n'existe encore. Couverture des parcours nécessitant une imprimante ou un téléphone réels toujours hors de portée d'une suite automatisée.  **Cycle 48 (C13, 2026-09-24)** : le seul test flaky constaté (`test_cloture_ne_se_supprime_pas_meme_en_sql_direct`) est marqué `@pytest.mark.flaky(reruns=2, reruns_delay=5)` — reprise automatique en cas d'échec transitoire, sans masquer un échec déterministe ; `pytest.ini` enregistre le marqueur ; `pytest-rerunfailures==16.0` ajouté au lockfile avec hachages. Prouvé : lock 37 paquets / 0 sans hachage, test_caisse 19/19. Aucune autre suite de test touchée.  **Cycle 52 (C13, 2026-09-25)** : chasse aux trous de couverture — `verifier-stock-reel.mjs` RÉÉCRIT (il testait encore la casse et le retour client à un seul temps et affirmait que l'agent stock n'a pas de bouton Casse — contredisait le point f/chantier A, suite rouge invisible car la CI n'exécute que pytest) : 38/38 dont déclarations sans effet stock + validation sur `declarations.html` (casse décrémente, retour revendable réintègre, offert décrémente) ; nouveau `verifier-exploitation-reel.mjs` (12/12) : voyant sauvegarde par la VRAIE route `/exploitation/derniere-sauvegarde` (le câblage mimait le fichier), carte Ventes du jour, carte Articles offerts, logo téléversé/affiché/supprimé depuis l'écran, 403 agent stock ; ajouté à `verifier_tout.sh` et `package.json` ; `verifier-routes-appelees.mjs` 55/55.  **Cycle 57 (C13, 2026-10-20)** : invariant comptable global — section 18 de `01_protections.sql`, 12 contrôles `INV` qui BALAYENT toutes les ventes/transactions/créances par simple lecture au lieu de contrôler chaque fonction isolément (le piètre précédent : la « dépense fantôme » de `annuler_vente` n'a été vue qu'au cycle 54). Règle directrice : une vente ne fait jamais sortir plus d'espèces qu'elle n'en a encaissées (recette + règlements FIFO, même formule que 047) ; plus unicité recette, jamais de recette sur crédit, recette = total_ttc, annulations adossées et exactes, créance annulée si vente crédit annulée, remboursements adossés à un retour validé et bornés par la vente. Preuve de détection : 2 violations plantées volontairement (dépense fantôme 999 999, recette sur vente à crédit) → 2 détectées. 178/178 SQL, suite complète verte, pytest 297/297. PR #74. |
+| C13 | Tests automatisés et qualité | **73 %** | Cycle 20, complété au **cycle 27** : **172 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **9 suites Playwright** (261 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant. `db/outils/verifier_tout.sh` enchaîne les trois couches en une seule commande. **Cycle 27** : un des deux points bloquant une CI Linux, cité depuis le cycle 20, est corrigé — `server/tests/conftest.py` cherchait `psql.exe` en dur dans `_pgdev/pgsql/bin/` (distribution portable Windows, absente de tout runner CI) ; cherche désormais `psql` sur le `PATH` en premier (`shutil.which`), ne retombant sur le chemin Windows que s'il est introuvable — comportement du poste de développement inchangé (vérifié : aucun `psql` sur son `PATH`, le repli s'active toujours), 172/172 tests toujours au vert. Reste, non traité ce cycle : `PGHOST`/`PGPORT` (5433, instance portable) et le mot de passe de test en dur restent, eux aussi, propres à ce poste — un runner CI aurait besoin de ses propres variables d'environnement ; aucun pipeline CI (fichier de workflow) n'existe encore. Couverture des parcours nécessitant une imprimante ou un téléphone réels toujours hors de portée d'une suite automatisée.  **Cycle 48 (C13, 2026-09-24)** : le seul test flaky constaté (`test_cloture_ne_se_supprime_pas_meme_en_sql_direct`) est marqué `@pytest.mark.flaky(reruns=2, reruns_delay=5)` — reprise automatique en cas d'échec transitoire, sans masquer un échec déterministe ; `pytest.ini` enregistre le marqueur ; `pytest-rerunfailures==16.0` ajouté au lockfile avec hachages. Prouvé : lock 37 paquets / 0 sans hachage, test_caisse 19/19. Aucune autre suite de test touchée.  **Cycle 52 (C13, 2026-09-25)** : chasse aux trous de couverture — `verifier-stock-reel.mjs` RÉÉCRIT (il testait encore la casse et le retour client à un seul temps et affirmait que l'agent stock n'a pas de bouton Casse — contredisait le point f/chantier A, suite rouge invisible car la CI n'exécute que pytest) : 38/38 dont déclarations sans effet stock + validation sur `declarations.html` (casse décrémente, retour revendable réintègre, offert décrémente) ; nouveau `verifier-exploitation-reel.mjs` (12/12) : voyant sauvegarde par la VRAIE route `/exploitation/derniere-sauvegarde` (le câblage mimait le fichier), carte Ventes du jour, carte Articles offerts, logo téléversé/affiché/supprimé depuis l'écran, 403 agent stock ; ajouté à `verifier_tout.sh` et `package.json` ; `verifier-routes-appelees.mjs` 55/55.  **Cycle 57 (C13, 2026-10-20)** : invariant comptable global — section 18 de `01_protections.sql`, 12 contrôles `INV` qui BALAYENT toutes les ventes/transactions/créances par simple lecture au lieu de contrôler chaque fonction isolément (le piètre précédent : la « dépense fantôme » de `annuler_vente` n'a été vue qu'au cycle 54). Règle directrice : une vente ne fait jamais sortir plus d'espèces qu'elle n'en a encaissées (recette + règlements FIFO, même formule que 047) ; plus unicité recette, jamais de recette sur crédit, recette = total_ttc, annulations adossées et exactes, créance annulée si vente crédit annulée, remboursements adossés à un retour validé et bornés par la vente. Preuve de détection : 2 violations plantées volontairement (dépense fantôme 999 999, recette sur vente à crédit) → 2 détectées. 178/178 SQL, suite complète verte, pytest 297/297. PR #74. **Cycle 61 (C13, 2026-10-20)** : régression complète après fusion des PR #74/#75/#73/#76/#77 — pytest **306/306** sur base isolée, suite SQL **202 protections + 61 habilitations + 6 concurrence**, aller-retour des migrations 000→049 (10 lignes de diff cosmétiques connues), Playwright **431 contrôles / 12 suites / 0 échec**. Trois défauts réels de l'outillage de test trouvés par exécution et corrigés, non masqués : rapprochement routes/`*` de requête (faux positif), INSERT multi-site obsolète dans l'essai d'échappement HTML, navigateur jamais fermé dans la suite comptes (hang après 26/26). Suites statiques héritées `affichage`/`flux` documentées inutilisables sur écrans connectés. Intégration Playwright dans la CI : tâche suivante (PR dédiée). **Cycle 62 (C13, 2026-10-20)** : les 12 suites Playwright sont désormais EXÉCUTÉES PAR GITHUB ACTIONS à chaque PR — job `playwright` indépendant du job `pytest`, postgres:17 isolé sur 5433, base recréée (000→049 + jeu d'essai + qf_app), config.ini de test généré, uvicorn 8010 démarré et tué dans la même étape. Installation reproductible : `package-lock.json` Playwright 1.63.0 enfin VERSIONNÉ (il était gitignoré, rendant `npm ci` impossible), Chromium figé par le lockfile (`PLAYWRIGHT_CHANNEL=chromium`), cache npm sur le lockfile. `executer_suites_reelles.sh` : 12 suites, délai 600 s par suite, journal + synthèse par suite, 40 dernières lignes en échec ; artefact `rapports-playwright` conservé 7 jours si échec ; `pull_request` sans filtre de base pour couvrir les PR empilées. Preuves : run GitHub **39459056591 SUCCESS** — playwright **12/12 suites, 431 contrôles, 0 échec** en 4 min 55 s, pytest 7 min 59 s ; local après correctifs stock **49/49** et inventaire **17/17**, exit 0. Deux courses réelles de l'outillage trouvées et corrigées par exécution : (1) inventaire — le clic « Matin » relance chargerListe() et la liste « soir » était remplacée pendant les clics, le comptage partait sur un autre article (14/17 : écart +21 sur « Article rare », « Ciment » non compté), corrigé par attente du GET + networkidle ; (2) stock — `appeler()` affiche « succès » PUIS recharge la liste, le contrôle « la mention quantités décimales a disparu » lisait l'ancienne liste (1 échec/49 sous charge), corrigé par networkidle dans attendreSucces(). Portabilité Linux : psql du PATH hors poste Windows, canal navigateur surchargeable, import existsSync manquant. PR #79. |
 | C14 | Documentation et livrables | **65 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration.  **Cycle 45 (C14, 2026-09-24)** : livrables CDC §7 tous présents et documentés — code source (dépôt Git, `OWNERSHIP.md`), schéma + migrations 000-038 (+ inverses), scripts de fabrication (`server/fabrication/construire.ps1` + `.spec` PyInstaller), sauvegarde/restauration (`db/outils` + guide, RPO 1 h / RTO 2 h / AES-256), jeux de tests (pytest 248, suite SQL, Playwright), CI GitHub Actions, documentation d'installation et d'exploitation ; `README.md` racine remis à jour (état cycle 44 + liste des livrables §7 + résumé opérationnel). Reste : étiqueter une version (tag) lors de la première livraison réelle, clause contractuelle d'escrow (hors périmètre technique, point l).  **Cycle 50 (C14, 2026-09-25)** : premier tag de version **`v0.1.0`** posé et poussé sur `main` (commit de la montée majeure C11, moyenne ≈ 74 %). Reste : clause contractuelle d'escrow (hors périmètre technique, point l). |
 
 **Moyenne indicative après le cycle 63 (exécutable candidat + sauvegarde/restauration, PR #80) : ≈ 78 %** (C0 84, C1 92, C2 77, C3 77, C4 92, C5 81, C6 85, C7 65, C8 72, C9 60, C10 58, C11 85, C12 95, C13 76, C14 65). C13 est compté à 76 tel que documenté par le cycle 62 (PR #79, en attente de fusion) ; la PR #80 se fusionne après #78 et #79 pour garder ce référentiel cohérent.
@@ -3738,6 +3738,166 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
 
 ---
 
+### Cycle 61 — Régression complète après fusion et réparation des outils de test (2026-10-20)
+
+- **OBJECTIF** : après la fusion autorisée des cinq PR (#74, #75, #73,
+  #76, #77), synchroniser `main`, rejouer la totalité des preuves
+  (pytest, suite SQL sur base isolée, toutes les suites Playwright),
+  vérifier l'intégrité et la réversibilité des migrations jusqu'à 049,
+  corriger les régressions et n'actualiser les captures qu'après
+  vérification.
+- **FUSIONS EFFECTUÉES (autorisées, sans force)** : #74 (invariant
+  comptable, `f014782`) → #75 (écarts de prix vendeurs, `b182b89` ;
+  conflits documentaires résolus après retarget, aucun contenu unique
+  de la branche perdu — vérifié) → #73 (rejeu crédit, `6589fac`) → #76
+  (remises, `a572fcb` ; conflit dans `verifier-vente-reelle.mjs` résolu
+  en conservant le helper UTF-8 et le contrôle du paramètre crédit,
+  avec une assertion explicite supplémentaire) → #77 (case décimale,
+  `c1784c6` ; conflit dans `01_protections.sql` résolu en composant les
+  sections 18/19 de `main` puis la section 20). Chaque fusion : CI
+  GitHub verte, aucune protection contournée, aucun force push.
+  `main` synchronisé sur `c1784c6` ; travail du cycle sur
+  `cycle-61-regression-complete`.
+- **PR #60 EXAMINÉE SÉPARÉMENT (non fusionnée, non fermée)** :
+  documentation seule (+32/−1), CI verte, corrige l'addendum (chantier C
+  point a livré aux cycles 34-35). **Recommandation : fusionner**
+  (aucun risque code/base) — décision `BLOCKED_OWNER`.
+- **TESTS (exécution réelle)** :
+  - pytest complet sur base isolée `qf_c61_pytest` (000→049) :
+    **306/306, exit 0** en 733,80 s.
+  - suite SQL complète sur base isolée `qf_c61_pw` : **exit 0** —
+    protections **202/202**, habilitations **61/61**, concurrence
+    **6/6**, aller-retour des migrations 000→049 avec les **10 lignes
+    de diff cosmétiques connues** (extensions, ordre de colonnes).
+  - Playwright, serveur et PostgreSQL réels, **12 suites, 431
+    contrôles, 0 échec** : routes 62/62, câblage 94/94, vente 49/49,
+    stock 49/49, rapports 39/39, inventaire 17/17, UX 27/27, comptes
+    26/26, caisse 24/24, RH 21/21, exploitation 12/12, échappement
+    11/11.
+- **ANOMALIES CORRIGÉES, NON MASQUÉES** (défauts de l'outillage de
+  test, révélés par l'exécution post-fusion) :
+  1. `verifier-routes-appelees.mjs` — faux positif sur
+     `appelApi("/rapports/ecarts-prix-vendeurs" + suffixe)` : le `*`
+     final collé au chemin ne peut représenter qu'une chaîne de
+     requête, pas un segment. Le rapprochement accepte désormais le
+     chemin instancié et le chemin littéral ; **62/62**, liste
+     d'orphelines ramenée à 4 routes réellement sans écran
+     (changer-mot-de-passe, déverrouiller, GET /transactions, annuler
+     une vente).
+  2. `verifier-echappement-html.mjs` — INSERT hérité d'avant le
+     multi-site (`articles.quantite_stock`/`site_id` supprimés par
+     026-031) : réécrit en article + `stocks_sites` ; **11/11**.
+  3. `verifier-comptes-reel.mjs` — les 26 contrôles passaient mais le
+     processus ne rendait jamais la main (navigateur jamais fermé) :
+     reproduit deux fois (timeout 240 s, exit 124) avant correction ;
+     `close()` + `process.exit()` ajoutés ; **26/26, exit 0**.
+- **EXCLUSIONS DOCUMENTÉES** : `verifier-affichage.mjs` (20/20
+  contrôles de mise en page mais exit 1 : `/configuration/logo` en 404
+  en mode statique — les écrans connectés exigent le backend, limite
+  connue depuis le cycle 59) et `verifier-flux.mjs` (connexion réelle
+  `/auth/connexion` impossible en mode statique) : suites héritées du
+  mode maquette, inutilisables sur écrans connectés ; non comptées
+  comme régressions, aucune assertion masquée.
+- **CAPTURES** : **31 captures régénérées uniquement après suites
+  vertes**, par le générateur canonique (`verifier-cablage.mjs`) —
+  tableau-bord 5, inventaire 5, ux-corrections 5, RH 5, clôture 5,
+  rapports 2, vente 2, stock 1, tableau-bord-exploitation 1.
+- **RISQUES RÉSIDUELS** : suites statiques héritées non exécutables
+  (documentées) ; les captures `stock-*` montrent les articles du jeu
+  d'essai (préexistant) ; aucune campagne UX humaine ; Playwright
+  reste hors CI (tâche suivante, PR dédiée).
+- **SCORE AVANT → APRÈS** : C13 **71 % → 73 %** (+2). Justification :
+  trois défauts réels de l'outillage de test trouvés et corrigés par
+  exécution, chaîne de preuve complète rejouée après fusion des cinq
+  PR ; la montée reste mesurée car Playwright n'est pas encore exigé
+  par la CI. Moyenne indicative ≈ **77 %** (76,8 arrondi).
+- **STATUT** : `READY_FOR_REVIEW` (branche `cycle-61-regression-complete`).
+  **PROCHAINE TÂCHE** : intégration de Playwright dans GitHub Actions
+  (PR dédiée, installation reproductible, environnement isolé,
+  rapports d'échec conservés).
+- **VALIDATION HUMAINE REQUISE** : fusion de la PR du cycle 61 ;
+  décision sur la PR #60 (`BLOCKED_OWNER`).
+
+---
+
+### Cycle 62 — Intégration de Playwright dans GitHub Actions (2026-10-20)
+
+- **OBJECTIF** : exécuter les 12 suites Playwright « serveur réel » dans
+  GitHub Actions, avec installation reproductible, environnement isolé et
+  conservation des rapports d'échec, sans dégrader le job pytest.
+- **LIVRÉ** (PR #79, branche `ci-playwright-actions`, empilée sur le
+  cycle 61) :
+  - Job `playwright` **indépendant** du job `pytest` : un échec de l'un ne
+    masque jamais le verdict de l'autre ; le job pytest existant est
+    inchangé.
+  - Environnement isolé : service `postgres:17` sur 5433, base
+    `quincaillerie_test` recréée depuis `creation_base_donnees.sql`, puis
+    migrations 000→049, jeu d'essai et mot de passe `qf_app` (prérequis non
+    versionnés recréés comme pour pytest) ; `config.ini` de TEST généré ;
+    uvicorn sur 127.0.0.1:8010, démarré et tué dans la même étape (trap),
+    avec attente réelle de `/sante` avant exécution.
+  - Installation reproductible : `maquette/verification/package-lock.json`
+    Playwright 1.63.0 **versionné** (il était gitignoré, ce qui rendait
+    `npm ci` impossible), `npm ci` (jamais `npm install`), Chromium **figé
+    par le lockfile** (`npx playwright install --with-deps chromium`,
+    `PLAYWRIGHT_CHANNEL=chromium`), cache npm sur le lockfile.
+  - Exécution : `maquette/verification/executer_suites_reelles.sh` — 12
+    suites séquentielles, **délai de 600 s par suite**, journal et synthèse
+    par suite, 40 dernières lignes en échec ; `timeout-minutes: 60` sur le
+    job ; artefact `rapports-playwright` (journaux + log serveur) conservé
+    **7 jours** en cas d'échec.
+  - Déclenchement : `pull_request` **sans filtre de base** — les PR
+    empilées (base ≠ main) sont vérifiées avant fusion, pas seulement après
+    retarget.
+  - Portabilité Linux : `psql` du PATH hors poste Windows (`PSQL`
+    surchargeable), canal navigateur surchargeable, import `existsSync`
+    manquant dans la suite caisse.
+- **TESTS (exécution réelle)** :
+  - **CI GitHub, run 39459056591 (commit 1b9c668, PR #79) : SUCCESS.**
+    Job `playwright` : **4 min 55 s**, **12/12 suites, 431 contrôles,
+    0 échec** (routes 62, câblage 94, vente 49, stock 49, rapports 39,
+    inventaire 17, UX 27, comptes 26, caisse 24, RH 21, exploitation 12,
+    échappement 11). Job `pytest` : **7 min 59 s**, succès.
+  - Local (poste Windows, base à 049, serveur 8010) : runner complet
+    **11/12** — seul stock rouge (la course ci-dessous, corrigée) ; après
+    correctifs, exécutions unitaires réelles : inventaire **17/17, exit 0**
+    et stock **49/49, exit 0**.
+- **ANOMALIES CORRIGÉES, NON MASQUÉES** (toutes révélées par exécution) :
+  1. **Course inventaire** : le clic « Matin » relance `chargerListe() `;
+     sans attendre le GET, la liste « soir » encore affichée était
+     remplacée pendant les clics suivants. Preuve : comptage de 22 enregistré
+     sur « Article rare » (écart +21) et « Ciment » resté non compté —
+     **14/17**. Correctif `choisirMatin()` (attente de la réponse du GET +
+     networkidle) → **17/17**.
+  2. **Course stock** : `appeler()` affiche « succès » PUIS recharge la
+     liste ; le contrôle « la mention quantités décimales a disparu »
+     lisait l'ANCIENNE liste alors que la base était correcte — **1
+     échec/49** sous charge. Correctif : `attendreSucces()` attend
+     networkidle (page sans sondage périodique) → **49/49**.
+  3. **Lockfile Playwright gitignoré** : `npm ci` impossible et
+     installation non reproductible ; exception `.gitignore` explicite et
+     lockfile versionné.
+  4. **Portabilité Linux** : `psql` en dur sur `_pgdev` (absent en CI),
+     canal `chrome` imposé, import `existsSync` manquant (caisse).
+  5. **Logo factice** `maquette/verification/_logo_test_c13.png` généré par
+     la suite exploitation : désormais ignoré (artefact d'exécution).
+- **RISQUES RÉSIDUELS** : `verifier-cablage.mjs` régénère les captures à
+  chaque exécution (diffs locaux réversés, non commités dans cette PR) ;
+  Playwright dépend du quota de runners GitHub ; les suites statiques
+  `affichage`/`flux` restent exclues et documentées.
+- **SCORE AVANT → APRÈS** : C13 **73 % → 76 %** (+3). Justification :
+  Playwright n'est plus seulement rejoué à la main mais **exigé par la CI à
+  chaque PR** (431 contrôles sur base isolée, rapports conservés,
+  installation reproductible) ; deux courses réelles de l'outillage ont été
+  trouvées et corrigées par exécution. Pas de montée supplémentaire : la
+  couverture fonctionnelle est inchangée, les suites statiques restent hors
+  CI et la campagne UX humaine reste due. Moyenne exacte = **77,0 %**.
+- **STATUT** : `READY_FOR_REVIEW` (PR #79). CI verte sur le commit de code
+  `1b9c668`.
+- **VALIDATION HUMAINE REQUISE** : fusion de la PR #79 après celle du
+  cycle 61 (retarget sur `main`) ; décision PR #60 (`BLOCKED_OWNER`).
+
+---
 ### Cycle 63 — Phase 2 : exécutable candidat et sauvegarde/restauration vérifiées — 2026-10-20
 
 - **CYCLE** : 63. **DATE** : 2026-10-20. **PHASE** : 2 (finalisation
@@ -3824,7 +3984,6 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
   exclusion) ; toute décision de mise en production.
 
 ---
-
 ## Tableau de pilotage — reprise du 2026-10-20 (après cycle 63)
 
 | Cycle | Chantier | Tâche | Responsable | Statut | Tests | Dépendance | Prochaine action |

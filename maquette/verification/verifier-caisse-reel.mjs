@@ -22,6 +22,7 @@ import { chromium } from "playwright";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 const RACINE_DEPOT = resolve(ICI, "..", "..");
@@ -31,7 +32,8 @@ const SERVEUR_URL = process.env.SERVEUR_URL || "http://127.0.0.1:8010";
 // TRAVAIL_PARALLELE.md) : chaque piste rejoue ce script sur SA PROPRE base
 // (jamais quincaillerie_test) sans modifier les scripts communs aux trois.
 const PGDEV = resolve(process.env.PGDEV_RACINE || RACINE_DEPOT, "_pgdev");
-const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
+// `_pgdev` n'existe que sur le poste Windows ; en CI, `psql` est sur le PATH.
+const PSQL = process.env.PSQL || (existsSync(resolve(PGDEV, "pgsql", "bin", "psql.exe")) ? resolve(PGDEV, "pgsql", "bin", "psql.exe") : "psql");
 const BASE_DB = process.env.PGDATABASE_PISTE || "quincaillerie_test";
 
 const MDP_RESPONSABLE = "ResponsableTest123";
@@ -107,7 +109,7 @@ const jourComptoir = psqlValeur(`SELECT date_encaissement::date FROM ventes WHER
 console.log(`Vente Magasin (site 1) : ${venteMagasin.total_ttc} FCFA le ${jourMagasin}`);
 console.log(`Vente Comptoir (site 2) : ${venteComptoir.total_ttc} FCFA le ${jourComptoir}\n`);
 
-const navigateur = await chromium.launch({ channel: "chrome" });
+const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });
 const CAPTURES = resolve(ICI, "..", "captures") + "/";
 
 async function mesurerMiseEnPage(page, nomEcran, largeur) {
