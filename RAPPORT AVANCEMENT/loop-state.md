@@ -3825,6 +3825,40 @@ du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
   re-vérifier les numéros), décisions D1-D13. **PROCHAINE TÂCHE** :
   cycle 66 — audit exhaustif C0-C14 → `REGISTRE_ECARTS_100.md`.
 
+### Cycle 66 — Audit C0–C14 : registre exhaustif des écarts (REGISTRE_ECARTS_100.md)
+
+- **LIVRABLE** : `REGISTRE_ECARTS_100.md` (racine) — 40 écarts recensés avec les
+  13 champs imposés (id, chantier, exigence source, état, preuve, gravité
+  P0-P3, risque métier, correction, dépendances, responsable, critère
+  d'acceptation, tests requis, statut). **Zéro écart P0** — intégrité,
+  comptabilité et sécurité non compromises sur aucun chantier.
+- **PREUVES NOUVELLES (exécutées ce cycle, base d'audit fraîche)** :
+  `quincaillerie_c66` reconstruite de zéro (schéma d'origine + migrations
+  000-050 + jeu d'essai — 50 migrations appliquées) puis détruite après
+  capture des preuves. (1) `parametres` figé : 5 lignes `a_decider=TRUE`
+  restantes (numéro contribuable, téléphone, seuil plancher, seuil écart
+  caisse, tentatives) + plafond C7 à confirmer par écrit ; (2) **dérive
+  découverte par l'audit** : `seuil_remise_validation_pct` (migration 037)
+  absent du jeu d'essai qui réamorce `parametres` — aucun impact fonctionnel
+  (le code gère l'absence, `ventes.py:263-267`), mais dérive test/production
+  à corriger (C1-04, P3) ; (3) modèle point a vérifié : `articles` sans
+  `site_id`, PK `(article_id, site_id)` de `stocks_sites` (C4-01 CLOS) ;
+  (4) D3 confirmé par relecture : `utilisateur_caisse_id` toujours = compte
+  responsable (`ventes.py:210-227`, commentaire in-code) ; (5) captures du
+  cycle 60 revérifiées : régénérées le 2026-10-20, contenu disque identique
+  au versionné (`git status` propre) → TODO soldé (C8-02 CLOS).
+- **SYNTHÈSE** : 38 écarts ouverts = 17 P1 (11 BLOQUE_PROPRIETAIRE + 6
+  BLOQUE_TEST_HUMAIN), 14 P2, 7 P3 ; **10 actionnables par le développement**
+  (C0-04, C1-04, C4-02, C7-02, C7-03, C8-01, C11-02, C12-03, C13-02, C14-03)
+  répartis sur les lots 67+ ; tableau des décisions D1–D13 croisé avec les
+  écarts.
+- **SCORES** : inchangés (audit sans chantier) — aucun score ne bouge sans
+  preuve ; le registre est la feuille de route des cycles 67+ (lots A à E).
+- **STATUT** : READY_FOR_REVIEW (PR #83 à créer). **BLOCAGES SIGNALÉS, NON
+  LEVÉS** : fusions PR #78→#82 (+#83), décisions D1-D13, campagnes humaines,
+  Kaspersky (D11). **PROCHAINE TÂCHE** : cycle 67 — lot A (C2, C3, C4, C5,
+  C6).
+
 ---
 
 ### Cycle 61 — Régression complète après fusion et réparation des outils de test (2026-10-20)
@@ -4167,6 +4201,7 @@ du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
 | 64 | C0 | Dossier d'installation (`INSTALLATION/` : README 9 étapes, checklist J-1, preuve) + `migrer.ps1` (parité bash prouvée) + correctif voyant déployé (`RACINE_DEPOT` figé → dossier de l'exe) + exe reconstruit | QODER | READY_FOR_REVIEW | simulation réelle en dossier isolé (initdb 5434, 50 migrations, exe lancé : `/sante` ok, connexion jeton réel, voyant sans variable d'env.) ; parité migrer.ps1≡migrer.sh 34/3/118/49 ↔ 14/0/67 ; pytest **306/306** | PR #78→#79→#80 (journal inclut #80, union) | fusion PR #81 après #78/#79/#80 ; installation réelle = autorisation propriétaire |
 | — | C0/C14 | Protocoles d'import stock/créances + recette fonctionnelle + dossier de décision de mise en production | QODER | TODO | — | PR #81 | **prochaine tâche** ; aucun import réel sans autorisation |
 | 65 | C8/C2 | Matrice complète des rôles (API 56 routes, SQL 10 sondes, UI 30 contrôles + 22 captures) + migration 050 : obligation de changement du mot de passe provisoire appliquée à chaque requête | QODER | READY_FOR_REVIEW | matrice 1/1 zéro divergence, SQL 10/10, force 3/3, Playwright 30/30, régression complète voir cycle 65 §4 | — | fusion PR #82 par le propriétaire |
+| 66 | C0-C14 | Audit exhaustif des écarts → `REGISTRE_ECARTS_100.md` : 40 écarts (38 ouverts : 17 P1, 14 P2, 7 P3 ; 10 dev-actionnables ; 2 CLOS par vérification) + dérive seed C1-04 + D3 confirmé + modèle point a vérifié | QODER | READY_FOR_REVIEW | base d'audit reconstruite (50 migrations rejouées), paramètres figés, `git status` captures propre | — | fusion PR #83 par le propriétaire |
 | — | C13/C14 | Régression complète : toutes les suites Playwright sur base isolée + rafraîchissement des captures obsolètes (tableau-bord/inventaire) | QODER | TODO | — | — | **prochaine tâche Phase 2** |
 | — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
 | — | C5/C6 | Décisions métier (HT/TTC, paiements mixtes, seuil caisse…) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire |
