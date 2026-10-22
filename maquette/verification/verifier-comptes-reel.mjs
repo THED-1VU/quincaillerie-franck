@@ -243,4 +243,8 @@ for (const largeur of [360, 390, 768, 1366, 1920]) {
 console.log(`\n== ${ok.length}/${ok.length + ko.length} contrôles réussis ==`);
 for (const libelle of ok) console.log(`  OK  ${libelle}`);
 for (const libelle of ko) console.log(`  KO  ${libelle}`);
-if (ko.length) process.exit(1);
+// Sans fermeture explicite du navigateur, Node restait vivant après un
+// succès (constaté au cycle 61 : tous les contrôles OK, processus bloqué,
+// code de sortie jamais rendu). Les autres suites appellent déjà close().
+await navigateur.close();
+process.exit(ko.length ? 1 : 0);
