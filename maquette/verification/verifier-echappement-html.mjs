@@ -31,7 +31,8 @@ if (!existsSync(PGDEV)) {
   // principal, deux niveaux au-dessus de _worktrees/<piste>/.
   PGDEV = resolve(RACINE_DEPOT, "..", "..", "_pgdev");
 }
-const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
+// `_pgdev` n'existe que sur le poste Windows ; en CI, `psql` est sur le PATH.
+const PSQL = process.env.PSQL || (existsSync(resolve(PGDEV, "pgsql", "bin", "psql.exe")) ? resolve(PGDEV, "pgsql", "bin", "psql.exe") : "psql");
 
 const MDP_AGENT_STOCK = "AgentStockTest123";
 const MDP_AGENT_COMPTA = "AgentComptaTest123";
@@ -70,11 +71,16 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_RESPONSABLE}', gen_salt('bf', 12)) WHERE identifiant='resp';`);
 // Article du site 1, stock 1 : une vente de 3 dessus produit un écart
 // affiché au tableau de bord, avec ce nom malveillant.
-psql(`INSERT INTO articles (nom, categorie, unite, prix_achat, prix_vente, quantite_stock, seuil_alerte, site_id, fournisseur_id)
-       VALUES ('${NOM_MALVEILLANT.replace(/'/g, "''")}', 'Essai', 'pièce', 1000, 2000, 1, 1, 1, 1);`);
+// Schéma multi-site depuis les migrations 026-031 : le stock et le seuil
+// vivent dans `stocks_sites`, plus dans `articles` (l'ancienne insertion,
+// antérieure au cycle 35, empêchait cette suite de démarrer).
+psql(`INSERT INTO articles (id, nom, categorie, unite, prix_achat, prix_vente)
+       VALUES (991, '${NOM_MALVEILLANT.replace(/'/g, "''")}', 'Essai', 'pièce', 1000, 2000);
+     INSERT INTO stocks_sites (article_id, site_id, quantite_stock, seuil_alerte)
+       VALUES (991, 1, 1, 1);`);
 console.log("Base prête.\n");
 
-const navigateur = await chromium.launch({ channel: "chrome" });
+const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });
 
 async function seConnecter(page, identifiant, motDePasse) {
   await page.goto(`${SERVEUR_URL}/app/connexion.html`, { waitUntil: "networkidle" });

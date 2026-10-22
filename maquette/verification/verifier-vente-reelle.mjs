@@ -43,7 +43,8 @@ if (!existsSync(PGDEV)) {
   // principal, deux niveaux au-dessus de _worktrees/<piste>/.
   PGDEV = resolve(RACINE_DEPOT, "..", "..", "_pgdev");
 }
-const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
+// `_pgdev` n'existe que sur le poste Windows ; en CI, `psql` est sur le PATH.
+const PSQL = process.env.PSQL || (existsSync(resolve(PGDEV, "pgsql", "bin", "psql.exe")) ? resolve(PGDEV, "pgsql", "bin", "psql.exe") : "psql");
 
 const MDP_AGENT_COMPTA = "AgentComptaTest123";
 const MDP_RESPONSABLE = "ResponsableTest123";
@@ -85,7 +86,7 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_RESPONSABLE}', gen_salt('bf', 12)) WHERE identifiant='resp';`);
 console.log("Base prête.\n");
 
-const navigateur = await chromium.launch({ channel: "chrome" });
+const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });
 
 async function seConnecter(page, identifiant, motDePasse) {
   await page.goto(`${SERVEUR_URL}/app/connexion.html`, { waitUntil: "networkidle" });
