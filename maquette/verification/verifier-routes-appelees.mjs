@@ -261,10 +261,25 @@ verifier(appeles.length > 20, `au moins 20 appels trouvés dans la maquette (obt
 // Un gabarit appelé (avec ses `*`) doit correspondre à AU MOINS une route
 // réelle : on instancie un chemin concret (les `*` remplacés par "1") et on
 // le teste contre chaque regex de route réelle, même méthode.
+//
+// Cas trouvé au cycle 61 : `appelApi("/rapports/ecarts-prix-vendeurs" +
+// suffixe)` (cycle 58), où `suffixe` vaut "" ou "?date_debut=...". Le `*`
+// final colle au chemin littéral, sans slash : il ne peut PAS représenter un
+// segment de chemin supplémentaire (ceux-ci sont toujours précédés d'un
+// slash), seulement une chaîne de requête optionnelle. On teste donc aussi
+// la variante sans ce `*` final, sinon la route réelle était déclarée
+// « inexistante » ET « jamais appelée » alors que les deux existaient.
+function cheminsConcrets(gabarit) {
+  const chemins = [gabarit.replace(/\*/g, "1")];
+  if (/[^/]\*$/.test(gabarit)) chemins.push(gabarit.slice(0, -1));
+  return chemins;
+}
+
 const dejaSignales = new Set();
 for (const appel of appeles) {
-  const concret = appel.gabarit.replace(/\*/g, "1");
-  const correspond = reelRegex.some((r) => r.methode === appel.methode && r.regex.test(concret));
+  const correspond = cheminsConcrets(appel.gabarit).some((concret) =>
+    reelRegex.some((r) => r.methode === appel.methode && r.regex.test(concret))
+  );
   const cle = `${appel.methode} ${appel.gabarit}`;
   if (dejaSignales.has(cle)) continue; // déjà vérifié depuis un autre écran
   dejaSignales.add(cle);
@@ -278,9 +293,9 @@ for (const appel of appeles) {
 // le contrôle ci-dessus, dans l'autre sens : un appel couvre une route
 // réelle si le chemin concret de l'appel matche le gabarit (regex) de
 // cette route.
-const appelesRegex = appeles.map((a) => ({ ...a, concret: a.gabarit.replace(/\*/g, "1") }));
+const appelesRegex = appeles.map((a) => ({ ...a, concrets: cheminsConcrets(a.gabarit) }));
 const orphelines = reelRegex.filter((r) =>
-  !appelesRegex.some((a) => a.methode === r.methode && r.regex.test(a.concret))
+  !appelesRegex.some((a) => a.methode === r.methode && a.concrets.some((c) => r.regex.test(c)))
 );
 
 console.log(`\nRoutes réelles : ${reel.length}. Appels distincts trouvés dans la maquette : ${dejaSignales.size}.\n`);
