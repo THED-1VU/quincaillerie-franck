@@ -274,9 +274,13 @@ def historique_comptages(
             cur.execute(
                 """
                 SELECT c.id, a.nom AS article_nom, c.site_id, c.moment,
-                       c.quantite_comptee, c.quantite_attendue, c.ecart, c.date_comptage
+                       c.quantite_comptee, c.quantite_attendue, c.ecart, c.date_comptage,
+                       r.type_resolution AS regularisation_type,
+                       r.motif AS regularisation_motif,
+                       r.date_regularisation AS regularisation_date
                   FROM comptages_stock c
                   JOIN articles a ON a.id = c.article_id
+                  LEFT JOIN regularisations_ecarts_comptage r ON r.comptage_id = c.id
                  WHERE c.date_comptage::date BETWEEN %s AND %s
                  ORDER BY c.date_comptage DESC
                 """,

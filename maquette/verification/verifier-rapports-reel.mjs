@@ -8,12 +8,18 @@
    configuration, signalement sans blocage. Une vente réelle est semée ici
    (5 720 = 12 % signalée, 5 980 = 8 % non signalée).
 
-   1. Le responsable voit les 5 sections (historique, export articles,
-      export stock valorisé — cycle 67, écart C4-02 —, export ventes,
-      écarts de prix) ; l'historique affiche un comptage réellement fait
-      aujourd'hui, et rien sur une période passée. Le rapport des écarts
-      affiche la vente semée, signale la ligne à 12 %, laisse visible celle
-      à 8 %, et le filtre de période l'écarte.
+   Cycle 68 (écarts C7-02/C7-03 du registre) : l'historique restitue la
+   régularisation du comptage semé (traçabilité 032, jamais effacée) et un
+   6e export dédié — les écarts de comptage valorisés au prix d'achat,
+   responsable seulement.
+
+   1. Le responsable voit les 6 sections (historique, export articles,
+      export stock valorisé — cycle 67, écart C4-02 —, écarts de comptage —
+      cycle 68, écart C7-03 —, export ventes, écarts de prix) ; l'historique
+      affiche un comptage réellement fait aujourd'hui AVEC sa régularisation,
+      et rien sur une période passée. Le rapport des écarts affiche la vente
+      semée, signale la ligne à 12 %, laisse visible celle à 8 %, et le
+      filtre de période l'écarte.
    2. L'agent stock ne voit QUE l'export du catalogue (jamais l'historique,
       ni l'export des ventes, ni les écarts) — aucune occurrence de FCFA.
    3. L'agent comptabilité voit l'export du catalogue, des ventes et les
@@ -84,6 +90,13 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 // EXPLICITEMENT en UTC (= « aujourd'hui » du navigateur, fuseau imposé plus
 // bas) pour ne pas dépendre du fuseau de la base.
 psql(`INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, date_comptage, moment, quantite_comptee) VALUES (1, 1, 2, '${AUJOURDHUI_UTC}', 'matin', 28);`);
+
+// Régularisation de cet écart par le responsable (cycle 68, écart C7-02) :
+// traçabilité pure (032) — l'historique doit la restituer, jamais l'effacer.
+psql(`INSERT INTO regularisations_ecarts_comptage (comptage_id, type_resolution, motif, decide_par_id)
+      SELECT id, 'erreur_de_comptage', NULL, 1 FROM comptages_stock
+       WHERE article_id = 1 AND site_id = 1 AND moment = 'matin'
+         AND date_comptage::date = '${AUJOURDHUI_UTC}'::date;`);
 
 // Vente réelle avec remises (cycle 58) : deux lignes au catalogue 6 500
 // (Ciment), 5 720 = 12 % sous le catalogue (au-delà du seuil de 10 % →
@@ -159,15 +172,18 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await page.goto(`${SERVEUR_URL}/app/rapports.html`, { waitUntil: "networkidle" });
   verifier(page.url().endsWith("rapports.html"), "responsable : accès à rapports.html");
 
-  for (const id of ["carte-historique", "carte-export-articles", "carte-export-stock", "carte-export-ventes", "carte-ecarts-prix"]) {
+  for (const id of ["carte-historique", "carte-export-articles", "carte-export-stock", "carte-export-ecarts-comptage", "carte-export-ventes", "carte-ecarts-prix"]) {
     verifier(await page.isVisible(`#${id}`), `responsable : section #${id} visible`);
   }
 
-  // Historique : la période par défaut est aujourd'hui -> le comptage semé plus haut apparaît.
+  // Historique : la période par défaut est aujourd'hui -> le comptage semé plus haut apparaît,
+  // avec sa régularisation (cycle 68, écart C7-02).
   await page.waitForSelector("#liste-historique li", { timeout: 5000 });
   const texteHistorique = await page.textContent("#liste-historique");
   verifier(texteHistorique.includes("Ciment"), "responsable : historique affiche le comptage réel du jour");
   verifier(texteHistorique.includes("-2") || texteHistorique.includes("écart"), "responsable : écart réel affiché (-2)");
+  verifier(texteHistorique.includes("régularisé") && texteHistorique.includes("erreur_de_comptage"),
+    "responsable : historique — la régularisation de l'écart est affichée");
 
   // Période passée -> liste vide.
   await page.fill("#hist-debut", "2000-01-01");
@@ -198,6 +214,17 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
 
   const enteteStockPdf = await telechargerEtLireEntete(page, "#export-stock-pdf");
   verifier(enteteStockPdf.startsWith("%PDF"), "responsable : export stock .pdf réellement téléchargé");
+
+  // Export des écarts de comptage (cycle 68, écart C7-03) : réservé au
+  // responsable — période par défaut aujourd'hui -> le fichier porte l'écart
+  // semé plus haut ; vrai téléchargement, fichier substantiel.
+  const enteteEcartsCptXlsx = await telechargerEtLireEntete(page, "#export-ecarts-comptage-xlsx");
+  verifier(enteteEcartsCptXlsx.startsWith("PK"), "responsable : export écarts de comptage .xlsx réellement téléchargé");
+  const contenuEcartsCpt = await telechargerEtLireEntete(page, "#export-ecarts-comptage-xlsx", 1 << 20);
+  verifier(contenuEcartsCpt.length > 400, `responsable : export écarts de comptage .xlsx substantiel (${contenuEcartsCpt.length} octets lus)`);
+
+  const enteteEcartsCptPdf = await telechargerEtLireEntete(page, "#export-ecarts-comptage-pdf");
+  verifier(enteteEcartsCptPdf.startsWith("%PDF"), "responsable : export écarts de comptage .pdf réellement téléchargé");
 
   // Écarts de prix par vendeur (cycle 58) : la vente semée plus haut doit
   // apparaître — 12 % SIGNALÉE, 8 % visible mais non signalée, seuil 10 %.
@@ -253,6 +280,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   verifier(await page.isVisible("#carte-export-articles"), "agent stock : export du catalogue visible");
   verifier(!(await page.isVisible("#carte-historique")), "agent stock : historique des comptages absent");
   verifier(!(await page.isVisible("#carte-export-stock")), "agent stock : export du stock valorisé absent");
+  verifier(!(await page.isVisible("#carte-export-ecarts-comptage")), "agent stock : export des écarts de comptage absent");
   verifier(!(await page.isVisible("#carte-export-ventes")), "agent stock : export des ventes absent");
   verifier(!(await page.isVisible("#carte-ecarts-prix")), "agent stock : rapport des écarts de prix absent");
 
@@ -278,6 +306,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   verifier(await page.isVisible("#carte-export-ventes"), "agent comptabilité : export des ventes visible");
   verifier(!(await page.isVisible("#carte-historique")), "agent comptabilité : historique des comptages absent");
   verifier(!(await page.isVisible("#carte-export-stock")), "agent comptabilité : export du stock valorisé absent");
+  verifier(!(await page.isVisible("#carte-export-ecarts-comptage")), "agent comptabilité : export des écarts de comptage absent");
 
   // Écarts de prix : accessibles à la comptabilité (même périmètre que
   // l'export des ventes), et la vente du site 1 est bien visible.

@@ -62,7 +62,7 @@ responsable → tableau de bord, comptabilité → vente, stock → inventaire.
 > strictement identique au besoin (le responsable lit les écarts sur
 > `tableau-bord.html` et `declarations.html`, il ne compte pas).
 
-## 3. Matrice API — route × rôle (57 routes, exhaustif)
+## 3. Matrice API — route × rôle (58 routes, exhaustif)
 
 Sources : décorateurs `exiger_role(...)` de `server/app/routes/`, revus
 ligne à ligne au cycle 65. `TOUS` = toute session valide (sans `exiger_role`).
@@ -76,7 +76,7 @@ Les routes sans jeton renvoient 401 ; les routes publiques sont listées.
 passe provisoire, seule route métier qui le soit),
 `GET /articles`, `GET /moi`.
 
-**Responsable seul (32)** — administration des comptes
+**Responsable seul (33)** — administration des comptes
 (`GET/POST /admin/comptes`, `PATCH /admin/comptes/{id}/actif`,
 `PATCH /admin/comptes/{id}/mot-de-passe`, `POST /admin/comptes/{id}/deverrouiller`),
 `POST /ventes/{id}/annuler`, inventaire en lecture et régularisation
@@ -93,7 +93,10 @@ tableau de bord (`GET /tableau-bord/alertes-stock`,
 (`POST /rh/employes`, `GET/POST /rh/absences-conges`,
 `GET/POST /rh/avances-salaire`, `POST /rh/avances-salaire/{id}/rembourser`),
 export du stock valorisé (`GET /rapports/stock`, cycle 67 — écart C4-02,
-porte `prix_achat` donc réservé au rôle qui en a le privilège).
+porte `prix_achat` donc réservé au rôle qui en a le privilège) et export
+des écarts de comptage (`GET /rapports/ecarts-comptage`, cycle 68 — écart
+C7-03, joint les régularisations et valorise à prix d'achat, mêmes
+privilèges colonnes 008/012).
 clients en écriture (`POST /clients`, `PUT /clients/{id}`,
 `PATCH /clients/{id}/actif`).
 
@@ -143,13 +146,14 @@ d'écart la calcule en `SECURITY DEFINER`.
 
 ## 5. Exports Excel/PDF
 
-Quatre routes d'export, toutes derrière `exiger_role` et servies
+Cinq routes d'export, toutes derrière `exiger_role` et servies
 par `telechargerFichier()` (jeton en en-tête, jamais en URL) :
 
 | Route | Rôles | Formats |
 |---|---|---|
 | `GET /rapports/articles?format=` | R, S, C | xlsx, pdf |
 | `GET /rapports/stock?format=` | **R seul** (cycle 67, écart C4-02) | xlsx (feuille « totaux par site »), pdf |
+| `GET /rapports/ecarts-comptage?format=&date_debut=&date_fin=` | **R seul** (cycle 68, écart C7-03) | xlsx (feuille « totaux »), pdf |
 | `GET /rapports/ventes?...&format=` | R, C | xlsx, pdf |
 | `GET /rapports/ecarts-prix-vendeurs` | R, C | tableau (JSON) |
 

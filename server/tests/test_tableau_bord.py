@@ -124,6 +124,41 @@ def test_historique_comptages_date_invalide_refusee(client):
     assert reponse.status_code == 422, reponse.text
 
 
+def test_historique_comptages_expose_la_regularisation(client):
+    """Écart C7-02 (registre) : l'historique restitue la décision de
+    régularisation (032) — un écart résolu reste visible AVEC sa résolution,
+    jamais effacé de l'historique."""
+    session_agent = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    comptage = client.post(
+        "/inventaire/comptages",
+        headers=entete_autorisation(session_agent["jeton"]),
+        json={"article_id": 1, "moment": "matin", "quantite_comptee": 25},
+    )
+    assert comptage.status_code == 201, comptage.text
+    comptage_id = comptage.json()["comptage_id"]
+
+    session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    regularisation = client.post(
+        f"/inventaire/ecarts/{comptage_id}/regulariser",
+        headers=entete_autorisation(session_resp["jeton"]),
+        json={"type_resolution": "erreur_de_comptage"},
+    )
+    assert regularisation.status_code == 201, regularisation.text
+
+    reponse = client.get(
+        "/inventaire/historique-comptages",
+        headers=entete_autorisation(session_resp["jeton"]),
+        params={"date_debut": "2000-01-01", "date_fin": "2999-12-31"},
+    )
+    assert reponse.status_code == 200, reponse.text
+    ligne = [c for c in reponse.json()["comptages"] if c["id"] == comptage_id]
+    assert len(ligne) == 1
+    assert ligne[0]["ecart"] == -5  # 25 comptés pour 30 attendus (jeu d'essai)
+    assert ligne[0]["regularisation_type"] == "erreur_de_comptage"
+    assert ligne[0]["regularisation_motif"] is None
+    assert ligne[0]["regularisation_date"] is not None
+
+
 def test_historique_comptages_reserve_au_responsable(client):
     session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
     reponse = client.get(

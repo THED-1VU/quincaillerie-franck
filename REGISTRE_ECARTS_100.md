@@ -22,25 +22,26 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **3 clôturés par vérification ou livraison** (C4-01 et
-C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67).
-37 écarts ouverts :
+40 écarts recensés, dont **6 clôturés par vérification ou livraison** (C4-01 et
+C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ; C1-04, C7-02 et C7-03
+livrés au cycle 68).
+34 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
 | P1 | **17** | 11 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
-| P2 | **13** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 5 |
-| P3 | **7** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 4 |
-| **Total ouverts** | **37** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 11 EN_COURS/OUVERT | **9** |
+| P2 | **11** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 3 |
+| P3 | **6** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 3 |
+| **Total ouverts** | **34** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 8 EN_COURS/OUVERT | **6** |
 
 Lecture : **aucun écart d'intégrité**. Le chemin vers 99–100 % se joue sur
 trois catégories : (1) décisions du propriétaire déjà répertoriées dans
 `DECISIONS_PROPRIETAIRE.md` (D1–D13) ; (2) validations humaines (campagnes,
-impression, 2ᵉ poste) ; (3) six fusions Git réservées au propriétaire
-(#78 → #82 + #83). Le développement garde **9 écarts actionnables**
-(C0-04, C1-04, C7-02, C7-03, C8-01, C11-02, C12-03, C13-02, C14-03) traités
-cycle par cycle ; les correctifs codables mais suspendus à une décision
+impression, 2ᵉ poste) ; (3) sept fusions Git réservées au propriétaire
+(#78 → #82 + #83, #84). Le développement garde **6 écarts actionnables**
+(C0-04, C8-01, C11-02, C12-03, C13-02, C14-03) traités cycle par cycle ;
+les correctifs codables mais suspendus à une décision
 (C1-01, C1-02, C2-02, C5-01, C5-02, C6-01, C6-02) démarreront dès que les
 décisions D2–D5, D9, D10 tombent.
 
@@ -134,11 +135,12 @@ décisions D2–D5, D9, D10 tombent.
 - **État :** `00_jeu_essai.sql` TRUNCATE `parametres` et réinsère une liste figée — la ligne `seuil_remise_validation_pct` (introduite par 037) n'y figure jamais. En environnement de test/CI, le paramètre n'existe tout simplement pas.
 - **Preuve (exécutée ce cycle) :** `SELECT count(*) FROM parametres WHERE cle='seuil_remise_validation_pct'` sur `quincaillerie_c66` → **0** ; `00_jeu_essai.sql:36` (truncate) vs `db/migrations/037_remises.sql:94` (INSERT). Le code gère l'absence (`server/app/routes/ventes.py:263-267` → seuil inactif), donc **aucun impact fonctionnel** ; c'est une dérive de fidélité test/production (une installation réelle via migrations seule aurait la ligne).
 - **Gravité / risque métier :** P3 — un test futur sur le seuil de remise ne pourrait pas échouer proprement en environnement de test ; l'écart s'aggravera à chaque nouveau paramètre oublié.
-- **Correction :** ajouter la ligne au bloc `INSERT INTO parametres` de `00_jeu_essai.sql` (valeur `a_definir`, `a_decider=TRUE`) ; vérifier systématiquement après chaque nouvelle migration que le seed couvre ses paramètres.
+- **Correction (exécutée cycle 68) :** audit complet du seed vs les 50 migrations → **deux** clés manquantes corrigées (`seuil_remise_validation_pct` de 037 et `contact_support_technique`, détectée en cours d'audit), plus une absence justifiée (`logo_boutique_extension`, état runtime non seedable) désormais documentée dans le commentaire du seed ; verrou `server/tests/test_jeu_essai.py` (19 clés attendues, `logo_boutique_extension` interdite).
 - **Dépendances :** aucune. **Responsable :** développement (lot B).
 - **Critère d'acceptation :** rejeu du seed sur base neuve → ligne présente ; note d'audit des paramètres du seed vs migrations.
 - **Tests requis :** rejeu `00_jeu_essai.sql` + contrôle présence ; suite SQL complète verte.
-- **Statut :** OUVERT.
+- **Preuves (cycle 68) :** pytest `test_jeu_essai.py` **1/1** ; régression complète sur base isolée verte ; PR #85.
+- **Statut :** CLOS (cycle 68).
 
 ---
 
@@ -333,25 +335,27 @@ décisions D2–D5, D9, D10 tombent.
 
 ### C7-02 — Historique/consultation des comptages
 - **Exigence source :** `loop-state.md` C7 (reste : historique).
-- **État :** les comptages sont tracés (`comptages_stock`, `ecarts_stock_ventes`, `regularisations_ecarts_comptage`) mais aucun écran ne permet de consulter l'historique complet par campagne.
-- **Preuve :** routes existantes (aucune route d'historique comptages) ; matrice des rôles.
+- **État :** *corrigé (constat d'audit erroné à l'origine)* — la route `/inventaire/historique-comptages` et l'écran « historique des comptages » existaient déjà ; le vrai écart portait sur l'exposition des **régularisations** exigée par le critère d'acceptation « écarts ET régularisations » (la requête ne joignait pas `regularisations_ecarts_comptage`).
+- **Preuve :** `inventaire.py:historique_comptages` (route présente avant le cycle) ; registre initial sur-estimé l'écart (« aucune route d'historique » était périmé).
 - **Gravité / risque métier :** P2 — le responsable ne peut pas revisiter une campagne passée sans SQL.
-- **Correction :** route + onglet « historique des comptages » (lecture seule).
+- **Correction (exécutée cycle 68) :** `LEFT JOIN regularisations_ecarts_comptage` dans `historique_comptages` → champs `regularisation_type/motif/date` exposés ; l'écran `maquette/inventaire.html` affiche « — régularisé : <type> (« <motif> ») » ; pytest `test_tableau_bord.py::test_historique_comptages_expose_la_regularisation` **1/1**.
 - **Dépendances :** aucune. **Responsable :** développement (lot C).
 - **Critère d'acceptation :** liste chronologique des campagnes avec écarts et régularisations.
 - **Tests requis :** pytest + Playwright.
-- **Statut :** OUVERT.
+- **Preuves (cycle 68) :** pytest 44/44 sur les 4 fichiers touchés ; Playwright `verifier-rapports-reel.mjs` **52/52** (régularisation affichée à l'écran) ; PR #85.
+- **Statut :** CLOS (cycle 68).
 
 ### C7-03 — Export dédié au chantier inventaire
 - **Exigence source :** `loop-state.md` C7.
 - **État :** pas d'export (xlsx/PDF) des écarts de comptage.
 - **Preuve :** `rapports.py` ; matrice (exports existants recensés).
 - **Gravité / risque métier :** P2 — l'inventaire papier/Excel est souvent exigé pour la déclaration fiscale.
-- **Correction :** export des écarts par campagne.
+- **Correction (exécutée cycle 68) :** route `/rapports/ecarts-comptage` (responsable seul — jointure régularisations + valorisation à prix d'achat, xlsx 2 feuilles + pdf, totaux cumulés) ; carte d'export ajoutée dans `maquette/rapports.html` ; matrice des rôles complétée (`/rapports/stock` omis au cycle 67 + nouvelle route).
 - **Dépendances :** C7-02 (même source de données). **Responsable :** développement (lot C).
 - **Critère d'acceptation :** fichier téléchargé, totaux cohérents avec l'écran.
 - **Tests requis :** pytest + Playwright.
-- **Statut :** OUVERT.
+- **Preuves (cycle 68) :** pytest `test_rapports.py` **7/7** (valorisation −25 000/+5 600, totaux, 403 agents, 422 formats/dates) ; Playwright **52/52** (téléchargement réel xlsx 5 680 o, pdf `%PDF`, carte absente pour les deux agents) ; PR #85.
+- **Statut :** CLOS (cycle 68).
 
 ### C7-04 — Deuxième campagne de comptage physique réel
 - **Exigence source :** chantier C9/C10 (tests humains) ; `loop-state.md`.

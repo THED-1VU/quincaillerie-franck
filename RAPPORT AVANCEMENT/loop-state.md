@@ -92,7 +92,7 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C4 | Articles et stock | **92 %** | Cycles 9, 11 et 13. Six opérations réelles, chacune une fonction PostgreSQL `SECURITY DEFINER`, toutes câblées sur un vrai écran (`maquette/stock.html`, cycle 11). **Constats n°2 et n°3 corrigés (cycle 13)** : un retour client ou fournisseur ne peut plus dépasser, en article et en quantité (cumul de plusieurs retours compris), ce que la vente ou la réception d'origine porte réellement (migration 016) ; `PUT /articles/{id}` ne trace plus de changement de prix dans `historique_prix_articles` quand le prix soumis est identique à l'actuel. `quantite_stock` volontairement jamais modifiable par fiche. **Aucun montant FCFA, aucun champ de prix n'atteint la page ni les réponses réseau de l'agent stock**. Vérifié par exécution : 104/104 tests pytest (100 + 4 nouveaux), suite SQL à jour (44/44, 52/52, 6/6, réversibilité de la migration 016 confirmée, vérifiée en SQL direct avant tout code Python), 6 suites Playwright — 0 régression (aucun écran touché par la correction). Manquent : volumétrie/reprise du stock initial (addendum j, non tranché côté code — décidé le 2026-09-19, débloqué par le cycle 35), export dédié à C4, remises et article offert (point f, sous-chantiers 3-4, non construits). **Cycle 35 (13b)** : modèle multi-site livré — `enregistrer_entree_stock` ouvre la ligne du site (première réception), `transferer_stock` = UN article + deux sites (ligne de destination créée), casse/retours sur (article, site), `annuler_vente` restitue par site ; écran `stock.html` adapté ; `verifier-stock-reel.mjs` 26/26, `test_stock.py` 16/16. **Cycle 39 (point f, sous-chantier 1, 2026-09-22)** : quantités décimales par article — `articles.quantite_decimale_autorisee`, les 6 fonctions de stock réécrites en `NUMERIC(12,3)` (mêmes règles, mêmes verrous), `GET/POST/PUT /articles` exposent et acceptent le nouveau champ. **Prouvé par exécution** : suite SQL 000-034 + inverses verte (5 contrôles dédiés : refus/acceptation/non-arrondi), pytest 224/224, `verifier-cablage.mjs` 94/94. **Cycle 40 (point f, sous-chantier 2, 2026-09-23)** : retours enrichis — casse et retour client passent en deux temps (déclaration ouverte à tout rôle qui touche au stock, sans effet sur le stock ; validation réservée au responsable, qui décrémente/réintègre réellement) ; retour client avec 3 issues (échange/avoir/remboursement espèces — ce dernier exige une confirmation explicite et crée une dépense) et état de la marchandise (revendable réintégré, invendable tracé sans mouvement fantôme — bug de cumul trouvé et corrigé par exécution : un retour invendable validé n'était pas compté dans le total « déjà rendu », permettant un dépassement silencieux du vendu). Anciennes fonctions à un seul temps supprimées. **Prouvé par exécution** : suite SQL 000-034,036 + inverses verte (protections 71/71, habilitations 53/53), pytest 229/229, `verifier-cablage.mjs` 94/94. **Cycle 46 (point f, sous-chantier 4, 2026-09-24)** : article offert — sortie commerciale gratuite distincte d'une remise à 100 % (migration 037, qui la refuse), même schéma déclaration/validation que la casse (ouverte à qui vend, agent comptabilité/responsable ; validation réservée au responsable). `employe_id` obligatoire (fiche RH, actif, même site — exigence du 2026-09-24 : « le geste le plus facile à détourner »), distinct de `declarant_id` et de `ventes.vendeur_id` (compte utilisateur, inchangé). `vente_id` nullable, `valeur_normale` figée depuis le prix catalogue. Écart de temps déclaration/validation traité : `GET /inventaire/ecarts` signale les déclarations en attente sur le même article, nouvelle carte tableau de bord « Articles offerts en attente de validation » avec ancienneté. Deux bugs de contrainte trouvés et corrigés par exécution avant tout commit (`chk_mouvements_categorie*` avait perdu `annulation_vente`, `chk_mouvements_vente_id_coherent` refusait `vente_id` pour cette nouvelle catégorie). **Prouvé par exécution** : suite SQL 000-039 + inverses verte (protections 103/103 dont 14 dédiés, habilitations 53/53), pytest 258/258, `verifier-cablage.mjs` 94/94, vérification visuelle réelle dans Chrome. **Reste (point f)** : écran de déclaration/validation dédié non câblé sur `stock.html` (listing/validation des trois types de déclarations — casse, retour client, article offert — reste à faire, comme prévu depuis le sous-chantier 2) ; case décimale sur la fiche article. Le plan des 4 sous-chantiers du point f est désormais entièrement livré. **Cycle 60 (C4, 2026-10-20)** : case « quantités décimales » câblée sur la fiche article (`stock.html`, création et modification, mention en liste) — la dernière pièce du point f. Migration 049 + inverse : refus de désactiver le drapeau tant qu'un stock ou un seuil décimal existe (sinon les déclencheurs de 034 rendent l'article immouvementable, y compris pour une réception entière) ; `SECURITY DEFINER` pour couvrir les deux sites malgré la RLS. Refus 422 propre, tracé dans `historique_modifications_articles` ; réactivation toujours possible. **Prouvé par exécution** : suite SQL complète verte (protections 177/177, dont 11 pour 049 ; habilitations 53/53 ; aller-retour des migrations OK), pytest 300/300, Playwright stock 49/49 (réception 2,5 acceptée, 1,5 refusée sur article entier, refus puis acceptation de la désactivation) et câblage 94/94. Restent : export dédié à C4, campagne UX humaine (BLOCKED_HUMAN_TEST). |
 | C5 | Ventes et facturation | **81 %** | Cycle 6, durci par le cycle de correction après C7, complété par les cycles 17, 19 et **27** (addendum point c, décidé le 2026-09-13). **Cycle 27, périmètre volontairement réduit au socle décidé** (`db/migrations/020_facturier_vendeur.sql`) : `numero_facturier` (référence du carnet PAPIER, transcrite par le comptable — jamais générée par le logiciel, préfixe `MAG-`/`CPT-` vérifié par site) et `vendeur_id` (qui a négocié le prix, distinct de qui saisit/encaisse) obligatoires sur toute nouvelle vente ; nouvelle route `GET /ventes/vendeurs` (comptes actifs du site + responsable) pour le menu déroulant de l'écran ; affiché sur le reçu PDF et dans l'export `/rapports/ventes`. **PAS construits ce cycle** (questions non tranchées à l'époque) : rapport « écarts de prix par vendeur » et son seuil de validation (question 5), liste de vendeurs sans compte (question 3). **Question 5 tranchée le 2026-09-18** : seuil de 10 % sous le prix catalogue, en configuration, signale sans jamais bloquer (voir `ADDENDUM_CAHIER_DES_CHARGES.md`, point c) — **le rapport lui-même reste à construire** (chantier non démarré), toujours retenu par la question 3 (vendeur sans compte), encore ouverte. Décisions antérieures (points b/d/e) inchangées : régime réel, TVA 19,25 % sur prix TTC, une vente déjà encaissée n'est jamais bloquée, crédit client désactivé. `POST /ventes/{id}/annuler` (cycle 17), `GET /ventes/{id}/recu` (cycle 19, PDF). **Cycle 42 (point f, sous-chantier 3, 2026-09-23)** : remises — par ligne (`prix_catalogue`/`remise_montant`, cohérence vérifiée par une `CHECK` — `GREATEST(catalogue - payé, 0)`, upsell toléré) et de la vente entière (`remise_globale_montant`), deux mécanismes séparés ; `POST /ventes` accepte au choix `prix_unitaire`, `remise_montant` ou `remise_pct` par ligne (exactement un des trois) ; remise à 100 % refusée (réservée au sous-chantier 4, article offert) ; seuil de validation responsable prêt mais inactif (`seuil_remise_validation_pct`, sentinelle `a_definir`) ; reçu PDF affiche catalogue/remise/payé quand une remise est présente. Vérifié par exécution : 33/33 tests pytest dédiés à C5 (172/172 au total, 9 nouveaux pour le point c) **puis 239/239 après le cycle 42 (10 nouveaux dédiés aux remises)**, suite SQL à jour (79/79 protections dont 8 dédiés à la migration 037, 53/53, 6/6, réversibilité confirmée), 12/12 + 94/94 + 27/27 contrôles Playwright (vente, câblage, corrections UX). **Cycle 58 (C5, 2026-10-20)** : rapport des écarts de prix par vendeur LIVRÉ (migration 048 + inverse) — vue `ecarts_prix_vendeurs` en `security_invoker = true` (la RLS par site de 008 s'applique à l'agent comptabilité ; une vue classique l'aurait contournée), seuil `seuil_ecart_prix_vendeur` = 10 **en configuration** (décision 2026-09-18, question 5), signalement non bloquant, route `GET /rapports/ecarts-prix-vendeurs`, écran `rapports.html` (4ᵉ carte, absente pour l'agent stock). Vendeur = fiche employé (migration 040, question 3 tranchée) ; lignes sans prix catalogue exclues ; ventes annulées exclues ; upsell restitué mais jamais signalé. Prouvé : protections 191/191 (13 contrôles 048), habilitations 55/55, pytest 303/303, Playwright 39/39 ; un bug réel de dates optionnelles (`IndeterminateDatatype`, HTTP 500) trouvé par le navigateur puis corrigé et revérifié. **Cycle 59 (C5, 2026-10-20)** : remises câblées dans `vente.html` (aucun changement serveur ni migration — backend livré au cycle 42) — remise par ligne restituée sous l'article (écart au prix catalogue, la remise reste portée par le prix négocié) ; remise globale saisie en FCFA avec total articles TTC, total réduit et TVA extraite (même formule que le serveur) ; refus AVANT tout `POST /ventes` d'une remise atteignant le total (renvoi vers « Offrir un article », décision 2026-09-23) ; montant rappelé dans la confirmation et le message de succès (valeur `remise_totale` du serveur). Prouvé : Playwright vente 28/28 (ligne 300 FCFA / 4,6 %, globale 1 000 → total 5 200, refus à 6 200 sans POST, `remise_totale` 1 300, base `6500.00|300.00|6200.00` et `remise_globale_montant` 1 000, aperçu = serveur), câblage 94/94, pytest 297/297. Manquent : ticket thermique/code-barres (non demandés), impression physique sur une imprimante réelle (non vérifiable par l'agent), seuil `seuil_remise_validation_pct` à fixer par le propriétaire (`a_definir`, BLOCKED_OWNER). |
 | C6 | Comptabilité et RH | **85 %** | Cycle 16, complété au cycle 18, puis au **cycle 25** (piste C6, travail en parallèle, addendum point g). `transactions` (recette/dépense **hors vente**, historique filtrable par période), `employes`/`absences_conges`/`avances_salaire` (responsable seul, CDC §3.5). **Cycle 25** : clôture de caisse **par site** (décision du 2026-09-13) — migration 019, table `clotures_caisse` **totalement immuable** (`UPDATE`/`DELETE` refusés même pour `postgres` en direct), seul point d'écriture `cloturer_caisse()` (`SECURITY DEFINER`, aucun `GRANT` même au responsable), attendu calculé serveur (`calculer_attendu_caisse()`, exclut le crédit client), écart calculé serveur, clôture rectificative tracée en cas d'erreur. Seuil de tolérance d'écart (`seuil_ecart_caisse_tolere`) amorcé à `a_definir` (question 5 non tranchée) : tolérance **nulle** appliquée tant que le propriétaire ne fixe pas de valeur — pas de chiffre inventé, mécanique déjà prête pour le jour où il le fera. Écran dédié `maquette/cloture-caisse.html` (aperçu de l'attendu avant saisie, historique). Vérifié par exécution, **rejoué intégralement par la session qui fusionne** (pas seulement le rapport de la piste) : 163/163 tests pytest (144 + 19 dédiés à la caisse), `verifier-cablage.mjs` 87/87, `verifier-rh-reel.mjs` 21/21, `verifier-caisse-reel.mjs` 24/24 (SQL direct et API réelle : refus d'écart sans commentaire, acceptation avec commentaire, clôture rectificative, cloisonnement par rôle prouvé aux deux niveaux — 403 API + `InsufficientPrivilege` SQL). Manquent : lien depuis `tableau-bord.html` (réservé à la piste UX ce tour, maintenant fusionnée — reste à câbler), fond de caisse initial (question 2, absent du modèle, sous-estime l'attendu en espèces s'il en existe un réellement), rattachement d'une vente saisie en retard (question 3), rapprochement Mobile Money exact (question 4), seuil d'écart à fixer par le propriétaire (question 5), blocage d'une saisie après clôture (question 6), rôle caissier (point h, chantier C3 séparé). |
-| C7 | Inventaire et écarts | **65 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. **Cycle 35 (13b)** : comptage par (article, site) — un même article peut être compté le même jour une fois par site (index unique révisé), `articles-a-compter` liste les fiches ayant un stock au site de l'appelant, écarts/historique lisent `comptages.site_id` ; `verifier-inventaire-reel.mjs` 17/17.  **Cycle 36 (2026-09-22)** : régularisation d'un écart de comptage livrée — 4 types de résolution (erreur_de_comptage, retrouve, vol_presume, casse_deja_enregistree), motif obligatoire sauf erreur_de_comptage, traçabilité PURE (jamais d'effet sur le stock, décision propriétaire), migration 032 + route + bouton « Régulariser » au tableau de bord ; plafond de vraisemblance mécanisé (paramètre `a_definir` — aucun blocage tant que le propriétaire ne fixe pas). Prouvé : pytest 218/218, suite SQL 000-032 verte, Playwright inventaire 17/17 et câblage 94/94. Reste : valeur du plafond à fixer par le propriétaire.  **Cycle 51 (C7, 2026-09-25)** : plafond de vraisemblance — migration 040 (+ inverse) : `plafond_vraisemblance_comptage = 10000`, `a_decider = FALSE` — valeur PAR DÉFAUT posée par l'équipe de développement, en attente de confirmation du propriétaire (référence corrigée par la migration 042, 2026-09-25) ; jeu d'essai synchronisé ; tests pytest réécrits (10 001 refusé / 10 000 accepté / paramètre re-décidable) + 3 contrôles SQL. Prouvé : suite SQL 000-042 + inverses verte, pytest complet **266/266** (venv monté). |
+| C7 | Inventaire et écarts | **67 %** | Cycle 7, durci par le cycle de correction qui a suivi. Comptage à l'aveugle câblé de bout en bout : `GET /inventaire/articles-a-compter` (liste sans aucune quantité, articles déjà comptés aujourd'hui exclus, `site_id` distingue les deux sites pour le responsable) et `POST /inventaire/comptages` (n'accepte que la quantité comptée, ne renvoie jamais l'écart ni la quantité attendue — figée et calculée par la base depuis le cycle 2, **y compris si le client les injecte lui-même dans la requête**). Faille trouvée et corrigée par exécution : l'agent stock pouvait lire `ecart`/`quantite_attendue` en SQL direct malgré la discipline applicative (`GRANT` sans restriction de colonne, migration 008) — colonnes retirées par la migration 012, comme pour les prix d'`articles`. Tableau de bord du responsable câblé sur `GET /inventaire/ecarts` (écarts de comptage) **et** `GET /inventaire/ecarts-ventes` (écarts de vente à découvert, chantier C5) — les deux étaient invisibles avant ce cycle. Vérifié par exécution : 11/11 tests pytest dédiés (55/55 au total, 0 régression), 17/17 contrôles Playwright bout-en-bout (`verifier-inventaire-reel.mjs`) dont le contrôle le plus critique repris du cycle 5 — quantité attendue absente de la page/réseau/code source même après un comptage produisant un écart réel — et une double soumission (panne réseau simulée) qui n'immobilise plus l'agent. **+5 points (cycle de correction)** : fuseau horaire de la base fixé à Africa/Douala à deux niveaux indépendants (base et application) au lieu d'hériter d'un réglage faux ; écarts affichés au tableau de bord sans construire le HTML par concaténation non échappée, vérifié par un essai d'injection réel (11/11, `verifier-echappement-html.mjs`). Manquent : régularisation d'un écart, plafond de vraisemblance, historique au-delà du jour courant, export/rapport. **Cycle 35 (13b)** : comptage par (article, site) — un même article peut être compté le même jour une fois par site (index unique révisé), `articles-a-compter` liste les fiches ayant un stock au site de l'appelant, écarts/historique lisent `comptages.site_id` ; `verifier-inventaire-reel.mjs` 17/17.  **Cycle 36 (2026-09-22)** : régularisation d'un écart de comptage livrée — 4 types de résolution (erreur_de_comptage, retrouve, vol_presume, casse_deja_enregistree), motif obligatoire sauf erreur_de_comptage, traçabilité PURE (jamais d'effet sur le stock, décision propriétaire), migration 032 + route + bouton « Régulariser » au tableau de bord ; plafond de vraisemblance mécanisé (paramètre `a_definir` — aucun blocage tant que le propriétaire ne fixe pas). Prouvé : pytest 218/218, suite SQL 000-032 verte, Playwright inventaire 17/17 et câblage 94/94. Reste : valeur du plafond à fixer par le propriétaire.  **Cycle 51 (C7, 2026-09-25)** : plafond de vraisemblance — migration 040 (+ inverse) : `plafond_vraisemblance_comptage = 10000`, `a_decider = FALSE` — valeur PAR DÉFAUT posée par l'équipe de développement, en attente de confirmation du propriétaire (référence corrigée par la migration 042, 2026-09-25) ; jeu d'essai synchronisé ; tests pytest réécrits (10 001 refusé / 10 000 accepté / paramètre re-décidable) + 3 contrôles SQL. Prouvé : suite SQL 000-042 + inverses verte, pytest complet **266/266** (venv monté). **Cycle 68 (2026-10-21, écarts C7-02/C7-03 du registre)** : régularisations exposées dans l'historique des comptages (LEFT JOIN `regularisations_ecarts_comptage`, affichage « — régularisé ») et export dédié `GET /rapports/ecarts-comptage` (xlsx 2 feuilles + pdf, valorisation à prix d'achat, totaux cumulés, responsable seul — privilèges colonnes 008/012). Prouvé : pytest 44/44 sur les fichiers touchés, régression complète **334/334** sur base isolée, Playwright **52/52** (téléchargement réel). Reste ouvert : valeurs de paramètres à confirmer (BLOQUE_PROPRIETAIRE) et 2ᵉ campagne de comptage physique (BLOQUE_TEST_HUMAIN). |
 | C8 | Tableaux de bord et rapports | **72 %** | Cycles 10, 12, 14 et 23. Alertes de stock, historique des comptages et deux exports Excel/PDF, tous câblés sur un vrai écran (`maquette/rapports.html`, cycle 12). **Gating du prix par rôle posé en SQL**, prouvé en relisant le contenu réel du fichier produit pour les 3 rôles au niveau API (cycle 10) et par un vrai téléchargement de navigateur intercepté depuis l'écran (cycle 12). **Cycle 14** : cloisonnement par site des exports, 2 tests dédiés. **Cycle 23** : bascule vue consolidée/par site sur `tableau-bord.html` — chaque route renvoyait déjà `site_id` par ligne, la bascule est un filtre purement d'affichage (aucune route ni migration nouvelle, aucun appel réseau au changement de vue). Vérifié par exécution : `verifier-cablage.mjs` +7 (87/87) — filtrer sur un site recalcule le total exactement (8 500 / 3 200 FCFA) et fait disparaître l'autre site de chaque carte, retour à « Les deux sites » retrouve le total consolidé identique (11 700 FCFA). Manquent : clôture de caisse (point g, non tranché), numéro de facturier (point c, non tranché — `numero_facture` restitué tel quel). **Cycle 35 (13b)** : alertes de stock par (article, site) sur `stocks_sites`, exports du catalogue par rôle (responsable : une ligne par article+site ; agent stock : quantité de son site ; comptabilité : sans quantité) ; `verifier-rapports-reel.mjs` 29/29. |
 | C9 | Ergonomie et UI *(priorité 1)* | **60 %** | Cycle 5, réévalué à la baisse le 2026-09-13 par la première campagne humaine réelle, puis **à la hausse au cycle 24** (piste UX, travail en parallèle) : 4 des 6 constats de cette catégorie corrigés et **vérifiés par exécution réelle** — UX-1 (ajouter un article en ≤ 2 actions **quelle que soit la quantité**, un nombre en tête de la recherche fixe la quantité dès l'ajout), UX-2 (vente entière au clavier seul **avec un prix négocié**, nouveau raccourci `F3`), UX-9 (le prix affiché en gris précise désormais explicitement « indicatif », « PAS le prix qui sera facturé »), UX-10 (avertissement toujours visible : un comptage validé est définitif, sans dialogue bloquant supplémentaire). Rejoué par la session qui fusionne : `verifier-ux-corrections.mjs` 27/27, aucune régression sur les 8 suites existantes. **Cycle 37 (2026-09-22)** : UX-8 (bouton de retrait du panier introuvable seul, ~20 s de recherche) — cause trouvée : `.panier__sup` (`maquette/vente.html`) n'avait fond/bordure **qu'au survol** (`:hover`), invisible au doigt sur téléphone. Fond et bordure de couleur d'alerte rendus **permanents** (`maquette/styles.css`), `title` ajouté en complément de l'`aria-label` déjà présent ; prouvé par `verifier-cablage.mjs` 94/94 + `verifier-vente-reelle.mjs` 12/12 (0 régression) et un relevé Playwright dédié (style calculé au repos passé de transparent à un fond/bordure visibles, clic toujours fonctionnel). **Reste ouvert** : UX-0 (le désaccord de méthode lui-même — pire des 3 essais vs 3ᵉ essai — reste à trancher par le propriétaire, aucun code n'y répond ; méthodologie tranchée le 2026-09-19, campagne elle-même non lancée). **Important : l'objectif chronométré principal (vente de 3 articles < 60 s, pire des 3 essais) n'a PAS été re-mesuré avec un vrai testeur humain**, et la discoverabilité réelle du bouton de retrait (UX-8) non plus — seules des frictions structurelles ont été supprimées et prouvées par exécution automatisée réelle (Playwright + backend réel), pas par une campagne humaine. Une deuxième campagne réelle reste nécessaire avant de considérer C9 proche de 100 %. |
 | C10 | Mobile et API web *(priorité 1)* | **58 %** | Cycle 5, complété au cycle 15, réévalué à la hausse le 2026-09-13 par la première campagne sur un vrai téléphone physique, puis **de nouveau à la hausse au cycle 24** (piste UX, travail en parallèle) : 3 des 5 constats mobiles corrigés et vérifiés par exécution réelle — UX-3 (débordement du tableau de bord : cause CSS identifiée et corrigée — `grid-template-columns` sans `minmax(0, ...)` laissait un contenu long, non couvert par le jeu d'essai de test, pousser la grille hors écran ; 0 px de débordement mesuré aux 5 largeurs avec un nom d'article réellement long et non sécable), UX-4 (taille de police minimale garantie sur les chiffres des cartes, mesurée ≥ 16px à 360/390px), UX-7 — **le plus sérieux constat de la campagne** — (coupure réseau en cours de requête : `AbortController` à 20 s autour de `fetch()`, message français affiché, formulaire réutilisable sans recharger la page). UX-6 (clavier numérique) était en réalité **déjà correct** à l'inspection (`type="number"` + `inputmode="numeric"` déjà posés) — pas un vrai défaut, confirmé par lecture directe du DOM rendu. **Honnêteté conservée sur UX-3/4** : l'identité exacte du téléphone/navigateur du testeur original n'a jamais été renseignée ; un facteur non reproductible propre à cet appareil n'est pas formellement exclu comme cause additionnelle — seule la cause CSS a pu être diagnostiquée et corrigée par exécution. **Cycle 36 (2026-09-22)** : UX-5 (saisie d'une recette au téléphone, 1 min 02 mesuré contre un objectif de 45 s) — cause structurelle probable corrigée : la carte « Saisie rapide » de `tableau-bord.html`, 5e sur 7 sous 3 listes de longueur variable, est remontée en tête **uniquement sous 700px** (`order: -1`, DOM inchangé, PC de caisse non affecté) ; prouvé par `verifier-cablage.mjs` 94/94 et un relevé Playwright dédié (ordre visuel confirmé aux deux largeurs). **La cible < 45 s elle-même reste à reconfirmer par un vrai testeur humain** — ce n'est pas une nouvelle mesure humaine, seulement une friction structurelle plausible supprimée. Une deuxième campagne sur un vrai téléphone physique reste nécessaire pour confirmer UX-3/4/5 dans les conditions réelles d'origine. Reste aussi : API dédiée si un jour distincte de l'appli web, usage hors ligne, notifications. |
@@ -3748,171 +3748,6 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
   fusion des PR #73, #74, #75, #76 puis #77 par le propriétaire
   (aucune auto-fusion).
 
-### Cycle 65 — C8/C2 : matrice complète des rôles + obligation de changement
-### du mot de passe provisoire enfin appliquée — 2026-10-21
-
-Premier cycle de la CLOSURE LOOP (objectif : 99-100 % par chantier C0-C14).
-**Décision de pilotage reçue** : matrice des rôles exhaustives (UI + API +
-SQL, avec captures par rôle), correction des défauts trouvés, puis
-`REGISTRE_ECARTS_100.md` au cycle 66 ; les décisions métier restent celles
-du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
-
-- **DÉFAUT MAJEUR TROUVÉ PAR LA MATRICE** : `doit_changer_mot_de_passe`
-  existait depuis le cycle 38 (jeton + réponse de connexion + remise à zéro
-  par le responsable) mais n'était **contrôlé nulle part** — vérifié par
-  grep exhaustif avant correction. Un compte provisoire accédait à toute
-  l'application, malgré l'« obligation » documentée (README C2). Corrigé :
-  migration 050 `changement_mdp_requis()` (SECURITY DEFINER, seul `qf_app`
-  — même motif que `compte_est_actif` 024, car `qf_app` n'a aucun SELECT sur
-  `utilisateurs`), relue **en base à chaque requête** par `deps.py` ;
-  drapeau vrai ⇒ 403 partout sauf `/auth/changer-mot-de-passe` et
-  `/auth/deconnexion`. Écran `changer-mot-de-passe.html` nouveau (garde
-  anti-boucle, session ré-enregistrée sur 401) ; `connexion.html` et
-  `api.js` renvoient vers cet écran ; jeu d'essai : comptes de travail
-  repassés `FALSE` (sinon toute la suite métier serait 403 — l'obligation
-  reste prouvée par `test_premier_compte` et `test_changement_mdp_force`).
-- **MATRICE PRODUITE** : `MATRICE_ROLES_AKUMA.md` — 56 routes API × 3 rôles
-  (≈ 390 requêtes), 10 sondes SQL sous rôle PostgreSQL (prix/quantités/
-  comptage aveugle/hachages/journaux), 11 écrans UI gatés par rôle, exports,
-  cloisonnement par site (renvoi vers `test_cloisonnement_site.py`),
-  sessions, cumul de rôles. **Zéro divergence** entre décorateurs et
-  attentes ; les deux divergences UI/API connues (inventaire ↔ responsable,
-  cumul rôle principal seul) sont mesurées, capturées et documentées —
-  décisions d'ergonomie laissées au propriétaire (D7/D8).
-- **TESTS AJOUTÉS** : `test_matrice_roles.py` (1 test-matrice),
-  `test_privileges_sql_roles.py` (10), `test_changement_mdp_force.py` (3),
-  `verifier-roles.mjs` (30 contrôles Playwright, 22 captures
-  `maquette/captures/roles/`, npm `roles`). Helper partagé conftest
-  `fixer_drapeau_changement_mdp` (raccourci admin de test).
-- **RÉGRESSION 1ʳᵉ PASSE : 3 ÉCHECS, 1 CAUSE RACINE, NON MASQUÉS** —
-  trois tests préexistants créent un compte par l'API (drapeau TRUE par
-  construction — comportement voulu) puis appellent des routes métier :
-  désormais bloqués par l'obligation. Corrections : prémisse « première
-  connexion » explicitée dans `test_authentification.py`, retrait du drapeau
-  dans `test_comptes.py` et `test_cumul_roles.py` (sinon le second test
-  cumul passait « pour la mauvaise raison » — 403 du drapeau au lieu du
-  403 de rôle). Après correction : 40/40 sur les 6 fichiers touchés.
-  Environnement : jonction `%TEMP%\pytest-of-USER\pytest-current`
-  inaccessible sans élévation (connu depuis le cycle 56) — contourné par
-  `--basetemp` dédié, élévation toujours réservée au propriétaire.
-  **Régression finale : 320 passed, 0 failed, exit 0** (11 min 39 s sur
-  `quincaillerie_c65`) — dont 14 tests nouveaux et les 3 tests adaptés ;
-  suite Playwright `roles` : 30/30.
-- **RAPPORTS** : `RAPPORT_TESTS_ROLES.md` (exécutions, correctif,
-  adaptations, divergences D1-D5), `DECISIONS_PROPRIETAIRE.md` (13 points
-  D1-D13 : prix caissier — vérifié en inspection, aucun `prix_achat` ni à
-  l'écran ni dans les rapports —, paiements mixtes, fond/seuil caisse,
-  remises, HT/TTC, durée de session, cumul UI, inventaire responsable,
-  `utilisateur_caisse_id` à auditer, 2FA, Kaspersky, tests physiques/GO,
-  fusions PR).
-- **SCORE AVANT → APRÈS** (référence cycle 64 : C2 77, C8 72, moyenne ≈ 78)
-  : C2 **77 → 82** (l'obligation documentée depuis 38 cycles est enfin
-  appliquée et prouvée aux trois couches ; restent D6 durée de session
-  branchée et D10 2FA), C8 **72 → 85** (matrice exhaustive automatisée +
-  captures ; restent D1/D2/D4, réserves précisément identifiées, et l'audit
-  D3 au cycle 66). Moyenne indicative ≈ **79 %**. Aucun autre chantier
-  revendiqué.
-- **ÉCART DE JOURNALISATION (D5)** : les cycles 61-64 (branches
-  `cycle-61-regression-complete`, `cycle-63-candidat-exe`,
-  `cycle-64-dossier-installation`, PR #78-#81 selon les relevés de session)
-  n'ont pas de section dans ce fichier — leurs scores de référence
-  (transmis par le propriétaire) ont servi de base ici. À reconstituer
-  depuis l'historique Git si le propriétaire le demande.
-- **STATUT** : `READY_FOR_REVIEW` (PR #82 à créer). Environnement du cycle
-  (serveur 8010 + base `quincaillerie_c65` + config `$TEMP`) détruit après
-  validation. **BLOCAGES SIGNALÉS, NON LEVÉS** : fusions PR #78→#81
-  (propriétaire, ordre requis — réseau GitHub indisponible au cycle 65 pour
-  re-vérifier les numéros), décisions D1-D13. **PROCHAINE TÂCHE** :
-  cycle 66 — audit exhaustif C0-C14 → `REGISTRE_ECARTS_100.md`.
-
-### Cycle 66 — Audit C0–C14 : registre exhaustif des écarts (REGISTRE_ECARTS_100.md)
-
-- **LIVRABLE** : `REGISTRE_ECARTS_100.md` (racine) — 40 écarts recensés avec les
-  13 champs imposés (id, chantier, exigence source, état, preuve, gravité
-  P0-P3, risque métier, correction, dépendances, responsable, critère
-  d'acceptation, tests requis, statut). **Zéro écart P0** — intégrité,
-  comptabilité et sécurité non compromises sur aucun chantier.
-- **PREUVES NOUVELLES (exécutées ce cycle, base d'audit fraîche)** :
-  `quincaillerie_c66` reconstruite de zéro (schéma d'origine + migrations
-  000-050 + jeu d'essai — 50 migrations appliquées) puis détruite après
-  capture des preuves. (1) `parametres` figé : 5 lignes `a_decider=TRUE`
-  restantes (numéro contribuable, téléphone, seuil plancher, seuil écart
-  caisse, tentatives) + plafond C7 à confirmer par écrit ; (2) **dérive
-  découverte par l'audit** : `seuil_remise_validation_pct` (migration 037)
-  absent du jeu d'essai qui réamorce `parametres` — aucun impact fonctionnel
-  (le code gère l'absence, `ventes.py:263-267`), mais dérive test/production
-  à corriger (C1-04, P3) ; (3) modèle point a vérifié : `articles` sans
-  `site_id`, PK `(article_id, site_id)` de `stocks_sites` (C4-01 CLOS) ;
-  (4) D3 confirmé par relecture : `utilisateur_caisse_id` toujours = compte
-  responsable (`ventes.py:210-227`, commentaire in-code) ; (5) captures du
-  cycle 60 revérifiées : régénérées le 2026-10-20, contenu disque identique
-  au versionné (`git status` propre) → TODO soldé (C8-02 CLOS).
-- **SYNTHÈSE** : 38 écarts ouverts = 17 P1 (11 BLOQUE_PROPRIETAIRE + 6
-  BLOQUE_TEST_HUMAIN), 14 P2, 7 P3 ; **10 actionnables par le développement**
-  (C0-04, C1-04, C4-02, C7-02, C7-03, C8-01, C11-02, C12-03, C13-02, C14-03)
-  répartis sur les lots 67+ ; tableau des décisions D1–D13 croisé avec les
-  écarts.
-- **SCORES** : inchangés (audit sans chantier) — aucun score ne bouge sans
-  preuve ; le registre est la feuille de route des cycles 67+ (lots A à E).
-- **STATUT** : READY_FOR_REVIEW (PR #83 à créer). **BLOCAGES SIGNALÉS, NON
-  LEVÉS** : fusions PR #78→#82 (+#83), décisions D1-D13, campagnes humaines,
-  Kaspersky (D11). **PROCHAINE TÂCHE** : cycle 67 — lot A (C2, C3, C4, C5,
-  C6).
-
-### Cycle 67 — Lot A (C4) : export dédié du stock valorisé (écart C4-02)
-
-- **LIVRABLE** : route `GET /rapports/stock?format=` (xlsx à 2 feuilles —
-  « stock » + « totaux par site » — et pdf), carte « Exporter le stock
-  (valorisé) » sur `maquette/rapports.html` **réservée au responsable**
-  (la route porte `prix_achat`, colonne dont seul ce rôle a le privilège —
-  GRANT 008), 5 tests pytest dédiés, 6 contrôles Playwright ajoutés à
-  `verifier-rapports-reel.mjs` (carte visible pour R, absente pour S et C,
-  téléchargement xlsx réel 5 826 octets, pdf `%PDF`), captures
-  `rapports-*.png` régénérées par la suite (page réellement modifiée),
-  MATRICE_ROLES_AKUMA.md à jour (57 routes, groupe « Responsable seul (32) »).
-- **CONTENU DE L'EXPORT** : une ligne par (article, site) — id, nom, unité,
-  site, quantité, seuil, prix achat/vente, valorisation achat/vente, alerte
-  (`RUPTURE` / `SOUS_SEUIL` / `OK`) — + totaux par site (valorisations et
-  comptes de ruptures/sous-seuils). Aucune migration (lecture seule).
-- **PREUVES** : `test_rapports.py` **24/24** (valorisations exactes : Ciment
-  site 1 = 150 000 / 195 000 FCFA et `OK`, Clou = 60 000 / 80 000, Article
-  rare `SOUS_SEUIL` ; totaux site 1 = 263 000 / 337 000 avec 1 sous-seuil,
-  site 2 = 60 000 / 80 000 ; pdf contient la valorisation ; agent stock et
-  agent comptabilité → 403 ; format invalide → 422) ; régression pytest
-  complète **325/325, exit 0** (baseline 320 du cycle 65 + 5 nouveaux,
-  11 min) ; Playwright `verifier-rapports-reel.mjs`
-  **45/45, 0 échec**.
-- **CORRECTIONS D'ENVIRONNEMENT (causes racines réelles, aucun échec masqué)**
-  : (1) `quincaillerie_test` datait d'avant la migration 050 → 24 échecs au
-  premier lancement (`changement_mdp_requis(smallint) does not exist`, appelée
-  par `deps.obtenir_session` à chaque requête) ; reconstruite de zéro
-  exactement selon `db/tests/executer_tests.sh` (DROP/CREATE + schéma d'origine
-  + `migrer.sh appliquer` — 50 migrations — + jeu d'essai) ; la tentative de
-  `migrer.sh` sur la base dérivée avait échoué proprement à la 001
-  (transaction unique, aucun dommage partiel). (2) Suite Playwright : 2
-  échecs autour de minuit — le navigateur héritait du fuseau du poste
-  (UTC-4) pendant que la base est en UTC, la date de filtre du navigateur
-  précédant d'un jour celle de l'API ; cause racine dans le **fixture de
-  test** (pas dans le produit) : `timezoneId: "UTC"` imposé au contexte +
-  date de comptage semée en UTC explicite — comparaison désormais
-  déterministe à tout moment.
-- **REGISTRE** : C4-02 → **CLOS** (preuves d'exécution réelle ci-dessus) ;
-  synthèse corrigée : **37 écarts ouverts = 17 P1 (11 BLOQUE_PROPRIETAIRE +
-  6 BLOQUE_TEST_HUMAIN) + 13 P2 + 7 P3 ; 9 dev-actionnables** (C0-04, C1-04,
-  C7-02, C7-03, C8-01, C11-02, C12-03, C13-02, C14-03).
-- **SCORES** : C4 **77 → 78** — un écart dev-actionnable livré et prouvé ;
-  tout le reste de C4 est BLOQUE_PROPRIETAIRE ou BLOQUE_TEST_HUMAIN (aucun
-  autre point ne monte sans preuve). Aucun autre chantier touché.
-- **STATUT** : READY_FOR_REVIEW (PR #84, empilée sur `cycle-66-audit-ecarts`,
-  à retarger vers `main` après fusion de #83 — même règle que les lots
-  précédents). **BLOCAGES SIGNALÉS, NON LEVÉS** : fusions PR #78→#84 dans
-  l'ordre, décisions D1-D13, campagnes humaines, Kaspersky (D11).
-  **PROCHAINE TÂCHE** : cycle 68 — C1-04 (dérive seed
-  `seuil_remise_validation_pct`) + C7-02/C7-03 (historique comptages et
-  export inventaire).
-
----
-
 ### Cycle 61 — Régression complète après fusion et réparation des outils de test (2026-10-20)
 
 - **OBJECTIF** : après la fusion autorisée des cinq PR (#74, #75, #73,
@@ -4232,7 +4067,225 @@ du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
 
 ---
 
-## Tableau de pilotage — reprise du 2026-10-20 (après cycle 65)
+### Cycle 65 — C8/C2 : matrice complète des rôles + obligation de changement
+### du mot de passe provisoire enfin appliquée — 2026-10-21
+
+Premier cycle de la CLOSURE LOOP (objectif : 99-100 % par chantier C0-C14).
+**Décision de pilotage reçue** : matrice des rôles exhaustives (UI + API +
+SQL, avec captures par rôle), correction des défauts trouvés, puis
+`REGISTRE_ECARTS_100.md` au cycle 66 ; les décisions métier restent celles
+du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
+
+- **DÉFAUT MAJEUR TROUVÉ PAR LA MATRICE** : `doit_changer_mot_de_passe`
+  existait depuis le cycle 38 (jeton + réponse de connexion + remise à zéro
+  par le responsable) mais n'était **contrôlé nulle part** — vérifié par
+  grep exhaustif avant correction. Un compte provisoire accédait à toute
+  l'application, malgré l'« obligation » documentée (README C2). Corrigé :
+  migration 050 `changement_mdp_requis()` (SECURITY DEFINER, seul `qf_app`
+  — même motif que `compte_est_actif` 024, car `qf_app` n'a aucun SELECT sur
+  `utilisateurs`), relue **en base à chaque requête** par `deps.py` ;
+  drapeau vrai ⇒ 403 partout sauf `/auth/changer-mot-de-passe` et
+  `/auth/deconnexion`. Écran `changer-mot-de-passe.html` nouveau (garde
+  anti-boucle, session ré-enregistrée sur 401) ; `connexion.html` et
+  `api.js` renvoient vers cet écran ; jeu d'essai : comptes de travail
+  repassés `FALSE` (sinon toute la suite métier serait 403 — l'obligation
+  reste prouvée par `test_premier_compte` et `test_changement_mdp_force`).
+- **MATRICE PRODUITE** : `MATRICE_ROLES_AKUMA.md` — 56 routes API × 3 rôles
+  (≈ 390 requêtes), 10 sondes SQL sous rôle PostgreSQL (prix/quantités/
+  comptage aveugle/hachages/journaux), 11 écrans UI gatés par rôle, exports,
+  cloisonnement par site (renvoi vers `test_cloisonnement_site.py`),
+  sessions, cumul de rôles. **Zéro divergence** entre décorateurs et
+  attentes ; les deux divergences UI/API connues (inventaire ↔ responsable,
+  cumul rôle principal seul) sont mesurées, capturées et documentées —
+  décisions d'ergonomie laissées au propriétaire (D7/D8).
+- **TESTS AJOUTÉS** : `test_matrice_roles.py` (1 test-matrice),
+  `test_privileges_sql_roles.py` (10), `test_changement_mdp_force.py` (3),
+  `verifier-roles.mjs` (30 contrôles Playwright, 22 captures
+  `maquette/captures/roles/`, npm `roles`). Helper partagé conftest
+  `fixer_drapeau_changement_mdp` (raccourci admin de test).
+- **RÉGRESSION 1ʳᵉ PASSE : 3 ÉCHECS, 1 CAUSE RACINE, NON MASQUÉS** —
+  trois tests préexistants créent un compte par l'API (drapeau TRUE par
+  construction — comportement voulu) puis appellent des routes métier :
+  désormais bloqués par l'obligation. Corrections : prémisse « première
+  connexion » explicitée dans `test_authentification.py`, retrait du drapeau
+  dans `test_comptes.py` et `test_cumul_roles.py` (sinon le second test
+  cumul passait « pour la mauvaise raison » — 403 du drapeau au lieu du
+  403 de rôle). Après correction : 40/40 sur les 6 fichiers touchés.
+  Environnement : jonction `%TEMP%\pytest-of-USER\pytest-current`
+  inaccessible sans élévation (connu depuis le cycle 56) — contourné par
+  `--basetemp` dédié, élévation toujours réservée au propriétaire.
+  **Régression finale : 320 passed, 0 failed, exit 0** (11 min 39 s sur
+  `quincaillerie_c65`) — dont 14 tests nouveaux et les 3 tests adaptés ;
+  suite Playwright `roles` : 30/30.
+- **RAPPORTS** : `RAPPORT_TESTS_ROLES.md` (exécutions, correctif,
+  adaptations, divergences D1-D5), `DECISIONS_PROPRIETAIRE.md` (13 points
+  D1-D13 : prix caissier — vérifié en inspection, aucun `prix_achat` ni à
+  l'écran ni dans les rapports —, paiements mixtes, fond/seuil caisse,
+  remises, HT/TTC, durée de session, cumul UI, inventaire responsable,
+  `utilisateur_caisse_id` à auditer, 2FA, Kaspersky, tests physiques/GO,
+  fusions PR).
+- **SCORE AVANT → APRÈS** (référence cycle 64 : C2 77, C8 72, moyenne ≈ 78)
+  : C2 **77 → 82** (l'obligation documentée depuis 38 cycles est enfin
+  appliquée et prouvée aux trois couches ; restent D6 durée de session
+  branchée et D10 2FA), C8 **72 → 85** (matrice exhaustive automatisée +
+  captures ; restent D1/D2/D4, réserves précisément identifiées, et l'audit
+  D3 au cycle 66). Moyenne indicative ≈ **79 %**. Aucun autre chantier
+  revendiqué.
+- **ÉCART DE JOURNALISATION (D5)** : les cycles 61-64 (branches
+  `cycle-61-regression-complete`, `cycle-63-candidat-exe`,
+  `cycle-64-dossier-installation`, PR #78-#81 selon les relevés de session)
+  n'ont pas de section dans ce fichier — leurs scores de référence
+  (transmis par le propriétaire) ont servi de base ici. À reconstituer
+  depuis l'historique Git si le propriétaire le demande.
+- **STATUT** : `READY_FOR_REVIEW` (PR #82 à créer). Environnement du cycle
+  (serveur 8010 + base `quincaillerie_c65` + config `$TEMP`) détruit après
+  validation. **BLOCAGES SIGNALÉS, NON LEVÉS** : fusions PR #78→#81
+  (propriétaire, ordre requis — réseau GitHub indisponible au cycle 65 pour
+  re-vérifier les numéros), décisions D1-D13. **PROCHAINE TÂCHE** :
+  cycle 66 — audit exhaustif C0-C14 → `REGISTRE_ECARTS_100.md`.
+
+### Cycle 66 — Audit C0–C14 : registre exhaustif des écarts (REGISTRE_ECARTS_100.md)
+
+- **LIVRABLE** : `REGISTRE_ECARTS_100.md` (racine) — 40 écarts recensés avec les
+  13 champs imposés (id, chantier, exigence source, état, preuve, gravité
+  P0-P3, risque métier, correction, dépendances, responsable, critère
+  d'acceptation, tests requis, statut). **Zéro écart P0** — intégrité,
+  comptabilité et sécurité non compromises sur aucun chantier.
+- **PREUVES NOUVELLES (exécutées ce cycle, base d'audit fraîche)** :
+  `quincaillerie_c66` reconstruite de zéro (schéma d'origine + migrations
+  000-050 + jeu d'essai — 50 migrations appliquées) puis détruite après
+  capture des preuves. (1) `parametres` figé : 5 lignes `a_decider=TRUE`
+  restantes (numéro contribuable, téléphone, seuil plancher, seuil écart
+  caisse, tentatives) + plafond C7 à confirmer par écrit ; (2) **dérive
+  découverte par l'audit** : `seuil_remise_validation_pct` (migration 037)
+  absent du jeu d'essai qui réamorce `parametres` — aucun impact fonctionnel
+  (le code gère l'absence, `ventes.py:263-267`), mais dérive test/production
+  à corriger (C1-04, P3) ; (3) modèle point a vérifié : `articles` sans
+  `site_id`, PK `(article_id, site_id)` de `stocks_sites` (C4-01 CLOS) ;
+  (4) D3 confirmé par relecture : `utilisateur_caisse_id` toujours = compte
+  responsable (`ventes.py:210-227`, commentaire in-code) ; (5) captures du
+  cycle 60 revérifiées : régénérées le 2026-10-20, contenu disque identique
+  au versionné (`git status` propre) → TODO soldé (C8-02 CLOS).
+- **SYNTHÈSE** : 38 écarts ouverts = 17 P1 (11 BLOQUE_PROPRIETAIRE + 6
+  BLOQUE_TEST_HUMAIN), 14 P2, 7 P3 ; **10 actionnables par le développement**
+  (C0-04, C1-04, C4-02, C7-02, C7-03, C8-01, C11-02, C12-03, C13-02, C14-03)
+  répartis sur les lots 67+ ; tableau des décisions D1–D13 croisé avec les
+  écarts.
+- **SCORES** : inchangés (audit sans chantier) — aucun score ne bouge sans
+  preuve ; le registre est la feuille de route des cycles 67+ (lots A à E).
+- **STATUT** : READY_FOR_REVIEW (PR #83 à créer). **BLOCAGES SIGNALÉS, NON
+  LEVÉS** : fusions PR #78→#82 (+#83), décisions D1-D13, campagnes humaines,
+  Kaspersky (D11). **PROCHAINE TÂCHE** : cycle 67 — lot A (C2, C3, C4, C5,
+  C6).
+
+### Cycle 67 — Lot A (C4) : export dédié du stock valorisé (écart C4-02)
+
+- **LIVRABLE** : route `GET /rapports/stock?format=` (xlsx à 2 feuilles —
+  « stock » + « totaux par site » — et pdf), carte « Exporter le stock
+  (valorisé) » sur `maquette/rapports.html` **réservée au responsable**
+  (la route porte `prix_achat`, colonne dont seul ce rôle a le privilège —
+  GRANT 008), 5 tests pytest dédiés, 6 contrôles Playwright ajoutés à
+  `verifier-rapports-reel.mjs` (carte visible pour R, absente pour S et C,
+  téléchargement xlsx réel 5 826 octets, pdf `%PDF`), captures
+  `rapports-*.png` régénérées par la suite (page réellement modifiée),
+  MATRICE_ROLES_AKUMA.md à jour (57 routes, groupe « Responsable seul (32) »).
+- **CONTENU DE L'EXPORT** : une ligne par (article, site) — id, nom, unité,
+  site, quantité, seuil, prix achat/vente, valorisation achat/vente, alerte
+  (`RUPTURE` / `SOUS_SEUIL` / `OK`) — + totaux par site (valorisations et
+  comptes de ruptures/sous-seuils). Aucune migration (lecture seule).
+- **PREUVES** : `test_rapports.py` **24/24** (valorisations exactes : Ciment
+  site 1 = 150 000 / 195 000 FCFA et `OK`, Clou = 60 000 / 80 000, Article
+  rare `SOUS_SEUIL` ; totaux site 1 = 263 000 / 337 000 avec 1 sous-seuil,
+  site 2 = 60 000 / 80 000 ; pdf contient la valorisation ; agent stock et
+  agent comptabilité → 403 ; format invalide → 422) ; régression pytest
+  complète **325/325, exit 0** (baseline 320 du cycle 65 + 5 nouveaux,
+  11 min) ; Playwright `verifier-rapports-reel.mjs`
+  **45/45, 0 échec**.
+- **CORRECTIONS D'ENVIRONNEMENT (causes racines réelles, aucun échec masqué)**
+  : (1) `quincaillerie_test` datait d'avant la migration 050 → 24 échecs au
+  premier lancement (`changement_mdp_requis(smallint) does not exist`, appelée
+  par `deps.obtenir_session` à chaque requête) ; reconstruite de zéro
+  exactement selon `db/tests/executer_tests.sh` (DROP/CREATE + schéma d'origine
+  + `migrer.sh appliquer` — 50 migrations — + jeu d'essai) ; la tentative de
+  `migrer.sh` sur la base dérivée avait échoué proprement à la 001
+  (transaction unique, aucun dommage partiel). (2) Suite Playwright : 2
+  échecs autour de minuit — le navigateur héritait du fuseau du poste
+  (UTC-4) pendant que la base est en UTC, la date de filtre du navigateur
+  précédant d'un jour celle de l'API ; cause racine dans le **fixture de
+  test** (pas dans le produit) : `timezoneId: "UTC"` imposé au contexte +
+  date de comptage semée en UTC explicite — comparaison désormais
+  déterministe à tout moment.
+- **REGISTRE** : C4-02 → **CLOS** (preuves d'exécution réelle ci-dessus) ;
+  synthèse corrigée : **37 écarts ouverts = 17 P1 (11 BLOQUE_PROPRIETAIRE +
+  6 BLOQUE_TEST_HUMAIN) + 13 P2 + 7 P3 ; 9 dev-actionnables** (C0-04, C1-04,
+  C7-02, C7-03, C8-01, C11-02, C12-03, C13-02, C14-03).
+- **SCORES** : C4 **77 → 78** — un écart dev-actionnable livré et prouvé ;
+  tout le reste de C4 est BLOQUE_PROPRIETAIRE ou BLOQUE_TEST_HUMAIN (aucun
+  autre point ne monte sans preuve). Aucun autre chantier touché.
+- **STATUT** : READY_FOR_REVIEW (PR #84, empilée sur `cycle-66-audit-ecarts`,
+  à retarger vers `main` après fusion de #83 — même règle que les lots
+  précédents). **BLOCAGES SIGNALÉS, NON LEVÉS** : fusions PR #78→#84 dans
+  l'ordre, décisions D1-D13, campagnes humaines, Kaspersky (D11).
+  **PROCHAINE TÂCHE** : cycle 68 — C1-04 (dérive seed
+  `seuil_remise_validation_pct`) + C7-02/C7-03 (historique comptages et
+  export inventaire).
+
+---
+
+### Cycle 68 — Lot B/C (C1, C7) : fidélité du seed + inventaire (régularisations, export écarts)
+
+- **LIVRABLE** : trois écarts du registre clos. (1) **C1-04** — audit complet
+  du jeu d'essai vs les 50 migrations : **deux** clés manquantes corrigées
+  (`seuil_remise_validation_pct` de 037, `contact_support_technique` de 022),
+  absence justifiée documentée dans le seed (`logo_boutique_extension`, état
+  runtime non seedable), verrou `server/tests/test_jeu_essai.py` (19 clés
+  attendues, `logo_boutique_extension` interdite). (2) **C7-02** — *constat
+  d'audit corrigé par l'exécution* : la route `/inventaire/historique-comptages`
+  et son écran existaient déjà (l'affirmation « aucune route d'historique »
+  du registre était périmée) ; le vrai écart portait sur l'exposition des
+  **régularisations** exigée par le critère d'acceptation « écarts ET
+  régularisations » — `LEFT JOIN regularisations_ecarts_comptage` ajoutant
+  `regularisation_type/motif/date`, affichage « — régularisé : <type> ».
+  (3) **C7-03** — route `GET /rapports/ecarts-comptage` (responsable seul —
+  joint les régularisations et valorise à prix d'achat, xlsx 2 feuilles +
+  pdf avec totaux cumulés) + carte sur `maquette/rapports.html` + matrice
+  des rôles complétée (`/rapports/stock` omis au cycle 67 + la nouvelle
+  route → **58 routes**, groupe « Responsable seul (33) »).
+- **PREUVES** : pytest sur les 4 fichiers touchés **44/44** ;
+  régression complète sur base isolée `quincaillerie_c68` **334/334,
+  exit 0** (11 min 35 — baseline 325 du cycle 67 + 9 nouveaux) ;
+  Playwright `verifier-rapports-reel.mjs` **52/52, 0 échec**
+  (téléchargement xlsx réel 5 680 octets `PK`, pdf `%PDF`, régularisation
+  affichée à l'écran, carte absente pour agent stock et agent comptabilité) ;
+  captures `rapports-*.png` régénérées par la suite.
+- **CORRECTION D'ENVIRONNEMENT (cause racine réelle, aucun échec masqué)** :
+  une première régression lancée en parallèle de la suite Playwright a été
+  **polluée** — le reseed TRUNCATE de Playwright a rencontré les INSERT de
+  pytest (`figer_quantite_attendue()` sur table mid-TRUNCATE) ; la régression
+  polluée a été tuée et ses résultats **écartés, jamais rapportés** ; la
+  preuve ci-dessus a été reconstruite sur une base isolée
+  (`QF_TEST_DBNAME=quincaillerie_c68`). Règle désormais acquise : les deux
+  suites ne tournent jamais concurremment sur la même base.
+- **REGISTRE** : C1-04, C7-02, C7-03 → **CLOS** (preuves d'exécution réelle
+  ci-dessus) ; synthèse corrigée : **34 écarts ouverts = 17 P1 (11
+  BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN) + 11 P2 + 6 P3 ; 6
+  dev-actionnables** (C0-04, C8-01, C11-02, C12-03, C13-02, C14-03).
+- **SCORES** : C1 **inchangé à 92** — correction de fidélité P3, aucune
+  capacité nouvelle (le score C1 ne monte pas sans preuve de capacité) ;
+  C7 **65 → 67** — deux P2 livrés et prouvés par exécution ; le reste de C7
+  est BLOQUE_PROPRIETAIRE (valeurs de paramètres) ou BLOQUE_TEST_HUMAIN
+  (2ᵉ campagne). Aucun autre chantier touché.
+- **STATUT** : READY_FOR_REVIEW (PR #85, empilée sur
+  `cycle-67-lot-a-export-stock`, à retarger vers `main` après fusion de
+  #84 — même règle que les lots précédents). **BLOCAGES SIGNALÉS, NON
+  LEVÉS** : fusions PR #78→#85 dans l'ordre, décisions D1–D13, campagnes
+  humaines, Kaspersky (D11). **PROCHAINE TÂCHE** : cycle 69 —
+  C8-01 (divergences d'affichage D1–D4 de la matrice) puis C13-02
+  (orchestrateur de régression) selon l'ordre des écarts actionnables.
+
+---
+
+## Tableau de pilotage — reprise du 2026-10-20 (après cycle 68)
 
 | Cycle | Chantier | Tâche | Responsable | Statut | Tests | Dépendance | Prochaine action |
 |---|---|---|---|---|---|---|---|
@@ -4255,6 +4308,7 @@ du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
 | 65 | C8/C2 | Matrice complète des rôles (API 56 routes, SQL 10 sondes, UI 30 contrôles + 22 captures) + migration 050 : obligation de changement du mot de passe provisoire appliquée à chaque requête | QODER | READY_FOR_REVIEW | matrice 1/1 zéro divergence, SQL 10/10, force 3/3, Playwright 30/30, régression complète voir cycle 65 §4 | — | fusion PR #82 par le propriétaire |
 | 66 | C0-C14 | Audit exhaustif des écarts → `REGISTRE_ECARTS_100.md` : 40 écarts (38 ouverts : 17 P1, 14 P2, 7 P3 ; 10 dev-actionnables ; 2 CLOS par vérification) + dérive seed C1-04 + D3 confirmé + modèle point a vérifié | QODER | READY_FOR_REVIEW | base d'audit reconstruite (50 migrations rejouées), paramètres figés, `git status` captures propre | — | fusion PR #83 par le propriétaire |
 | 67 | C4 | Export dédié stock valorisé : route `GET /rapports/stock` (xlsx 2 feuilles + pdf), carte `rapports.html` réservée au responsable (porte `prix_achat`), 5 tests pytest, contrôles Playwright réels, captures régénérées, MATRICE à jour (57 routes) | QODER | READY_FOR_REVIEW | pytest `test_rapports.py` 24/24 + régression complète 325/325, Playwright rapports 45/45 (téléchargement réel 5 826 o) | PR #83 (empilée) | fusion PR #84 après #83 par le propriétaire |
+| 68 | C1/C7 | Fidélité du seed (C1-04 : 2 clés corrigées + absence justifiée + verrou `test_jeu_essai.py`) + inventaire : régularisations exposées dans l'historique comptages (C7-02) + export `/rapports/ecarts-comptage` xlsx/pdf (C7-03), matrice à 58 routes | QODER | READY_FOR_REVIEW | pytest 44/44 + régression complète 334/334, Playwright rapports 52/52 (téléchargement réel 5 680 o) | PR #84 (empilée) | fusion PR #85 après #84 par le propriétaire |
 | — | C13/C14 | Régression complète : toutes les suites Playwright sur base isolée + rafraîchissement des captures obsolètes (tableau-bord/inventaire) | QODER | TODO | — | — | **prochaine tâche Phase 2** |
 | — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
 | — | C5/C6 | Décisions métier (HT/TTC, paiements mixtes, seuil caisse…) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire |
