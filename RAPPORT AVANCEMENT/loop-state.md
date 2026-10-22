@@ -4285,7 +4285,45 @@ du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
 
 ---
 
-## Tableau de pilotage — reprise du 2026-10-20 (après cycle 68)
+### Cycle 69 — Lot B (C8) : statuer sur les divergences d'affichage (écart C8-01)
+
+- **LIVRABLE** : recensement des 5 divergences du cycle 65 **soldé** —
+  chacune statuée par exécution et tracée. D1 (`inventaire.html` refuse le
+  responsable, API autorise) et D2 (UI cumul = rôle principal, API = tous
+  les rôles) : **acceptées en l'état** — gates UI volontaires conformes aux
+  recommandations D8/D7 option 1, confirmation réservée au propriétaire ;
+  D3 (`utilisateur_caisse_id` toujours le premier responsable) tracée vers
+  C5-01 (BLOQUE_PROPRIETAIRE, D9) ; D4 (prix caissier) tracée vers C3-01
+  (BLOQUE_PROPRIETAIRE, D1) ; D5 (journal 61-64) tracée vers C0-04 (OUVERT).
+  **Aucune correction de code** : vérifié que les libellés (`comptes.html`,
+  `inventaire.html`) ne mentent pas sur le comportement réel.
+- **PREUVES** : pytest `test_cumul_roles.py` + `test_matrice_roles.py`
+  **6/6** (API : responsable autorisé à compter, cumul honoré dans l'API) ;
+  Playwright `verifier-cablage.mjs` **94/94, 0 échec** (UI : gate
+  inventaire du responsable, redirections par rôle, aucun `prix_achat` à
+  l'écran/réseau/source pour l'agent) ; inspection `ventes.py:220-227`
+  (D3 inchangée, commentaire d'intention présent). Mises à jour :
+  `MATRICE_ROLES_AKUMA.md` §9 (statut par divergence), `RAPPORT_TESTS_ROLES.md`
+  §5 (même statut), `REGISTRE_ECARTS_100.md` C8-01 → CLOS.
+- **REGISTRE** : C8-01 → **CLOS** ; synthèse : **33 écarts ouverts = 17 P1
+  + 11 P2 + 5 P3 ; 5 dev-actionnables** (C0-04, C11-02, C12-03, C13-02,
+  C14-03).
+- **SCORES** : C8 **85 → 86** (référence : score du REGISTRE_ECARTS_100.md —
+  le tableau des scores ci-dessous, daté d'avant les cycles 61-64, est
+  rafraîchi au cycle 70 / C0-04) — recensement P3 soldé par preuves
+  d'exécution (aucune capacité d'écran ajoutée : le point reste de
+  documentation/audit). Aucun autre chantier touché.
+- **STATUT** : READY_FOR_REVIEW (PR #86, empilée sur
+  `cycle-68-lot-bc-inventaire`, à retarger vers `main` après fusion de
+  #85 — même règle que les lots précédents). **BLOCAGES SIGNALÉS, NON
+  LEVÉS** : fusions PR #78→#86 dans l'ordre, décisions D1–D13 (dont D7/D8
+  qui confirmeront les divergences acceptées), campagnes humaines,
+  Kaspersky (D11). **PROCHAINE TÂCHE** : cycle 70 — C0-04 (journal
+  rétrospectif des cycles 61-64, divergence D5).
+
+---
+
+## Tableau de pilotage — reprise du 2026-10-20 (après cycle 69)
 
 | Cycle | Chantier | Tâche | Responsable | Statut | Tests | Dépendance | Prochaine action |
 |---|---|---|---|---|---|---|---|
@@ -4309,6 +4347,7 @@ du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
 | 66 | C0-C14 | Audit exhaustif des écarts → `REGISTRE_ECARTS_100.md` : 40 écarts (38 ouverts : 17 P1, 14 P2, 7 P3 ; 10 dev-actionnables ; 2 CLOS par vérification) + dérive seed C1-04 + D3 confirmé + modèle point a vérifié | QODER | READY_FOR_REVIEW | base d'audit reconstruite (50 migrations rejouées), paramètres figés, `git status` captures propre | — | fusion PR #83 par le propriétaire |
 | 67 | C4 | Export dédié stock valorisé : route `GET /rapports/stock` (xlsx 2 feuilles + pdf), carte `rapports.html` réservée au responsable (porte `prix_achat`), 5 tests pytest, contrôles Playwright réels, captures régénérées, MATRICE à jour (57 routes) | QODER | READY_FOR_REVIEW | pytest `test_rapports.py` 24/24 + régression complète 325/325, Playwright rapports 45/45 (téléchargement réel 5 826 o) | PR #83 (empilée) | fusion PR #84 après #83 par le propriétaire |
 | 68 | C1/C7 | Fidélité du seed (C1-04 : 2 clés corrigées + absence justifiée + verrou `test_jeu_essai.py`) + inventaire : régularisations exposées dans l'historique comptages (C7-02) + export `/rapports/ecarts-comptage` xlsx/pdf (C7-03), matrice à 58 routes | QODER | READY_FOR_REVIEW | pytest 44/44 + régression complète 334/334, Playwright rapports 52/52 (téléchargement réel 5 680 o) | PR #84 (empilée) | fusion PR #85 après #84 par le propriétaire |
+| 69 | C8 | Divergences d'affichage soldées (écart C8-01) : D1/D2 acceptées en l'état (D7/D8), D3→C5-01, D4→C3-01, D5→C0-04 ; matrice §9 + rapport §5 à jour | QODER | READY_FOR_REVIEW | pytest 6/6 (cumul + matrice), Playwright câblage 94/94, inspection ventes.py | PR #85 (empilée) | fusion PR #86 après #85 par le propriétaire |
 | — | C13/C14 | Régression complète : toutes les suites Playwright sur base isolée + rafraîchissement des captures obsolètes (tableau-bord/inventaire) | QODER | TODO | — | — | **prochaine tâche Phase 2** |
 | — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
 | — | C5/C6 | Décisions métier (HT/TTC, paiements mixtes, seuil caisse…) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire |

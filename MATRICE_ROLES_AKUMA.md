@@ -211,13 +211,20 @@ redirige hors des écrans du rôle secondaire.
 
 ## 9. Divergences et anomalies relevées au cycle 65
 
-| # | Gravité | Description | Décision |
-|---|---|---|---|
-| D1 | P3 | `inventaire.html` refuse le responsable alors que l'API l'autorise à compter | ergonomie revendiquée — à confirmer |
-| D2 | P3 | UI cumul de rôles = rôle principal seul, API = tous les rôles | décision ergonomique à prendre |
-| D3 | P2 | Attribution `utilisateur_caisse_id` incohérente (`server/app/routes/ventes.py:210-227`) — relevée en exploration, à auditer au cycle 66 | propriétaire |
-| D4 | P2 | Visibilité des prix du caissier sur l'écran de vente — jamais tranchée | propriétaire (obligatoire avant GO) |
+Statuées au cycle 69 (écart C8-01 clôturé) — re-vérifiées par exécution :
+pytest `test_cumul_roles.py` + `test_matrice_roles.py` **6/6** (API) et
+Playwright `verifier-cablage.mjs` **94/94** (UI, prix, gates).
+
+| # | Gravité | Description | Décision | Statut (cycle 69) |
+|---|---|---|---|---|
+| D1 | P3 | `inventaire.html` refuse le responsable alors que l'API l'autorise à compter | ergonomie revendiquée — D8 | **Acceptée en l'état** : gate volontaire `["agent_stock"]` (comptage = tâche d'agent, recommandation D8 option 1) ; redirigé, prouvé par `verifier-cablage.mjs` ; tranché définitivement par le propriétaire (D8) |
+| D2 | P3 | UI cumul de rôles = rôle principal seul, API = tous les rôles | décision ergonomique — D7 | **Acceptée en l'état** : UI volontairement à périmètre principal (recommandation D7 option 1) ; API honore tout le cumul, prouvé par `test_cumul_roles.py` ; tranché par le propriétaire (D7) |
+| D3 | P2 | Attribution `utilisateur_caisse_id` incohérente (`server/app/routes/ventes.py:220-227`) — toujours le premier responsable, même si un agent saisit | propriétaire — D9 | **Tracée** : écart C5-01 du registre (BLOQUE_PROPRIETAIRE, décision D9) ; code annoté, volontairement non corrigé en attendant D9 |
+| D4 | P2 | Visibilité des prix du caissier sur l'écran de vente — jamais tranchée | propriétaire (obligatoire avant GO) | **Tracée** : écart C3-01 du registre (BLOQUE_PROPRIETAIRE, décision D1) ; aucun `prix_achat` à l'écran/réseau/source prouvé par inspection + `verifier-cablage.mjs` |
+| D5 | P3 | Journal `loop-state.md` : sections des cycles 61-64 absentes | — | **Tracée** : écart C0-04 du registre (OUVERT, développement) |
 
 Aucun de ces points n'est un trou d'habilitation : les accès réels (API et
-SQL) sont exactement ceux du tableau, et chaque divergence est soit prouvée
-sans effet de sécurité, soit une décision métier explicitement laissée ouverte.
+SQL) sont exactement ceux du tableau, et chaque divergence est désormais soit
+acceptée volontairement en l'état (D1/D2, en attente de confirmation
+propriétaire D7/D8), soit tracée vers l'écart ou la décision qui la porte
+(D3→C5-01, D4→C3-01, D5→C0-04). Le recensement est soldé.

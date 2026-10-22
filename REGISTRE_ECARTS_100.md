@@ -22,25 +22,25 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **6 clôturés par vérification ou livraison** (C4-01 et
+40 écarts recensés, dont **7 clôturés par vérification ou livraison** (C4-01 et
 C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ; C1-04, C7-02 et C7-03
-livrés au cycle 68).
-34 écarts ouverts :
+livrés au cycle 68 ; C8-01 soldé au cycle 69).
+33 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
 | P1 | **17** | 11 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
 | P2 | **11** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 3 |
-| P3 | **6** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 3 |
-| **Total ouverts** | **34** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 8 EN_COURS/OUVERT | **6** |
+| P3 | **5** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 2 |
+| **Total ouverts** | **33** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 7 EN_COURS/OUVERT | **5** |
 
 Lecture : **aucun écart d'intégrité**. Le chemin vers 99–100 % se joue sur
 trois catégories : (1) décisions du propriétaire déjà répertoriées dans
 `DECISIONS_PROPRIETAIRE.md` (D1–D13) ; (2) validations humaines (campagnes,
 impression, 2ᵉ poste) ; (3) sept fusions Git réservées au propriétaire
-(#78 → #82 + #83, #84). Le développement garde **6 écarts actionnables**
-(C0-04, C8-01, C11-02, C12-03, C13-02, C14-03) traités cycle par cycle ;
+(#78 → #82 + #83, #84). Le développement garde **5 écarts actionnables**
+(C0-04, C12-03, C13-02, C14-03, C11-02) traités cycle par cycle ;
 les correctifs codables mais suspendus à une décision
 (C1-01, C1-02, C2-02, C5-01, C5-02, C6-01, C6-02) démarreront dès que les
 décisions D2–D5, D9, D10 tombent.
@@ -374,14 +374,15 @@ décisions D2–D5, D9, D10 tombent.
 
 ### C8-01 — Divergences d'affichage recensées (D1–D4 de la matrice)
 - **Exigence source :** cycle 65 — divergences entre maquette et comportement réel.
-- **État :** 5 divergences documentées (`RAPPORT_TESTS_ROLES.md` §5), dont 4 corrigées ou acceptables ; D1 (prix caissier) reste ouverte (voir C3-01).
-- **Preuve :** `RAPPORT_TESTS_ROLES.md` ; `MATRICE_ROLES_AKUMA.md`.
+- **État :** recensement soldé au cycle 69 — chaque divergence est soit acceptée volontairement en l'état, soit tracée vers l'écart ou la décision qui la porte. Aucune correction de code nécessaire (aucun libellé ne ment sur le comportement réel : vérifié sur `comptes.html` et `inventaire.html`).
+- **Preuve :** `MATRICE_ROLES_AKUMA.md` §9 ; `RAPPORT_TESTS_ROLES.md` §5.
 - **Gravité / risque métier :** P3.
-- **Correction :** statuer sur chaque divergence ; corriger les libellés si besoin.
-- **Dépendances :** D1. **Responsable :** développement (lot B).
+- **Correction (exécutée cycle 69) :** statuer sur chaque divergence — D1 (inventaire refuse le responsable) et D2 (UI cumul = rôle principal) **acceptées en l'état** (gates volontaires, recommandations D8/D7 option 1, confirmation propriétaire) ; D3 (`utilisateur_caisse_id`) tracée → C5-01/D9 ; D4 (prix caissier) tracée → C3-01/D1 ; D5 (journal 61-64) tracée → C0-04.
+- **Dépendances :** D7, D8, D9, D1 (confirmations propriétaire) + C0-04. **Responsable :** développement (lot B) pour le recensement.
 - **Critère d'acceptation :** registre des divergences soldé.
 - **Tests requis :** rejeu des suites concernées.
-- **Statut :** OUVERT.
+- **Preuves (cycle 69) :** pytest `test_cumul_roles.py` + `test_matrice_roles.py` **6/6** (API : responsable autorisé à compter, cumul honoré) ; Playwright `verifier-cablage.mjs` **94/94** (UI : gate inventaire, redirections, aucun prix pour l'agent) ; inspection `ventes.py:220-227` (D3 toujours exacte) ; PR #86.
+- **Statut :** CLOS (cycle 69).
 
 ### C8-02 — Captures d'écran de référence
 - **Exigence source :** `loop-state.md` cycle 60 — « captures obsolètes à refaire ».
