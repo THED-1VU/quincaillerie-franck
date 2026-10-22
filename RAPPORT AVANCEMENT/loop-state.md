@@ -3859,6 +3859,58 @@ du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
   Kaspersky (D11). **PROCHAINE TÂCHE** : cycle 67 — lot A (C2, C3, C4, C5,
   C6).
 
+### Cycle 67 — Lot A (C4) : export dédié du stock valorisé (écart C4-02)
+
+- **LIVRABLE** : route `GET /rapports/stock?format=` (xlsx à 2 feuilles —
+  « stock » + « totaux par site » — et pdf), carte « Exporter le stock
+  (valorisé) » sur `maquette/rapports.html` **réservée au responsable**
+  (la route porte `prix_achat`, colonne dont seul ce rôle a le privilège —
+  GRANT 008), 5 tests pytest dédiés, 6 contrôles Playwright ajoutés à
+  `verifier-rapports-reel.mjs` (carte visible pour R, absente pour S et C,
+  téléchargement xlsx réel 5 826 octets, pdf `%PDF`), captures
+  `rapports-*.png` régénérées par la suite (page réellement modifiée),
+  MATRICE_ROLES_AKUMA.md à jour (57 routes, groupe « Responsable seul (32) »).
+- **CONTENU DE L'EXPORT** : une ligne par (article, site) — id, nom, unité,
+  site, quantité, seuil, prix achat/vente, valorisation achat/vente, alerte
+  (`RUPTURE` / `SOUS_SEUIL` / `OK`) — + totaux par site (valorisations et
+  comptes de ruptures/sous-seuils). Aucune migration (lecture seule).
+- **PREUVES** : `test_rapports.py` **24/24** (valorisations exactes : Ciment
+  site 1 = 150 000 / 195 000 FCFA et `OK`, Clou = 60 000 / 80 000, Article
+  rare `SOUS_SEUIL` ; totaux site 1 = 263 000 / 337 000 avec 1 sous-seuil,
+  site 2 = 60 000 / 80 000 ; pdf contient la valorisation ; agent stock et
+  agent comptabilité → 403 ; format invalide → 422) ; régression pytest
+  complète **325/325, exit 0** (baseline 320 du cycle 65 + 5 nouveaux,
+  11 min) ; Playwright `verifier-rapports-reel.mjs`
+  **45/45, 0 échec**.
+- **CORRECTIONS D'ENVIRONNEMENT (causes racines réelles, aucun échec masqué)**
+  : (1) `quincaillerie_test` datait d'avant la migration 050 → 24 échecs au
+  premier lancement (`changement_mdp_requis(smallint) does not exist`, appelée
+  par `deps.obtenir_session` à chaque requête) ; reconstruite de zéro
+  exactement selon `db/tests/executer_tests.sh` (DROP/CREATE + schéma d'origine
+  + `migrer.sh appliquer` — 50 migrations — + jeu d'essai) ; la tentative de
+  `migrer.sh` sur la base dérivée avait échoué proprement à la 001
+  (transaction unique, aucun dommage partiel). (2) Suite Playwright : 2
+  échecs autour de minuit — le navigateur héritait du fuseau du poste
+  (UTC-4) pendant que la base est en UTC, la date de filtre du navigateur
+  précédant d'un jour celle de l'API ; cause racine dans le **fixture de
+  test** (pas dans le produit) : `timezoneId: "UTC"` imposé au contexte +
+  date de comptage semée en UTC explicite — comparaison désormais
+  déterministe à tout moment.
+- **REGISTRE** : C4-02 → **CLOS** (preuves d'exécution réelle ci-dessus) ;
+  synthèse corrigée : **37 écarts ouverts = 17 P1 (11 BLOQUE_PROPRIETAIRE +
+  6 BLOQUE_TEST_HUMAIN) + 13 P2 + 7 P3 ; 9 dev-actionnables** (C0-04, C1-04,
+  C7-02, C7-03, C8-01, C11-02, C12-03, C13-02, C14-03).
+- **SCORES** : C4 **77 → 78** — un écart dev-actionnable livré et prouvé ;
+  tout le reste de C4 est BLOQUE_PROPRIETAIRE ou BLOQUE_TEST_HUMAIN (aucun
+  autre point ne monte sans preuve). Aucun autre chantier touché.
+- **STATUT** : READY_FOR_REVIEW (PR #84, empilée sur `cycle-66-audit-ecarts`,
+  à retarger vers `main` après fusion de #83 — même règle que les lots
+  précédents). **BLOCAGES SIGNALÉS, NON LEVÉS** : fusions PR #78→#84 dans
+  l'ordre, décisions D1-D13, campagnes humaines, Kaspersky (D11).
+  **PROCHAINE TÂCHE** : cycle 68 — C1-04 (dérive seed
+  `seuil_remise_validation_pct`) + C7-02/C7-03 (historique comptages et
+  export inventaire).
+
 ---
 
 ### Cycle 61 — Régression complète après fusion et réparation des outils de test (2026-10-20)
@@ -4202,6 +4254,7 @@ du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
 | — | C0/C14 | Protocoles d'import stock/créances + recette fonctionnelle + dossier de décision de mise en production | QODER | TODO | — | PR #81 | **prochaine tâche** ; aucun import réel sans autorisation |
 | 65 | C8/C2 | Matrice complète des rôles (API 56 routes, SQL 10 sondes, UI 30 contrôles + 22 captures) + migration 050 : obligation de changement du mot de passe provisoire appliquée à chaque requête | QODER | READY_FOR_REVIEW | matrice 1/1 zéro divergence, SQL 10/10, force 3/3, Playwright 30/30, régression complète voir cycle 65 §4 | — | fusion PR #82 par le propriétaire |
 | 66 | C0-C14 | Audit exhaustif des écarts → `REGISTRE_ECARTS_100.md` : 40 écarts (38 ouverts : 17 P1, 14 P2, 7 P3 ; 10 dev-actionnables ; 2 CLOS par vérification) + dérive seed C1-04 + D3 confirmé + modèle point a vérifié | QODER | READY_FOR_REVIEW | base d'audit reconstruite (50 migrations rejouées), paramètres figés, `git status` captures propre | — | fusion PR #83 par le propriétaire |
+| 67 | C4 | Export dédié stock valorisé : route `GET /rapports/stock` (xlsx 2 feuilles + pdf), carte `rapports.html` réservée au responsable (porte `prix_achat`), 5 tests pytest, contrôles Playwright réels, captures régénérées, MATRICE à jour (57 routes) | QODER | READY_FOR_REVIEW | pytest `test_rapports.py` 24/24 + régression complète 325/325, Playwright rapports 45/45 (téléchargement réel 5 826 o) | PR #83 (empilée) | fusion PR #84 après #83 par le propriétaire |
 | — | C13/C14 | Régression complète : toutes les suites Playwright sur base isolée + rafraîchissement des captures obsolètes (tableau-bord/inventaire) | QODER | TODO | — | — | **prochaine tâche Phase 2** |
 | — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
 | — | C5/C6 | Décisions métier (HT/TTC, paiements mixtes, seuil caisse…) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire |

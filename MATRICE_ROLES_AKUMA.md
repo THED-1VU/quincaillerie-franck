@@ -62,7 +62,7 @@ responsable → tableau de bord, comptabilité → vente, stock → inventaire.
 > strictement identique au besoin (le responsable lit les écarts sur
 > `tableau-bord.html` et `declarations.html`, il ne compte pas).
 
-## 3. Matrice API — route × rôle (56 routes, exhaustif)
+## 3. Matrice API — route × rôle (57 routes, exhaustif)
 
 Sources : décorateurs `exiger_role(...)` de `server/app/routes/`, revus
 ligne à ligne au cycle 65. `TOUS` = toute session valide (sans `exiger_role`).
@@ -76,7 +76,7 @@ Les routes sans jeton renvoient 401 ; les routes publiques sont listées.
 passe provisoire, seule route métier qui le soit),
 `GET /articles`, `GET /moi`.
 
-**Responsable seul (31)** — administration des comptes
+**Responsable seul (32)** — administration des comptes
 (`GET/POST /admin/comptes`, `PATCH /admin/comptes/{id}/actif`,
 `PATCH /admin/comptes/{id}/mot-de-passe`, `POST /admin/comptes/{id}/deverrouiller`),
 `POST /ventes/{id}/annuler`, inventaire en lecture et régularisation
@@ -92,6 +92,8 @@ tableau de bord (`GET /tableau-bord/alertes-stock`,
 (`POST/DELETE /configuration/logo`), RH complète
 (`POST /rh/employes`, `GET/POST /rh/absences-conges`,
 `GET/POST /rh/avances-salaire`, `POST /rh/avances-salaire/{id}/rembourser`),
+export du stock valorisé (`GET /rapports/stock`, cycle 67 — écart C4-02,
+porte `prix_achat` donc réservé au rôle qui en a le privilège).
 clients en écriture (`POST /clients`, `PUT /clients/{id}`,
 `PATCH /clients/{id}/actif`).
 
@@ -141,17 +143,21 @@ d'écart la calcule en `SECURITY DEFINER`.
 
 ## 5. Exports Excel/PDF
 
-Trois routes d'export (cycle 12), toutes derrière `exiger_role` et servies
+Quatre routes d'export, toutes derrière `exiger_role` et servies
 par `telechargerFichier()` (jeton en en-tête, jamais en URL) :
 
 | Route | Rôles | Formats |
 |---|---|---|
 | `GET /rapports/articles?format=` | R, S, C | xlsx, pdf |
+| `GET /rapports/stock?format=` | **R seul** (cycle 67, écart C4-02) | xlsx (feuille « totaux par site »), pdf |
 | `GET /rapports/ventes?...&format=` | R, C | xlsx, pdf |
 | `GET /rapports/ecarts-prix-vendeurs` | R, C | tableau (JSON) |
 
-L'habilitation des exports est couverte par la matrice API (les mêmes
-routes répondent 403 hors rôle, avec ou sans `?format=`).
+L'export stock porte `prix_achat` : c'est précisément pourquoi il est
+réservé au responsable (privilège colonne 008) — l'agent stock conserve
+son export catalogue sans prix d'achat, l'agent comptabilité n'a même
+pas les quantités. L'habilitation des exports est couverte par la matrice
+API (les mêmes routes répondent 403 hors rôle, avec ou sans `?format=`).
 
 ## 6. Cloisonnement par site
 

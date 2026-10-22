@@ -8,11 +8,12 @@
    configuration, signalement sans blocage. Une vente réelle est semée ici
    (5 720 = 12 % signalée, 5 980 = 8 % non signalée).
 
-   1. Le responsable voit les 4 sections (historique, export articles,
-      export ventes, écarts de prix) ; l'historique affiche un comptage
-      réellement fait aujourd'hui, et rien sur une période passée. Le
-      rapport des écarts affiche la vente semée, signale la ligne à 12 %,
-      laisse visible celle à 8 %, et le filtre de période l'écarte.
+   1. Le responsable voit les 5 sections (historique, export articles,
+      export stock valorisé — cycle 67, écart C4-02 —, export ventes,
+      écarts de prix) ; l'historique affiche un comptage réellement fait
+      aujourd'hui, et rien sur une période passée. Le rapport des écarts
+      affiche la vente semée, signale la ligne à 12 %, laisse visible celle
+      à 8 %, et le filtre de période l'écarte.
    2. L'agent stock ne voit QUE l'export du catalogue (jamais l'historique,
       ni l'export des ventes, ni les écarts) — aucune occurrence de FCFA.
    3. L'agent comptabilité voit l'export du catalogue, des ventes et les
@@ -52,6 +53,13 @@ const MDP_AGENT_STOCK = "AgentStockTest123";
 const MDP_AGENT_COMPTA = "AgentComptaTest123";
 const MDP_RESPONSABLE = "ResponsableTest123";
 
+// « Aujourd'hui » en UTC : date EXPLICITE de la semence du comptage plus
+// bas, alignée sur le fuseau fixe imposé au navigateur (timezoneId UTC) —
+// sans cela, autour de minuit, la date du navigateur et celle de la base
+// peuvent diverger et fausser deux contrôles sans aucun défaut produit
+// (constat cycle 67, machine de développement multi-fuseaux).
+const AUJOURDHUI_UTC = new Date().toISOString().slice(0, 10);
+
 const ok = [], ko = [];
 const verifier = (cond, libelle) => (cond ? ok : ko).push(libelle);
 
@@ -72,8 +80,10 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 
 // Un comptage réel d'aujourd'hui sur « Ciment CIM II 50 kg » (article 1,
 // stock 30) : compté à 28, écart -2 — pour prouver que l'historique affiche
-// un vrai écart, pas seulement une ligne « conforme ».
-psql(`INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, moment, quantite_comptee) VALUES (1, 1, 2, 'matin', 28);`);
+// un vrai écart, pas seulement une ligne « conforme ». La date est posée
+// EXPLICITEMENT en UTC (= « aujourd'hui » du navigateur, fuseau imposé plus
+// bas) pour ne pas dépendre du fuseau de la base.
+psql(`INSERT INTO comptages_stock (article_id, site_id, utilisateur_id, date_comptage, moment, quantite_comptee) VALUES (1, 1, 2, '${AUJOURDHUI_UTC}', 'matin', 28);`);
 
 // Vente réelle avec remises (cycle 58) : deux lignes au catalogue 6 500
 // (Ciment), 5 720 = 12 % sous le catalogue (au-delà du seuil de 10 % →
@@ -94,8 +104,15 @@ console.log("Base prête.\n");
 
 const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });
 
+// Fuseau fixe pour le navigateur : la carte « Historique des comptages »
+// compare « aujourd'hui » (toISOString côté page) à la date du comptage
+// semé ci-dessus (AUJOURDHUI_UTC). Sans fuseau imposé, le navigateur hérite
+// du fuseau système (constat cycle 67 : machine en UTC-4, base et Node en
+// UTC — autour de minuit, les deux « aujourd'hui » divergent). timezoneId
+// UTC + date explicite en UTC à la semence rendent la comparaison
+// déterministe partout.
 async function nouvellePage(largeur = 1366, hauteur = 900) {
-  const contexte = await navigateur.newContext({ viewport: { width: largeur, height: hauteur }, acceptDownloads: true });
+  const contexte = await navigateur.newContext({ viewport: { width: largeur, height: hauteur }, acceptDownloads: true, timezoneId: "UTC" });
   const page = await contexte.newPage();
   if (process.env.DEBUG_RAPPORTS) {
     page.on("console", (m) => console.log("  [console]", m.type(), m.text()));
@@ -134,7 +151,7 @@ async function telechargerEtLireEntete(page, idBouton, longueur = 4) {
 const LARGEURS = [360, 390, 768, 1366, 1920];
 
 // ============================================================================
-// 1. Responsable : les 4 sections, historique réel, exports réels, écarts
+// 1. Responsable : les 5 sections, historique réel, exports réels, écarts
 // ============================================================================
 {
   const { page } = await nouvellePage();
@@ -142,7 +159,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   await page.goto(`${SERVEUR_URL}/app/rapports.html`, { waitUntil: "networkidle" });
   verifier(page.url().endsWith("rapports.html"), "responsable : accès à rapports.html");
 
-  for (const id of ["carte-historique", "carte-export-articles", "carte-export-ventes", "carte-ecarts-prix"]) {
+  for (const id of ["carte-historique", "carte-export-articles", "carte-export-stock", "carte-export-ventes", "carte-ecarts-prix"]) {
     verifier(await page.isVisible(`#${id}`), `responsable : section #${id} visible`);
   }
 
@@ -170,6 +187,17 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
 
   const enteteVentesXlsx = await telechargerEtLireEntete(page, "#export-ventes-xlsx");
   verifier(enteteVentesXlsx.startsWith("PK"), "responsable : export ventes .xlsx réellement téléchargé");
+
+  // Export du stock valorisé (cycle 67, écart C4-02) : réservé au
+  // responsable — un vrai téléchargement, fichier substantiel (plusieurs
+  // Ko : lignes + feuille « totaux par site »), comme les autres exports.
+  const enteteStockXlsx = await telechargerEtLireEntete(page, "#export-stock-xlsx");
+  verifier(enteteStockXlsx.startsWith("PK"), "responsable : export stock .xlsx réellement téléchargé");
+  const contenuStock = await telechargerEtLireEntete(page, "#export-stock-xlsx", 1 << 20);
+  verifier(contenuStock.length > 500, `responsable : export stock .xlsx substantiel (${contenuStock.length} octets lus)`);
+
+  const enteteStockPdf = await telechargerEtLireEntete(page, "#export-stock-pdf");
+  verifier(enteteStockPdf.startsWith("%PDF"), "responsable : export stock .pdf réellement téléchargé");
 
   // Écarts de prix par vendeur (cycle 58) : la vente semée plus haut doit
   // apparaître — 12 % SIGNALÉE, 8 % visible mais non signalée, seuil 10 %.
@@ -224,6 +252,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
 
   verifier(await page.isVisible("#carte-export-articles"), "agent stock : export du catalogue visible");
   verifier(!(await page.isVisible("#carte-historique")), "agent stock : historique des comptages absent");
+  verifier(!(await page.isVisible("#carte-export-stock")), "agent stock : export du stock valorisé absent");
   verifier(!(await page.isVisible("#carte-export-ventes")), "agent stock : export des ventes absent");
   verifier(!(await page.isVisible("#carte-ecarts-prix")), "agent stock : rapport des écarts de prix absent");
 
@@ -248,6 +277,7 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
   verifier(await page.isVisible("#carte-export-articles"), "agent comptabilité : export du catalogue visible");
   verifier(await page.isVisible("#carte-export-ventes"), "agent comptabilité : export des ventes visible");
   verifier(!(await page.isVisible("#carte-historique")), "agent comptabilité : historique des comptages absent");
+  verifier(!(await page.isVisible("#carte-export-stock")), "agent comptabilité : export du stock valorisé absent");
 
   // Écarts de prix : accessibles à la comptabilité (même périmètre que
   // l'export des ventes), et la vente du site 1 est bien visible.

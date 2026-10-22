@@ -248,6 +248,107 @@ def test_export_ventes_date_invalide_refusee(client):
 
 
 # ---------------------------------------------------------------------------
+# /rapports/stock (cycle 67, écart C4-02 du REGISTRE_ECARTS_100.md) : stock
+# valorisé par site, RESPONSABLE SEULEMENT — prix_achat n'est un privilège
+# que du responsable (migration 008), les deux rôles agents sont refusés par
+# exiger_role avant même la base. Valeurs attendues : jeu d'essai figé —
+# Ciment 30 × 5 000 / 6 500 au Magasin (site 1), Clou 100 × 600 / 800 au
+# Comptoir (site 2), « Article rare » 1 ≤ seuil 1 → SOUS_SEUIL.
+# ---------------------------------------------------------------------------
+
+def _lignes_export_stock(reponse) -> dict:
+    classeur = load_workbook(BytesIO(reponse.content))
+    feuille = classeur["stock"]
+    entetes = [c.value for c in next(feuille.iter_rows(min_row=1, max_row=1))]
+    lignes = {}
+    for row in feuille.iter_rows(min_row=2):
+        ligne = {entetes[i]: row[i].value for i in range(len(entetes))}
+        lignes[(ligne["nom"], ligne["site_id"])] = ligne
+    return classeur, lignes
+
+
+def test_export_stock_responsable_xlsx_valorisation_et_alertes(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get(
+        "/rapports/stock", params={"format": "xlsx"}, headers=entete_autorisation(session["jeton"])
+    )
+    assert reponse.status_code == 200, reponse.text
+    classeur, lignes = _lignes_export_stock(reponse)
+
+    ciment = lignes[("Ciment CIM II 50 kg", 1)]
+    assert ciment["quantite_stock"] == 30
+    assert ciment["prix_achat"] == 5000 and ciment["prix_vente"] == 6500
+    assert ciment["valorisation_achat"] == 150000
+    assert ciment["valorisation_vente"] == 195000
+    assert ciment["alerte"] == "OK"
+
+    clou = lignes[("Clou 5 cm", 2)]
+    assert clou["quantite_stock"] == 100
+    assert clou["valorisation_achat"] == 60000
+    assert clou["valorisation_vente"] == 80000
+
+    rare = lignes[("Article rare", 1)]
+    assert rare["quantite_stock"] == 1
+    assert rare["alerte"] == "SOUS_SEUIL"  # 1 ≤ seuil 1
+
+    # Feuille de synthèse : totaux par site, cohérents avec les lignes.
+    feuille_totaux = classeur["totaux par site"]
+    entetes = [c.value for c in next(feuille_totaux.iter_rows(min_row=1, max_row=1))]
+    totaux = {
+        row[entetes.index("site_id")].value: {
+            "total_achat": row[entetes.index("total_achat")].value,
+            "total_vente": row[entetes.index("total_vente")].value,
+            "nb_ruptures": row[entetes.index("nb_ruptures")].value,
+            "nb_sous_seuil": row[entetes.index("nb_sous_seuil")].value,
+        }
+        for row in feuille_totaux.iter_rows(min_row=2)
+    }
+    assert totaux[1]["total_achat"] == 263000   # 150 000 + 112 000 + 1 000
+    assert totaux[1]["total_vente"] == 337000   # 195 000 + 140 000 + 2 000
+    assert totaux[1]["nb_ruptures"] == 0
+    assert totaux[1]["nb_sous_seuil"] == 1       # « Article rare »
+    assert totaux[2]["total_achat"] == 60000
+    assert totaux[2]["total_vente"] == 80000
+    assert totaux[2]["nb_sous_seuil"] == 0
+
+
+def test_export_stock_responsable_pdf_avec_valorisation(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get(
+        "/rapports/stock", params={"format": "pdf"}, headers=entete_autorisation(session["jeton"])
+    )
+    assert reponse.status_code == 200, reponse.text
+    texte = _texte_pdf(reponse.content)
+    assert "valorisation_achat" in texte and "valorisation_vente" in texte
+    assert "150000" in texte  # valorisation d'achat du Ciment, jeu d'essai
+
+
+def test_export_stock_agent_stock_refuse(client):
+    session = se_connecter(client, "magasin.stock", MOT_DE_PASSE_AGENT_STOCK)
+    reponse = client.get(
+        "/rapports/stock", params={"format": "xlsx"}, headers=entete_autorisation(session["jeton"])
+    )
+    assert reponse.status_code == 403, reponse.text
+
+
+def test_export_stock_agent_comptabilite_refuse(client):
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.get(
+        "/rapports/stock", params={"format": "xlsx"}, headers=entete_autorisation(session["jeton"])
+    )
+    assert reponse.status_code == 403, reponse.text
+
+
+def test_export_stock_format_invalide_refuse(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    reponse = client.get(
+        "/rapports/stock", params={"format": "csv"}, headers=entete_autorisation(session["jeton"])
+    )
+    assert reponse.status_code == 422, reponse.text
+
+
+
+# ---------------------------------------------------------------------------
 # /rapports/ecarts-prix-vendeurs (cycle 58, point c Q5, décidé 2026-09-18) :
 # 10 % sous le prix catalogue, en configuration, signale SANS jamais bloquer.
 # ---------------------------------------------------------------------------

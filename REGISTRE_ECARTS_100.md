@@ -22,26 +22,27 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **2 clôturés par vérification ce cycle** (C4-01, C8-02).
-38 écarts ouverts :
+40 écarts recensés, dont **3 clôturés par vérification ou livraison** (C4-01 et
+C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67).
+37 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
 | P1 | **17** | 11 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
-| P2 | **14** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 6 |
+| P2 | **13** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 5 |
 | P3 | **7** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 4 |
-| **Total ouverts** | **38** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 12 EN_COURS/OUVERT | **10** |
+| **Total ouverts** | **37** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 11 EN_COURS/OUVERT | **9** |
 
 Lecture : **aucun écart d'intégrité**. Le chemin vers 99–100 % se joue sur
 trois catégories : (1) décisions du propriétaire déjà répertoriées dans
 `DECISIONS_PROPRIETAIRE.md` (D1–D13) ; (2) validations humaines (campagnes,
 impression, 2ᵉ poste) ; (3) six fusions Git réservées au propriétaire
-(#78 → #82 + la PR de ce registre). Le développement garde **10 écarts
-actionnables** (C0-04, C1-04, C4-02, C7-02, C7-03, C8-01, C11-02, C12-03,
-C13-02, C14-03), répartis sur les lots 67+ ; les correctifs codables mais
-suspendus à une décision (C1-01, C1-02, C2-02, C5-01, C5-02, C6-01, C6-02)
-démarreront dès que les décisions D2–D5, D9, D10 tombent.
+(#78 → #82 + #83). Le développement garde **9 écarts actionnables**
+(C0-04, C1-04, C7-02, C7-03, C8-01, C11-02, C12-03, C13-02, C14-03) traités
+cycle par cycle ; les correctifs codables mais suspendus à une décision
+(C1-01, C1-02, C2-02, C5-01, C5-02, C6-01, C6-02) démarreront dès que les
+décisions D2–D5, D9, D10 tombent.
 
 ---
 
@@ -218,14 +219,28 @@ démarreront dès que les décisions D2–D5, D9, D10 tombent.
 
 ### C4-02 — Export dédié au chantier stock
 - **Exigence source :** `loop-state.md` C4 « reste : export dédié à C4 ».
-- **État :** les exports existants (`/rapports/articles`, mouvements) couvrent le catalogue mais aucun export ne consolide « stock par site avec valorisation » dédié à la gestion.
-- **Preuve :** `server/app/routes/rapports.py` ; `loop-state.md`.
-- **Gravité / risque métier :** P2 — le propriétaire demandait une vision valorisée du stock.
-- **Correction :** route + onglet d'export « stock par site » (xlsx) — après décision du périmètre exact (valorisation à l'achat ou à la vente ?).
-- **Dépendances :** périmètre (propriétaire, peut être glané avec D-batch). **Responsable :** développement.
-- **Critère d'acceptation :** fichier xlsx téléchargé, contrôles croisés avec les soldes affichés.
-- **Tests requis :** pytest + Playwright téléchargement.
-- **Statut :** OUVERT.
+- **État :** **LIVRÉ au cycle 67** — route `GET /rapports/stock` (responsable
+  seulement) : lignes (article, site) avec quantités, seuil, prix d'achat,
+  prix de vente, valorisations calculées EN SQL et alerte RUPTURE/SOUS_SEUIL/OK ;
+  le xlsx ajoute une feuille « totaux par site » ; carte dédiée dans
+  `rapports.html` (responsable uniquement). `prix_achat` reste un privilège
+  du seul rôle responsable (migration 008) — aucun prix retiré après coup.
+- **Preuve :** pytest `test_rapports.py` 24/24 (5 tests nouveaux : valorisations
+  exactes du jeu d'essai — Ciment 150 000/195 000, « Article rare » SOUS_SEUIL,
+  totaux par site 263 000/337 000 et 60 000/80 000 —, 403 agent stock et
+  agent comptabilité, 422 format invalide, PDF avec valorisation) ;
+  Playwright `verifier-rapports-reel.mjs` **45/45** (carte visible pour le
+  responsable, absente pour les deux rôles agents, téléchargements xlsx+pdf
+  réels — fichier de 5 826 octets). Fichiers : `server/app/routes/rapports.py`,
+  `maquette/rapports.html`, `server/tests/test_rapports.py`,
+  `maquette/verification/verifier-rapports-reel.mjs` (PR #84).
+- **Gravité / risque métier :** P2 — levé.
+- **Correction :** livrée (ci-dessus).
+- **Dépendances :** — **Responsable :** développement (cycle 67).
+- **Critère d'acceptation :** fichier xlsx téléchargé, contrôles croisés avec
+  les soldes affichés — atteint (totaux relus depuis le fichier réel).
+- **Tests requis :** pytest + Playwright téléchargement — exécutés, verts.
+- **Statut :** CLOS (cycle 67, preuves d'exécution réelle).
 
 ### C4-03 — Campagne UX du parcours stock
 - **Exigence source :** cycle 60 « campagne UX humaine (BLOCKED_HUMAN_TEST) ».
