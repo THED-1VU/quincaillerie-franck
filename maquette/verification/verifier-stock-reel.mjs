@@ -50,7 +50,8 @@ if (!existsSync(PGDEV)) {
   // principal, deux niveaux au-dessus de _worktrees/<piste>/.
   PGDEV = resolve(RACINE_DEPOT, "..", "..", "_pgdev");
 }
-const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
+// `_pgdev` n'existe que sur le poste Windows ; en CI, `psql` est sur le PATH.
+const PSQL = process.env.PSQL || (existsSync(resolve(PGDEV, "pgsql", "bin", "psql.exe")) ? resolve(PGDEV, "pgsql", "bin", "psql.exe") : "psql");
 
 const MDP_AGENT_STOCK = "AgentStockTest123";
 const MDP_RESPONSABLE = "ResponsableTest123";
@@ -98,7 +99,7 @@ const VENTE_ID = "900";
 
 console.log("Base prête.\n");
 
-const navigateur = await chromium.launch({ channel: "chrome" });
+const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });
 
 async function nouvellePage(largeur = 1366, hauteur = 900) {
   const contexte = await navigateur.newContext({ viewport: { width: largeur, height: hauteur } });
@@ -132,8 +133,14 @@ async function ouvrirArticle(page, nomPartiel, action) {
   await page.waitForSelector("#carte-panneau:not([hidden])", { timeout: 5000 });
 }
 
+// appeler() affiche « succès » PUIS recharge la liste : sans attendre la fin
+// du GET /articles, les contrôles suivants lisent l'ANCIENNE liste (trouvé au
+// cycle 62 : la mention « quantités décimales » semblait subsister après sa
+// désactivation, 1 échec/50 sous charge). networkidle est sûr ici : la page ne
+// fait aucun sondage périodique et le GET part dans la même tâche que le texte.
 async function attendreSucces(page) {
   await page.waitForSelector("#zone-succes-panneau:not([hidden])", { timeout: 10000 });
+  await page.waitForLoadState("networkidle");
 }
 
 // Clique le bouton de validation du panneau — jamais un sélecteur "text="

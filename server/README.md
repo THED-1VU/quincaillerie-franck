@@ -907,17 +907,24 @@ Aucun Python, aucune dépendance à installer : vérifié en lançant l'exécuta
 depuis un dossier **totalement isolé** du dépôt, avec seulement lui-même et
 `config.ini` — voir `fabrication/DERNIER_RESULTAT.md`.
 
-### État actuel du lanceur — placeholder documenté
+> La distribution complète d'un poste serveur de production (PostgreSQL
+> portable, base, migrations, sauvegarde planifiée, compte responsable) suit
+> le **`INSTALLATION/`** à la racine du dépôt — procédure prouvée par
+> simulation en environnement isolé (`INSTALLATION/PREUVE_SIMULATION.md`).
+> Cette section ne couvre que la copie brute de l'exécutable.
 
-Le navigateur ouvert par `lanceur.py` pointe encore sur `/docs`
-(documentation interactive de l'API), pas sur `/app/connexion.html` : la
-maquette est câblée sur ce serveur depuis le cycle 5 (`main.py` la sert sous
-`/app`), mais l'exécutable, lui, n'a pas été reconstruit ni son
-`CHEMIN_A_OUVRIR` mis à jour depuis (fabrication = chantier C0, non rouvert
-aux cycles 5/6). Le mécanisme de lancement (port, attente de démarrage,
-ouverture du navigateur) ne changera pas quand ce sera fait — seule la
-constante `CHEMIN_A_OUVRIR` dans `lanceur.py` sera mise à jour. Le mode
-kiosque (plein écran) n'a pas non plus été activé.
+### État actuel du lanceur
+
+À jour des cycles 46, 53 et 63 : l'exécutable ouvre directement
+`/app/connexion.html` (écran de connexion réel — la constante
+`CHEMIN_A_OUVRIR` a été corrigée), en **mode kiosque plein écran** Edge ou
+Chrome s'il en trouve un (repli : navigateur par défaut via `webbrowser`),
+avec attente du démarrage du port avant ouverture. L'argument
+`--sans-navigateur` (ajouté au cycle 63) lance le serveur sans ouvrir de
+fenêtre — utile pour les tests automatisés de l'exécutable. Le port 8000 est
+tenté en premier, avec repli automatique sur un port libre (affiché en
+console, adresse LAN incluse). L'arrêt de l'application se fait en fermant la
+console ; un verrou anti-double-instance est en place (cycle 46).
 
 ### Piège rencontré et corrigé — nommage du dossier
 
