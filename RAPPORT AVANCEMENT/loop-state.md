@@ -101,7 +101,19 @@ Cycle décrit dans `.agents/skills/finalisation-loop/SKILL.md`.
 | C13 | Tests automatisés et qualité | **73 %** | Cycle 20, complété au **cycle 27** : **172 tests pytest**, une **suite SQL complète** (44+52+6 contrôles + réversibilité) et **9 suites Playwright** (261 contrôles) existent et sont rejouées à chaque cycle qui touche le code correspondant. `db/outils/verifier_tout.sh` enchaîne les trois couches en une seule commande. **Cycle 27** : un des deux points bloquant une CI Linux, cité depuis le cycle 20, est corrigé — `server/tests/conftest.py` cherchait `psql.exe` en dur dans `_pgdev/pgsql/bin/` (distribution portable Windows, absente de tout runner CI) ; cherche désormais `psql` sur le `PATH` en premier (`shutil.which`), ne retombant sur le chemin Windows que s'il est introuvable — comportement du poste de développement inchangé (vérifié : aucun `psql` sur son `PATH`, le repli s'active toujours), 172/172 tests toujours au vert. Reste, non traité ce cycle : `PGHOST`/`PGPORT` (5433, instance portable) et le mot de passe de test en dur restent, eux aussi, propres à ce poste — un runner CI aurait besoin de ses propres variables d'environnement ; aucun pipeline CI (fichier de workflow) n'existe encore. Couverture des parcours nécessitant une imprimante ou un téléphone réels toujours hors de portée d'une suite automatisée.  **Cycle 48 (C13, 2026-09-24)** : le seul test flaky constaté (`test_cloture_ne_se_supprime_pas_meme_en_sql_direct`) est marqué `@pytest.mark.flaky(reruns=2, reruns_delay=5)` — reprise automatique en cas d'échec transitoire, sans masquer un échec déterministe ; `pytest.ini` enregistre le marqueur ; `pytest-rerunfailures==16.0` ajouté au lockfile avec hachages. Prouvé : lock 37 paquets / 0 sans hachage, test_caisse 19/19. Aucune autre suite de test touchée.  **Cycle 52 (C13, 2026-09-25)** : chasse aux trous de couverture — `verifier-stock-reel.mjs` RÉÉCRIT (il testait encore la casse et le retour client à un seul temps et affirmait que l'agent stock n'a pas de bouton Casse — contredisait le point f/chantier A, suite rouge invisible car la CI n'exécute que pytest) : 38/38 dont déclarations sans effet stock + validation sur `declarations.html` (casse décrémente, retour revendable réintègre, offert décrémente) ; nouveau `verifier-exploitation-reel.mjs` (12/12) : voyant sauvegarde par la VRAIE route `/exploitation/derniere-sauvegarde` (le câblage mimait le fichier), carte Ventes du jour, carte Articles offerts, logo téléversé/affiché/supprimé depuis l'écran, 403 agent stock ; ajouté à `verifier_tout.sh` et `package.json` ; `verifier-routes-appelees.mjs` 55/55.  **Cycle 57 (C13, 2026-10-20)** : invariant comptable global — section 18 de `01_protections.sql`, 12 contrôles `INV` qui BALAYENT toutes les ventes/transactions/créances par simple lecture au lieu de contrôler chaque fonction isolément (le piètre précédent : la « dépense fantôme » de `annuler_vente` n'a été vue qu'au cycle 54). Règle directrice : une vente ne fait jamais sortir plus d'espèces qu'elle n'en a encaissées (recette + règlements FIFO, même formule que 047) ; plus unicité recette, jamais de recette sur crédit, recette = total_ttc, annulations adossées et exactes, créance annulée si vente crédit annulée, remboursements adossés à un retour validé et bornés par la vente. Preuve de détection : 2 violations plantées volontairement (dépense fantôme 999 999, recette sur vente à crédit) → 2 détectées. 178/178 SQL, suite complète verte, pytest 297/297. PR #74. **Cycle 61 (C13, 2026-10-20)** : régression complète après fusion des PR #74/#75/#73/#76/#77 — pytest **306/306** sur base isolée, suite SQL **202 protections + 61 habilitations + 6 concurrence**, aller-retour des migrations 000→049 (10 lignes de diff cosmétiques connues), Playwright **431 contrôles / 12 suites / 0 échec**. Trois défauts réels de l'outillage de test trouvés par exécution et corrigés, non masqués : rapprochement routes/`*` de requête (faux positif), INSERT multi-site obsolète dans l'essai d'échappement HTML, navigateur jamais fermé dans la suite comptes (hang après 26/26). Suites statiques héritées `affichage`/`flux` documentées inutilisables sur écrans connectés. Intégration Playwright dans la CI : tâche suivante (PR dédiée). **Cycle 62 (C13, 2026-10-20)** : les 12 suites Playwright sont désormais EXÉCUTÉES PAR GITHUB ACTIONS à chaque PR — job `playwright` indépendant du job `pytest`, postgres:17 isolé sur 5433, base recréée (000→049 + jeu d'essai + qf_app), config.ini de test généré, uvicorn 8010 démarré et tué dans la même étape. Installation reproductible : `package-lock.json` Playwright 1.63.0 enfin VERSIONNÉ (il était gitignoré, rendant `npm ci` impossible), Chromium figé par le lockfile (`PLAYWRIGHT_CHANNEL=chromium`), cache npm sur le lockfile. `executer_suites_reelles.sh` : 12 suites, délai 600 s par suite, journal + synthèse par suite, 40 dernières lignes en échec ; artefact `rapports-playwright` conservé 7 jours si échec ; `pull_request` sans filtre de base pour couvrir les PR empilées. Preuves : run GitHub **39459056591 SUCCESS** — playwright **12/12 suites, 431 contrôles, 0 échec** en 4 min 55 s, pytest 7 min 59 s ; local après correctifs stock **49/49** et inventaire **17/17**, exit 0. Deux courses réelles de l'outillage trouvées et corrigées par exécution : (1) inventaire — le clic « Matin » relance chargerListe() et la liste « soir » était remplacée pendant les clics, le comptage partait sur un autre article (14/17 : écart +21 sur « Article rare », « Ciment » non compté), corrigé par attente du GET + networkidle ; (2) stock — `appeler()` affiche « succès » PUIS recharge la liste, le contrôle « la mention quantités décimales a disparu » lisait l'ancienne liste (1 échec/49 sous charge), corrigé par networkidle dans attendreSucces(). Portabilité Linux : psql du PATH hors poste Windows, canal navigateur surchargeable, import existsSync manquant. PR #79. |
 | C14 | Documentation et livrables | **65 %** | Évalué sur pièces. Documentation d'usage/recette solide : CDC détaillé, 2 guides testeur, dossier de recette, guide d'installation. `MODELE_DONNEES.md`, `PERIMETRE_LIVRE.md`, `ADDENDUM_CAHIER_DES_CHARGES.md` produits dans ce cycle. Manquent (CDC §7) : code source, scripts de fabrication des exécutables, scripts + guide de sauvegarde/restauration.  **Cycle 45 (C14, 2026-09-24)** : livrables CDC §7 tous présents et documentés — code source (dépôt Git, `OWNERSHIP.md`), schéma + migrations 000-038 (+ inverses), scripts de fabrication (`server/fabrication/construire.ps1` + `.spec` PyInstaller), sauvegarde/restauration (`db/outils` + guide, RPO 1 h / RTO 2 h / AES-256), jeux de tests (pytest 248, suite SQL, Playwright), CI GitHub Actions, documentation d'installation et d'exploitation ; `README.md` racine remis à jour (état cycle 44 + liste des livrables §7 + résumé opérationnel). Reste : étiqueter une version (tag) lors de la première livraison réelle, clause contractuelle d'escrow (hors périmètre technique, point l).  **Cycle 50 (C14, 2026-09-25)** : premier tag de version **`v0.1.0`** posé et poussé sur `main` (commit de la montée majeure C11, moyenne ≈ 74 %). Reste : clause contractuelle d'escrow (hors périmètre technique, point l). |
 
+**Moyenne indicative après le cycle 60 (C4 case décimale sur la fiche article, PR #77) : ≈ 77 %** (C0 78, C1 92, C2 77, C3 77, C4 92, C5 81, C6 85, C7 65, C8 72, C9 60, C10 58, C11 85, C12 92, C13 71, C14 65).
+
 **Moyenne indicative après le cycle 64 (dossier d'installation prouvé par simulation + correctif voyant déployé, PR #81) : ≈ 78 %** (C0 86, C1 92, C2 77, C3 77, C4 92, C5 81, C6 85, C7 65, C8 72, C9 60, C10 58, C11 85, C12 95, C13 76, C14 65). C13 est compté à 76 tel que documenté par le cycle 62 (PR #79, en attente de fusion) ; la PR #80 se fusionne après #78 et #79 pour garder ce référentiel cohérent, puis #81.
+
+**Moyenne indicative après le cycle 65 (matrice des rôles + obligation de
+changement du mot de passe provisoire, PR #82) : ≈ 79 %** — référence
+cycle 64 transmise par le propriétaire (C0 86, C1 92, C2 77, C3 77, C4 77,
+C5 81, C6 85, C7 65, C8 72, C9 60, C10 58, C11 85, C12 95, C13 76, C14 65),
+deltas prouvés ce cycle : C2 **→ 82**, C8 **→ 85** (détail et justification
+en tête de section « Cycle 65 » du journal ; écart de journalisation des
+cycles 61-64 consigné D5). Les scores des cycles 61-64 (C0 78→86, C4 92→77,
+C12 92→95, C13 71→76) proviennent du relevé du propriétaire — sections de
+journal à reconstituer si demandé.
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 ---
@@ -3736,6 +3748,83 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
   fusion des PR #73, #74, #75, #76 puis #77 par le propriétaire
   (aucune auto-fusion).
 
+### Cycle 65 — C8/C2 : matrice complète des rôles + obligation de changement
+### du mot de passe provisoire enfin appliquée — 2026-10-21
+
+Premier cycle de la CLOSURE LOOP (objectif : 99-100 % par chantier C0-C14).
+**Décision de pilotage reçue** : matrice des rôles exhaustives (UI + API +
+SQL, avec captures par rôle), correction des défauts trouvés, puis
+`REGISTRE_ECARTS_100.md` au cycle 66 ; les décisions métier restent celles
+du propriétaire (`DECISIONS_PROPRIETAIRE.md`).
+
+- **DÉFAUT MAJEUR TROUVÉ PAR LA MATRICE** : `doit_changer_mot_de_passe`
+  existait depuis le cycle 38 (jeton + réponse de connexion + remise à zéro
+  par le responsable) mais n'était **contrôlé nulle part** — vérifié par
+  grep exhaustif avant correction. Un compte provisoire accédait à toute
+  l'application, malgré l'« obligation » documentée (README C2). Corrigé :
+  migration 050 `changement_mdp_requis()` (SECURITY DEFINER, seul `qf_app`
+  — même motif que `compte_est_actif` 024, car `qf_app` n'a aucun SELECT sur
+  `utilisateurs`), relue **en base à chaque requête** par `deps.py` ;
+  drapeau vrai ⇒ 403 partout sauf `/auth/changer-mot-de-passe` et
+  `/auth/deconnexion`. Écran `changer-mot-de-passe.html` nouveau (garde
+  anti-boucle, session ré-enregistrée sur 401) ; `connexion.html` et
+  `api.js` renvoient vers cet écran ; jeu d'essai : comptes de travail
+  repassés `FALSE` (sinon toute la suite métier serait 403 — l'obligation
+  reste prouvée par `test_premier_compte` et `test_changement_mdp_force`).
+- **MATRICE PRODUITE** : `MATRICE_ROLES_AKUMA.md` — 56 routes API × 3 rôles
+  (≈ 390 requêtes), 10 sondes SQL sous rôle PostgreSQL (prix/quantités/
+  comptage aveugle/hachages/journaux), 11 écrans UI gatés par rôle, exports,
+  cloisonnement par site (renvoi vers `test_cloisonnement_site.py`),
+  sessions, cumul de rôles. **Zéro divergence** entre décorateurs et
+  attentes ; les deux divergences UI/API connues (inventaire ↔ responsable,
+  cumul rôle principal seul) sont mesurées, capturées et documentées —
+  décisions d'ergonomie laissées au propriétaire (D7/D8).
+- **TESTS AJOUTÉS** : `test_matrice_roles.py` (1 test-matrice),
+  `test_privileges_sql_roles.py` (10), `test_changement_mdp_force.py` (3),
+  `verifier-roles.mjs` (30 contrôles Playwright, 22 captures
+  `maquette/captures/roles/`, npm `roles`). Helper partagé conftest
+  `fixer_drapeau_changement_mdp` (raccourci admin de test).
+- **RÉGRESSION 1ʳᵉ PASSE : 3 ÉCHECS, 1 CAUSE RACINE, NON MASQUÉS** —
+  trois tests préexistants créent un compte par l'API (drapeau TRUE par
+  construction — comportement voulu) puis appellent des routes métier :
+  désormais bloqués par l'obligation. Corrections : prémisse « première
+  connexion » explicitée dans `test_authentification.py`, retrait du drapeau
+  dans `test_comptes.py` et `test_cumul_roles.py` (sinon le second test
+  cumul passait « pour la mauvaise raison » — 403 du drapeau au lieu du
+  403 de rôle). Après correction : 40/40 sur les 6 fichiers touchés.
+  Environnement : jonction `%TEMP%\pytest-of-USER\pytest-current`
+  inaccessible sans élévation (connu depuis le cycle 56) — contourné par
+  `--basetemp` dédié, élévation toujours réservée au propriétaire.
+  **Régression finale : 320 passed, 0 failed, exit 0** (11 min 39 s sur
+  `quincaillerie_c65`) — dont 14 tests nouveaux et les 3 tests adaptés ;
+  suite Playwright `roles` : 30/30.
+- **RAPPORTS** : `RAPPORT_TESTS_ROLES.md` (exécutions, correctif,
+  adaptations, divergences D1-D5), `DECISIONS_PROPRIETAIRE.md` (13 points
+  D1-D13 : prix caissier — vérifié en inspection, aucun `prix_achat` ni à
+  l'écran ni dans les rapports —, paiements mixtes, fond/seuil caisse,
+  remises, HT/TTC, durée de session, cumul UI, inventaire responsable,
+  `utilisateur_caisse_id` à auditer, 2FA, Kaspersky, tests physiques/GO,
+  fusions PR).
+- **SCORE AVANT → APRÈS** (référence cycle 64 : C2 77, C8 72, moyenne ≈ 78)
+  : C2 **77 → 82** (l'obligation documentée depuis 38 cycles est enfin
+  appliquée et prouvée aux trois couches ; restent D6 durée de session
+  branchée et D10 2FA), C8 **72 → 85** (matrice exhaustive automatisée +
+  captures ; restent D1/D2/D4, réserves précisément identifiées, et l'audit
+  D3 au cycle 66). Moyenne indicative ≈ **79 %**. Aucun autre chantier
+  revendiqué.
+- **ÉCART DE JOURNALISATION (D5)** : les cycles 61-64 (branches
+  `cycle-61-regression-complete`, `cycle-63-candidat-exe`,
+  `cycle-64-dossier-installation`, PR #78-#81 selon les relevés de session)
+  n'ont pas de section dans ce fichier — leurs scores de référence
+  (transmis par le propriétaire) ont servi de base ici. À reconstituer
+  depuis l'historique Git si le propriétaire le demande.
+- **STATUT** : `READY_FOR_REVIEW` (PR #82 à créer). Environnement du cycle
+  (serveur 8010 + base `quincaillerie_c65` + config `$TEMP`) détruit après
+  validation. **BLOCAGES SIGNALÉS, NON LEVÉS** : fusions PR #78→#81
+  (propriétaire, ordre requis — réseau GitHub indisponible au cycle 65 pour
+  re-vérifier les numéros), décisions D1-D13. **PROCHAINE TÂCHE** :
+  cycle 66 — audit exhaustif C0-C14 → `REGISTRE_ECARTS_100.md`.
+
 ---
 
 ### Cycle 61 — Régression complète après fusion et réparation des outils de test (2026-10-20)
@@ -4057,7 +4146,7 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
 
 ---
 
-## Tableau de pilotage — reprise du 2026-10-20 (après cycle 64)
+## Tableau de pilotage — reprise du 2026-10-20 (après cycle 65)
 
 | Cycle | Chantier | Tâche | Responsable | Statut | Tests | Dépendance | Prochaine action |
 |---|---|---|---|---|---|---|---|
@@ -4077,7 +4166,8 @@ l'invariant lui-même plutôt que la fonction qu'on vient de toucher.
 | 63 | C0/C12 | Akuma.exe candidat : 3 écrans 404 corrigés dans le spec, `--sans-navigateur`, build via `python -m PyInstaller` ; test isolé complet contre l'exe ; sauvegarde/restauration re-prouvées ; cause Kaspersky prouvée | QODER | READY_FOR_REVIEW | exe 28,8 Mio ; 12 suites Playwright **431/431** contre l'exe (base c63 @049) ; dump .enc 358 000 o ; restauration 37 tables identiques ; rôles conformes | PR #78 puis #79 (conflit doc loop-state, union) | fusion PR #80 après #78/#79 ; action propriétaire Kaspersky (quarantaine/exclusion) |
 | 64 | C0 | Dossier d'installation (`INSTALLATION/` : README 9 étapes, checklist J-1, preuve) + `migrer.ps1` (parité bash prouvée) + correctif voyant déployé (`RACINE_DEPOT` figé → dossier de l'exe) + exe reconstruit | QODER | READY_FOR_REVIEW | simulation réelle en dossier isolé (initdb 5434, 50 migrations, exe lancé : `/sante` ok, connexion jeton réel, voyant sans variable d'env.) ; parité migrer.ps1≡migrer.sh 34/3/118/49 ↔ 14/0/67 ; pytest **306/306** | PR #78→#79→#80 (journal inclut #80, union) | fusion PR #81 après #78/#79/#80 ; installation réelle = autorisation propriétaire |
 | — | C0/C14 | Protocoles d'import stock/créances + recette fonctionnelle + dossier de décision de mise en production | QODER | TODO | — | PR #81 | **prochaine tâche** ; aucun import réel sans autorisation |
-| — | C9/C14 | Matrice de vérification par rôle (responsable, agent comptabilité/caissier, agent stock) : tests + captures d'écran | QODER | TODO | — | PR #81 | demande du propriétaire (2026-10-20), cycle 65 |
+| 65 | C8/C2 | Matrice complète des rôles (API 56 routes, SQL 10 sondes, UI 30 contrôles + 22 captures) + migration 050 : obligation de changement du mot de passe provisoire appliquée à chaque requête | QODER | READY_FOR_REVIEW | matrice 1/1 zéro divergence, SQL 10/10, force 3/3, Playwright 30/30, régression complète voir cycle 65 §4 | — | fusion PR #82 par le propriétaire |
+| — | C13/C14 | Régression complète : toutes les suites Playwright sur base isolée + rafraîchissement des captures obsolètes (tableau-bord/inventaire) | QODER | TODO | — | — | **prochaine tâche Phase 2** |
 | — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
 | — | C5/C6 | Décisions métier (HT/TTC, paiements mixtes, seuil caisse…) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire |
 

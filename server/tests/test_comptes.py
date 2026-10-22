@@ -19,6 +19,7 @@ from __future__ import annotations
 from conftest import (
     MOT_DE_PASSE_RESPONSABLE,
     entete_autorisation,
+    fixer_drapeau_changement_mdp,
     se_connecter,
 )
 
@@ -115,6 +116,10 @@ def test_desactiver_reactiver_et_coupure_session(client):
     cree = _creer_compte(client, session["jeton"], identifiant="cible.agent")
     assert cree.status_code == 201, cree.text
     compte_id = cree.json()["id"]
+    # Ce test porte sur la désactivation, pas sur l'obligation de changement
+    # de mot de passe (cycle 65) : le compte créé par l'API a le drapeau TRUE
+    # par construction, on le retire pour travailler avec un compte « en poste ».
+    fixer_drapeau_changement_mdp("cible.agent", False)
 
     # L'agent se connecte : sa session est valide.
     session_agent = se_connecter(client, "cible.agent", "MotDePasse123")

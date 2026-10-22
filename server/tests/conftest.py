@@ -69,10 +69,26 @@ MOT_DE_PASSE_AGENT_COMPTA = "AgentComptaTest123"
 MOT_DE_PASSE_AGENT_COMPTA_COMPTOIR = "AgentComptaCptTest123"
 
 
-def _executer_sql_admin(sql: str) -> None:
+def _executer_sql_admin(sql: str, parametres: tuple | None = None) -> None:
     with psycopg.connect(PG_ADMIN_DSN) as conn:
-        conn.execute(sql)
+        conn.execute(sql, parametres or ())
         conn.commit()
+
+
+def fixer_drapeau_changement_mdp(identifiant: str, valeur: bool) -> None:
+    """Pose ou retire l'obligation de changer le mot de passe provisoire
+    (cycle 65, migration 050).
+
+    Raccourci d'ADMINISTRATION DE TEST : dans l'application, ce drapeau ne
+    se retire QUE par le changement réel du mot de passe — les tests qui ne
+    portent pas sur ce mécanisme travaillent avec des comptes « en poste »
+    (drapeau faux), et les tests qui le portent le posent explicitement.
+    """
+    _executer_sql_admin(
+        "UPDATE utilisateurs SET doit_changer_mot_de_passe = %s "
+        "WHERE identifiant = %s",
+        (valeur, identifiant),
+    )
 
 
 @pytest.fixture(scope="function")
