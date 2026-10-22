@@ -39,8 +39,15 @@ DOSSIER_MAQUETTE = (RACINE_SERVEUR.parent / "maquette").resolve()
 # restent volontairement hors du paquet.
 FICHIERS_MAQUETTE = [
     "api.js",
+    # Cycle 63 : trois écrans livrés après la dernière construction (cycle 53)
+    # manquaient ici — ils étaient donc servis en 404 par l'exécutable alors
+    # que le serveur de développement les sert. Toute nouvelle page doit être
+    # ajoutée à cette liste EN MÊME TEMPS que l'écran.
+    "clients.html",
     "cloture-caisse.html",
+    "comptes.html",
     "connexion.html",
+    "declarations.html",
     "donnees-simulees.js",
     "favicon.ico",
     "index.html",
