@@ -30,7 +30,8 @@ let PGDEV = resolve(RACINE_DEPOT, "_pgdev");
 if (!existsSync(PGDEV)) {
   PGDEV = resolve(RACINE_DEPOT, "..", "..", "_pgdev");
 }
-const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
+// `_pgdev` n'existe que sur le poste Windows ; en CI, `psql` est sur le PATH.
+const PSQL = process.env.PSQL || (existsSync(resolve(PGDEV, "pgsql", "bin", "psql.exe")) ? resolve(PGDEV, "pgsql", "bin", "psql.exe") : "psql");
 
 const MDP_RESPONSABLE = "ResponsableTest123";
 const MDP_AGENT_STOCK = "AgentStockTest123";
@@ -59,7 +60,7 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 psql(`DELETE FROM utilisateurs WHERE identifiant = '${NOUVEAU_IDENTIFIANT}';`);
 console.log("Base prête.\n");
 
-const navigateur = await chromium.launch({ channel: "chrome" });
+const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });
 const CAPTURES = resolve(ICI, "..", "captures") + "/";
 
 async function mesurerMiseEnPage(page, nomEcran, largeur) {
@@ -243,4 +244,8 @@ for (const largeur of [360, 390, 768, 1366, 1920]) {
 console.log(`\n== ${ok.length}/${ok.length + ko.length} contrôles réussis ==`);
 for (const libelle of ok) console.log(`  OK  ${libelle}`);
 for (const libelle of ko) console.log(`  KO  ${libelle}`);
-if (ko.length) process.exit(1);
+// Sans fermeture explicite du navigateur, Node restait vivant après un
+// succès (constaté au cycle 61 : tous les contrôles OK, processus bloqué,
+// code de sortie jamais rendu). Les autres suites appellent déjà close().
+await navigateur.close();
+process.exit(ko.length ? 1 : 0);
