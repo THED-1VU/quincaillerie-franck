@@ -12,6 +12,8 @@ base.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from fastapi import Depends, HTTPException, Request, status
 
 from .database import BaseDeDonnees
@@ -79,6 +81,12 @@ def obtenir_session(
                     status.HTTP_401_UNAUTHORIZED,
                     "Ce compte est désactivé. Voyez le responsable.",
                 )
+            cur.execute("SELECT * FROM contexte_session(%s, %s)",
+                        (session.jti, session.utilisateur_id))
+            contexte = cur.fetchone()
+            if not contexte or not contexte["enregistree"] or contexte["site_id"] != session.site_id:
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session invalide, reconnectez-vous.")
+            session = replace(session, role=contexte["role"], roles=tuple(contexte["roles"]))
             if ligne["changement_requis"] and request.url.path not in (
                 "/auth/changer-mot-de-passe",
                 "/auth/deconnexion",

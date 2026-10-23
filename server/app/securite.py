@@ -27,6 +27,8 @@ _TOURS_BCRYPT = 12
 
 
 def hacher_mot_de_passe(mot_de_passe_clair: str) -> str:
+    if len(mot_de_passe_clair.encode("utf-8")) > 72:
+        raise ValueError("Le mot de passe dépasse la limite technique bcrypt de 72 octets UTF-8.")
     sel = bcrypt.gensalt(rounds=_TOURS_BCRYPT, prefix=b"2a")
     return bcrypt.hashpw(mot_de_passe_clair.encode("utf-8"), sel).decode("ascii")
 
@@ -83,7 +85,7 @@ def _b64_decoder(donnees: bytes) -> bytes:
 class GestionnaireSessions:
     def __init__(self, secret_key: str, duree_minutes: int) -> None:
         self._cle = secret_key.encode("utf-8")
-        self._duree_secondes = duree_minutes * 60
+        self._duree_secondes = min(duree_minutes, 480) * 60
 
     def emettre(
         self,
@@ -98,7 +100,7 @@ class GestionnaireSessions:
     ) -> str:
         maintenant = int(time.time())
         duree_secondes = (
-            duree_minutes * 60 if duree_minutes is not None else self._duree_secondes
+            min(duree_minutes, 480) * 60 if duree_minutes is not None else self._duree_secondes
         )
         charge = {
             "uid": utilisateur_id,
@@ -146,6 +148,8 @@ class GestionnaireSessions:
 
         if int(time.time()) >= charge.get("exp", 0):
             raise JetonInvalide("Jeton expiré, reconnectez-vous.")
+        if charge.get("exp", 0) - charge.get("iat", 0) > 480 * 60:
+            raise JetonInvalide("Durée de session excessive, reconnectez-vous.")
 
         return Session(
             utilisateur_id=charge["uid"],
