@@ -105,14 +105,28 @@ indépendant de ce décalage.
   minuit passé à Douala. Le `POST /caisse` du même scénario réussissait avec
   écart 0, ce qui exclut un défaut serveur ; l'écran affichait bien 6 500
   (deuxième `GET`), seule la réponse capturée était périmée.
-- **Correctif (test uniquement, même famille que l'échec pytest de la
-  section 4)** : `verifier-caisse-reel.mjs` attend désormais précisément
-  l'URL `site_id=<site>&date_cloture=<jour lu en base>` (helper
-  `chargerAttenduExact`) et que l'ÉCRAN affiche le montant du jour avant
-  lecture. Preuve A/B sous conditions reproduites (fuseau navigateur forcé
-  à UTC-11 + 400 ms de latence sur l'aperçu) : version d'avant = échec
-  identique au CI (1/24), version corrigée = 24/24 ; suite réelle ensuite
-  24/24. Aucun code applicatif ni contrainte SQL touchés.
+- **Première correction (commit `816538b`, test seul)** : attendre l'URL
+  exacte `site_id=<site>&date_cloture=<jour lu en base>` et que l'ÉCRAN
+  affiche le montant du jour avant lecture. Run **40039156099** sur
+  **`816538b`** : job `pytest` **succès**, job `playwright` **encore en
+  échec** sur la même suite, autre manifestation —
+  `page.waitForFunction: Timeout 10000ms` : la réponse exacte était reçue,
+  mais l'écran restait à 0. **Cause affinée par exécution** : la page lance
+  DEUX aperçus concurrents (change du site — avec la date par défaut du
+  navigateur — puis change de la date) ; l'aperçu le plus LENT écrase
+  l'affichage du plus récent, et l'ordre varie d'un run à l'autre (run 1 :
+  réponse périmée capturée ; run 2 : réponse périmée affichée en dernier).
+- **Correctif final (test uniquement, même famille que l'échec pytest de
+  la section 4)** : `verifier-caisse-reel.mjs` pose site ET date en une
+  fois puis n'émet QU'UN `change` — un seul aperçu, celui du site et du
+  jour lus en base ; l'attente de l'URL exacte et du montant affiché est
+  conservée. Preuve par trace des requêtes sous divergence reproduite
+  (fuseau navigateur forcé à UTC-11, latence de 5 ms sur l'aperçu daté de
+  la veille) : avant = `["1|2026-10-23","1|2026-10-24","2|2026-10-24",
+  "2|2026-10-24"]` (deux aperçus concurrents), après =
+  `["1|2026-10-24","2|2026-10-24"]` (un seul par site) ; version corrigée
+  = 24/24, suite réelle ensuite 24/24. Aucun code applicatif ni contrainte
+  SQL touchés.
 - La PR #103 pointe sur la tête de `operation-100-lot-b` ; la fusion
   reste à la main du propriétaire (Claude in Chrome), merge commit uniquement.
 
@@ -171,8 +185,8 @@ Divergences relevées, **signalées sans correction** :
 ## 8. Ce qui reste à la main du propriétaire
 
 - **Fusion de la PR #103** (Claude in Chrome) : CI sur l'état combiné
-  (section 5 : run 40035602067 vert ; la course de test révélée par le run
-  40037134895 est corrigée et re-prouvée localement).
+  (section 5 : run 40035602067 vert ; la course de test révélée par les
+  runs 40037134895 et 40039156099 est corrigée et re-prouvée localement).
 - **Kaspersky** : procédure S1-S6 (restauration/exclusion de
   `sauvegarder.ps1`), décision propriétaire.
 - **Second PC** : épreuve physique P1-P9 (reprise, RTO ≤ 2 h).

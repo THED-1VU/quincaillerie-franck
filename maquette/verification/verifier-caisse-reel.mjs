@@ -143,13 +143,13 @@ async function seConnecter(page, identifiant, motDePasse) {
   }
 }
 
-// La page interroge /caisse/attendu sur change de site ET de date. Un
-// waitForResponse générique peut capter la requête déclenchée par le site,
-// partie avec la date par défaut du NAVIGATEUR — qui peut différer de la date
-// réelle en base aux abords de minuit (constaté en CI le 2026-10-23 à 23 h UTC :
-// navigateur au 23, base Africa/Douala au 24, « espèces attendues = 0 » alors
-// que la vente du jour vaut 6500). On force le change de date et on attend
-// précisément l'URL du site ET du jour voulus.
+// La page interroge /caisse/attendu sur change de site ET de date. Deux
+// aperçus concurrents peuvent se croiser et le plus LENT écrase l'affichage
+// du plus récent (constaté en CI : l'aperçu du navigateur, daté de la veille
+// aux abords de minuit, arrivait après celui du jour et laissait « 0 » à
+// l'écran alors que la vente du jour valait 6500). On pose donc site ET date
+// d'un seul geste, suivis d'UN seul change : une seule requête, celle du
+// site et du jour lus en base, dont on attend l'URL exacte.
 async function chargerAttenduExact(page, siteId, jour) {
   const urlAttendue = `/caisse/attendu?site_id=${siteId}&date_cloture=${jour}`;
   const [reponse] = await Promise.all([
@@ -157,11 +157,11 @@ async function chargerAttenduExact(page, siteId, jour) {
       (r) => r.request().method() === "GET" && r.url().endsWith(urlAttendue),
       { timeout: 10000 }
     ),
-    page.evaluate((j) => {
-      const champ = document.getElementById("f-date");
-      champ.value = j;
-      champ.dispatchEvent(new Event("change"));
-    }, jour),
+    page.evaluate(([s, j]) => {
+      document.getElementById("f-site").value = String(s);
+      document.getElementById("f-date").value = j;
+      document.getElementById("f-date").dispatchEvent(new Event("change"));
+    }, [siteId, jour]),
   ]);
   return reponse;
 }
@@ -209,7 +209,6 @@ for (const largeur of [360, 390, 768, 1366, 1920]) {
   verifier(page.url().endsWith("cloture-caisse.html"), "responsable : accès à cloture-caisse.html");
 
   // --- Site Magasin, clôture EXACTE (compté = attendu) ---
-  await page.selectOption("#f-site", "1");
   const reponseAttendu = await chargerAttenduExact(page, 1, jourMagasin);
   const corpsAttendu = await reponseAttendu.json();
   verifier(reponseAttendu.ok(), "attendu réel : GET /caisse/attendu -> 200");
@@ -249,7 +248,6 @@ for (const largeur of [360, 390, 768, 1366, 1920]) {
   verifier(true, "clôture exacte réelle : message de succès affiché");
 
   // --- Site Comptoir, écart SANS commentaire -> refusé, message affiché ---
-  await page.selectOption("#f-site", "2");
   await chargerAttenduExact(page, 2, jourComptoir);
   await page.fill("#f-especes", String(venteComptoir.total_ttc - 200));
   const [reponseRefusee] = await Promise.all([

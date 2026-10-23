@@ -4792,10 +4792,16 @@ fusionnées** (fusion = propriétaire uniquement, dans l'ordre
   famille que l'échec pytest : l'aperçu capturé partait avec la date du
   NAVIGATEUR (UTC, 23/10) au lieu du jour en base (Africa/Douala, 24/10)
   — course entre deux `GET /caisse/attendu` (changement de site puis de
-  date). Correctif du test : attente de l'URL exacte
-  `site_id`+`date_cloture` et du montant affiché à l'écran ; preuve A/B
-  reproduite (avant 1/24, après 24/24), suite réelle 24/24. Aucun code
-  applicatif ni SQL modifiés (détail : `CYCLE_77_REVALIDATION.md` §5).
+  date). **Première correction (`816538b`) insuffisante** : le run
+  **40039156099** sur `816538b` a de nouveau échoué sur `caisse`
+  (`waitForFunction` timeout — la réponse exacte était reçue mais l'écran
+  restait à 0, l'aperçu le plus lent écrasant le plus récent). **Correctif
+  final (test seul)** : site ET date posés ensemble, UN seul `change` —
+  un seul aperçu, celui du jour lu en base ; trace des requêtes sous
+  divergence : avant `["1|2026-10-23","1|2026-10-24","2|2026-10-24",
+  "2|2026-10-24"]`, après `["1|2026-10-24","2|2026-10-24"]` ; 24/24.
+  Aucun code applicatif ni SQL modifiés (détail :
+  `CYCLE_77_REVALIDATION.md` §5).
 - **Docs** : `LOTB_RAPPORT_FINAL.md` et ce journal corrigés (#100/#101/#102
   fusionnées ; `main` = `d745ead` ; chaîne « #92 → #100 » retirée).
 - **Analyse #92/#60 (aucune décision)** : #92 = 3 docs cycle 74 uniques
