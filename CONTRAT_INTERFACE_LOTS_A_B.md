@@ -2,7 +2,18 @@
 
 Date : 2026-10-23. Codex : C1/C2/C3. Qoder : C5/C8/C12.
 Branche Codex : `codex/akuma-c1-c2-c3-100`.
-Statut : contrat proposé pour coordination ; aucun accusé de réception de Qoder.
+Statut initial : contrat proposé. Mise à jour : contrat du Lot B lu dans le
+checkout principal. Le sommet complet `2dae406` est le socle commun convenu,
+intégré localement ; aucune PR fusionnée par Codex. Le constat sur main
+ci-dessous reste historique et distinct de cette intégration locale.
+
+Contrat avant corrections : 053 (attribué à Codex par le Lot B) registre les
+sessions serveur, invalide les autres sessions après changement de mot de passe
+et toutes les sessions après réinitialisation/désactivation. La session qui
+effectue son propre changement reste utilisable (204 inchangé). Les anciens
+jetons non enregistrés imposent une reconnexion. Rôles et site sont contrôlés
+en base à chaque requête. 054 est réservé aux invariants complémentaires des
+paiements et à la concurrence. Aucun fichier du Lot B modifié silencieusement.
 
 ## Socle vérifié
 
