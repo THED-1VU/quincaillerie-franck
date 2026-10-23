@@ -27,9 +27,15 @@ fiscale n'a été inventé ; la saisie TTC est conservée.
    (`ventes.py:94-95, 185-186`). La fonction `parametre_numerique()` REFUSE
    la valeur sentinelle `a_definir` : l'application s'arrête franchement au
    lieu d'appliquer en silence une règle inventée (en-tête de la migration
-   006). Sont également à l'état sentinelle `a_definir` + `a_decider =
-   TRUE` : `regime_fiscal`, `prix_saisis_ttc`,
-   `boutique_numero_contribuable`, `arrondi_montants`.
+   006). **États réels vérifiés en SQL le 2026-10-23** — sur une base issue
+   des migrations seules, `regime_fiscal`, `prix_saisis_ttc`,
+   `arrondi_montants`, `boutique_numero_contribuable` et `taux_tva` sont à
+   l'état sentinelle (`a_definir` ou `0`, `a_decider = TRUE`) ; sur la base
+   de test reconstruite avec le seed (`db/tests/00_jeu_essai.sql`), ils
+   portent les valeurs du cycle 6 (`regime_fiscal=reel`, `prix_saisis_ttc=oui`,
+   `arrondi_montants=arithmetique`, `taux_tva=19.25`, `a_decider = FALSE`,
+   référence « addendum point d, décidé cycle 6 »). Rien de tout cela n'a
+   été changé au cycle 75 ; la valeur EXACTE du taux reste la question Q2.
 4. **Reçu et rapports n'exposent que des valeurs déduites, jamais saisies.**
    `sous_total_ht`, `taux_tva`, `montant_tva`, `total_ttc` sont calculés à
    l'encaissement et écrits dans `ventes` (`ventes.py:432-440`) ; le reçu
@@ -42,7 +48,7 @@ fiscale n'a été inventé ; la saisie TTC est conservée.
 | # | Question | Paramètre concerné |
 |---|---|---|
 | Q1 | Régime fiscal réel de la quincaillerie : impôt libératoire, simplifié ou réel (assujetti TVA) ? | `regime_fiscal` (a_definir) |
-| Q2 | Si assujetti : le taux de TVA applicable et sa valeur exacte (aujourd'hui : 0 = aucune TVA appliquée) | `taux_tva` (0) |
+| Q2 | Si assujetti : le taux de TVA applicable et sa valeur exacte (défaut migrations : 0 = aucune TVA appliquée ; base de test : 19,25 %, décidé cycle 6) | `taux_tva` |
 | Q3 | Les prix négociés avec le client sont-ils bien TTC ? (hypothèse de travail depuis le cycle 6, jamais confirmée par le comptable) | `prix_saisis_ttc` (a_definir) |
 | Q4 | Les documents (reçu/facture, exports) doivent-ils présenter une ventilation HT **ligne à ligne**, ou la ventilation globale actuelle (HT / TVA / TTC de la vente) suffit-elle ? | présentation — écart C1-02 |
 | Q5 | Le numéro de contribuable doit-il figurer sur les factures, et quelles mentions fiscales obligatoires s'attachent à la numérotation ? | `boutique_numero_contribuable` (a_definir) |
@@ -64,9 +70,12 @@ fiscale n'a été inventé ; la saisie TTC est conservée.
 ## 4. Ce que ce cycle n'a PAS fait (limites assumées)
 
 - Aucun taux de TVA ni aucune règle fiscale inventés ; aucune valeur
-  `a_definir` basculée — les migrations et le seed restent à l'état
-  sentinelle (les 5 lignes `a_decider = TRUE` de C6-01 attendent leurs
-  arbitrages, dont D5).
+  basculée — la migration 006 garde ses sentinelles, le seed garde les
+  valeurs du cycle 6 (vérifié en SQL, §1.3). Les 6 lignes
+  `a_decider = TRUE` de la base de test — `boutique_numero_contribuable`,
+  `boutique_telephone`, `contact_support_technique`, `seuil_alerte_plancher`,
+  `seuil_ecart_caisse_tolere`, `tentatives_max_connexion` — attendent leurs
+  arbitrages (relevé SQL du 2026-10-23).
 - Aucun import de données réelles (limite §7 du cycle 75).
 - Aucune modification d'écran ni de calcul : l'audit constate, il ne tranche
   pas.

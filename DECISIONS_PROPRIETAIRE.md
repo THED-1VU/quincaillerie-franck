@@ -97,10 +97,14 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
   (note complète : `RAPPORT AVANCEMENT/D5_AUDIT_TTC.md`) :
   - prix saisis TTC partout, TVA extraite sur le TOTAL de la vente (jamais
     ligne à ligne) — `ventes.py:335-337, 378-384` ;
-  - aucun taux inventé : `taux_tva` = paramètre en base, défaut 0, valeur
+  - aucun taux inventé : `taux_tva` = paramètre en base (défaut migrations
+    0 = aucune TVA appliquée ; base de test 19,25 %, décidé cycle 6 — la
+    valeur exacte reste la question Q2), valeur
     `a_definir` refusée par `parametre_numerique()` (migration 006) ;
-    `regime_fiscal`, `prix_saisis_ttc`, `boutique_numero_contribuable`,
-    `arrondi_montants` restent à l'état sentinelle ;
+    sur une base issue des migrations seules, `regime_fiscal`,
+    `prix_saisis_ttc`, `boutique_numero_contribuable`, `arrondi_montants`
+    restent à l'état sentinelle (la base de test porte les valeurs du
+    cycle 6 — vérifié en SQL le 2026-10-23) ;
   - reçu PDF et exports n'affichent que des valeurs déduites et stockées
     (`ventes.py:432-440, 543-552`, `rapports.py:280`) ;
   - **6 questions comptables** (Q1-Q6) listées pour confirmation AVANT tout
