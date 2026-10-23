@@ -8,7 +8,7 @@ REVOKE UPDATE ON ventes,ventes_lignes FROM qf_agent_comptabilite;
 -- Droit minimal pour le verrou matériel ; aucune colonne métier modifiable.
 GRANT UPDATE(id) ON ventes TO qf_responsable,qf_agent_comptabilite;
 CREATE FUNCTION verrouiller_vente_paiement()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
 DECLARE v_id INTEGER;
 BEGIN
     FOR v_id IN SELECT DISTINCT unnest(CASE TG_OP
@@ -30,7 +30,7 @@ CREATE TRIGGER trg_verrou_vente_paiement BEFORE INSERT OR UPDATE OR DELETE
 ON ventes_paiements FOR EACH ROW EXECUTE FUNCTION verrouiller_vente_paiement();
 
 CREATE FUNCTION verifier_integrite_paiements(p_id INTEGER)
-RETURNS VOID LANGUAGE plpgsql AS $$
+RETURNS VOID LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
 DECLARE v ventes%ROWTYPE; v_somme NUMERIC; v_nombre INTEGER; v_mode TEXT;
 BEGIN
     SELECT * INTO v FROM ventes WHERE id=p_id FOR UPDATE;
@@ -59,7 +59,7 @@ BEGIN
 END $$;
 
 CREATE FUNCTION controler_paiements_complets()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
 BEGIN
     IF TG_TABLE_NAME='ventes' THEN
         PERFORM verifier_integrite_paiements(NEW.id);

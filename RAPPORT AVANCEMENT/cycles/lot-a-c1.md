@@ -48,6 +48,12 @@ l'incompatibilité du nom de contrainte laissé par l'ancien inverse.
   Cette adaptation transversale a été annoncée dans le contrat publié et
   dans la note de coordination du checkout principal, avant modification.
 
+Une sonde SQL sous qf_agent_comptabilite a également reproduit un masquage
+de la vente réelle par une table temporaire. Les trois validateurs 054 fixent
+désormais `search_path=public,pg_temp`. La comparaison sur les fonctions du
+sommet 83a4172 accepte le contournement ; les fonctions corrigées le refusent.
+Le test pytest dédié est vert (1 réussi), et la sonde annule ses transactions.
+
 ## Migrations effectivement présentes et limites
 
 000–052 : **53 fichiers montants**, dont deux 040 historiques et aucun 043,

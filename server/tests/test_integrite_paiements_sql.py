@@ -109,3 +109,15 @@ def test_identite_session_prime_sur_utilisateur_et_site_fournis(client):
     assert response.status_code==200
     assert response.json()["utilisateur_id"]==session["utilisateur_id"]
     assert response.json()["site_id"]==1
+
+
+def test_table_temporaire_ne_masque_pas_la_vente_reelle(base_reinitialisee):
+    with pytest.raises(psycopg.errors.CheckViolation):
+        with psycopg.connect(PG_ADMIN_DSN) as connection:
+            connection.execute("SET LOCAL ROLE qf_agent_comptabilite")
+            connection.execute("SELECT set_config('qf.site_id','1',TRUE)")
+            ident=creer(connection,"MAG-TEMP001")
+            connection.execute("CREATE TEMP TABLE ventes (LIKE public.ventes)")
+            connection.execute("INSERT INTO pg_temp.ventes SELECT * FROM public.ventes WHERE id=%s",(ident,))
+            connection.execute("UPDATE pg_temp.ventes SET statut='en_attente'")
+            connection.execute("SET CONSTRAINTS ALL IMMEDIATE")

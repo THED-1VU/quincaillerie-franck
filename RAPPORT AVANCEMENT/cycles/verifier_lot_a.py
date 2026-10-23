@@ -7,6 +7,7 @@ Les mots de passe ci-dessous sont exclusivement les valeurs publiques de test.
 from pathlib import Path
 import json
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -135,6 +136,33 @@ def verifier_upgrade_051():
             connection.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(legacy)))
 
 
+def sonder_masquage_table(database, ancien=False):
+    with psycopg.connect(**{**ADMIN, "dbname": database}) as connection:
+        try:
+            if ancien:
+                source = subprocess.check_output(["git", "show", "83a4172:db/migrations/054_integrite_paiements.sql"], cwd=ROOT).decode("utf-8")
+                functions = re.findall(r"CREATE FUNCTION .*?\$\$;", source, flags=re.S)
+                assert len(functions) == 3
+                for function in functions:
+                    connection.execute(function.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1))
+                for signature in ("verrouiller_vente_paiement()", "verifier_integrite_paiements(INTEGER)", "controler_paiements_complets()"):
+                    connection.execute("ALTER FUNCTION public." + signature + " RESET ALL")
+            connection.execute("SET LOCAL ROLE qf_agent_comptabilite")
+            connection.execute("SELECT set_config('qf.site_id','1',TRUE)")
+            ident = connection.execute("INSERT INTO public.ventes(site_id,utilisateur_id,statut,mode_paiement,utilisateur_caisse_id,"
+                "sous_total_ht,taux_tva,montant_tva,total_ttc,date_encaissement,numero_facturier,vendeur_id) "
+                "VALUES(1,4,'payee','mixte',4,100,0,0,100,NOW(),'MAG-TEMP002',1) RETURNING id").fetchone()[0]
+            connection.execute("CREATE TEMP TABLE ventes (LIKE public.ventes)")
+            connection.execute("INSERT INTO pg_temp.ventes SELECT * FROM public.ventes WHERE id=%s", (ident,))
+            connection.execute("UPDATE pg_temp.ventes SET statut='en_attente'")
+            connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            return "ACCEPTE"
+        except psycopg.errors.CheckViolation:
+            return "REFUSE"
+        finally:
+            connection.rollback()
+
+
 CONFIG.write_text("[database]\nhost=127.0.0.1\nport=" + str(PORT) + "\ndbname=" + DB +
                   "\nuser=qf_app\npassword=qf_app_dev_local\n[api]\nsecret_key=" +
                   "0" * 64 + "\nduree_session_minutes=480\n", encoding="utf-8")
@@ -246,6 +274,10 @@ try:
         apres = sonder_paiements(restored)
         (OUT / "paiements_avant_apres.json").write_text(json.dumps({"052": avant, "054": apres}, indent=2), encoding="utf-8")
         assert set(avant.values()) == {"ACCEPTE"} and set(apres.values()) == {"REFUSE"}
+        masquage = {"83a4172": sonder_masquage_table(restored, ancien=True),
+                    "corrige": sonder_masquage_table(restored)}
+        (OUT / "masquage_table_avant_apres.json").write_text(json.dumps(masquage, indent=2), encoding="utf-8")
+        assert masquage == {"83a4172": "ACCEPTE", "corrige": "REFUSE"}
         with psycopg.connect(**{**ADMIN, "dbname": restored}) as connection:
             assert connection.execute("SELECT count(*) FROM schema_migrations WHERE version IN ('053','054')").fetchone()[0] == 2
         RESULTS["reprise_et_upgrade"] = 0
