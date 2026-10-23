@@ -92,7 +92,22 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
 - **Impact** : **GO**.
 - **Recommandation** : à faire confirmer par le comptable avant tout import
   réel du stock.
-- **Statut** : OUVERT (addendum le signale).
+- **Audit livré (cycle 75-G, 2026-10-23)** — décision validée : la saisie
+  TTC est CONSERVÉE et le traitement fiscal est audité, sans rien inventer
+  (note complète : `RAPPORT AVANCEMENT/D5_AUDIT_TTC.md`) :
+  - prix saisis TTC partout, TVA extraite sur le TOTAL de la vente (jamais
+    ligne à ligne) — `ventes.py:335-337, 378-384` ;
+  - aucun taux inventé : `taux_tva` = paramètre en base, défaut 0, valeur
+    `a_definir` refusée par `parametre_numerique()` (migration 006) ;
+    `regime_fiscal`, `prix_saisis_ttc`, `boutique_numero_contribuable`,
+    `arrondi_montants` restent à l'état sentinelle ;
+  - reçu PDF et exports n'affichent que des valeurs déduites et stockées
+    (`ventes.py:432-440, 543-552`, `rapports.py:280`) ;
+  - **6 questions comptables** (Q1-Q6) listées pour confirmation AVANT tout
+    import réel : régime fiscal, taux exact, confirmation TTC, ventilation
+    ligne à ligne (écart C1-02), mentions obligatoires, arrondi.
+- **Statut** : OUVERT (addendum le signale ; réponses comptable Q1-Q6
+  attendues — aucune bascule de paramètre avant elles).
 
 ## D6 — Durée de session inactive (C2)
 

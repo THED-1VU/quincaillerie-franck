@@ -143,14 +143,15 @@ reportages de preuves déjà établies.
 
 ### C1-02 — Ventilation HT/TTC sur les documents (addendum point d, question 5)
 - **Exigence source :** addendum point d ; décision D5.
-- **État :** prix saisis TTC (décidé cycle 6, `prix_saisis_ttc=oui`), TVA 19,25 % calculée — mais la ventilation HT ligne à ligne n'est pas affichée sur le reçu/les rapports (seuls sous-total HT, montant TVA, total TTC de la vente le sont).
-- **Preuve :** `server/app/routes/rapports.py` (colonnes de l'export) ; reçu PDF cycle 19.
+- **État :** prix saisis TTC (décidé cycle 6, `prix_saisis_ttc=oui`), TVA extraite sur le total de la vente (taux lu en base, 0 par défaut — aucun taux inventé, migration 006) — mais la ventilation HT ligne à ligne n'est pas affichée sur le reçu/les rapports (seuls sous-total HT, montant TVA, total TTC de la vente le sont).
+- **Partiellement soldé (cycle 75-G)** : décision D5 validée (2026-10-23, TTC conservé) et audit du traitement fiscal livré — `RAPPORT AVANCEMENT/D5_AUDIT_TTC.md` (constats de code pointés et prouvés ; 6 questions comptables listées, dont la ventilation ligne à ligne). Reste ouvert : réponses du comptable (Q1-Q6), puis colonne HT par ligne si requis.
+- **Preuve :** `server/app/routes/rapports.py` (colonnes de l'export) ; reçu PDF cycle 19 ; audit cycle 75-G (`ventes.py:335-337, 378-384, 432-440, 543-552`, migration 006).
 - **Gravité / risque métier :** P2 — conformité de présentation fiscale des factures.
 - **Correction :** décision D5 puis ajout de la colonne HT par ligne si requis.
-- **Dépendances :** D5. **Responsable :** développement après décision.
+- **Dépendances :** D5 (validée) + réponses comptable (Q1-Q6). **Responsable :** PROPRIÉTAIRE (comptable), puis développement.
 - **Critère d'acceptation :** facture présentant HT/TVA/TTC conformément à la décision.
 - **Tests requis :** pytest reçu + comparaison montants.
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **Statut :** BLOQUE_PROPRIETAIRE (réponses comptable attendues avant import réel).
 
 ### C1-03 — Reprise sur une base contenant de vraies données
 - **Exigence source :** chantier C1 « reprise » ; ordre permanent « aucun import de données réelles sans autorisation ».
