@@ -209,22 +209,12 @@ def enregistrer_vente(
 
             # Point h (rôle caissier) : décidé le 2026-09-13 (fusionné avec
             # agent_comptabilite, cycle 27 — voir ADDENDUM_CAHIER_DES_CHARGES.md).
-            # Cette ligne reste néanmoins inchangée ce cycle : elle attribue
-            # TOUJOURS l'encaissement au responsable, même quand c'est un
-            # agent_comptabilite qui saisit réellement la vente — un
-            # désaccord désormais visible avec la décision ci-dessus,
-            # signalé mais volontairement PAS corrigé ici (hors du
-            # périmètre validé pour le point c de ce cycle ; vendeur_id,
-            # ajouté plus bas, couvre déjà « qui a négocié le prix », ce qui
-            # motivait initialement ce chantier).
-            cur.execute("SELECT id FROM utilisateurs WHERE role = 'responsable' LIMIT 1")
-            ligne_resp = cur.fetchone()
-            if ligne_resp is None:
-                raise HTTPException(
-                    status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    "Aucun compte responsable trouvé pour l'encaissement.",
-                )
-            utilisateur_caisse_id = ligne_resp["id"]
+            # Décision D9 (propriétaire, 2026-10-23) : l'encaissement est
+            # attribué au compte AUTHENTIFIÉ (identifiant porté par le jeton
+            # signé), jamais à un compte supposé ni à une donnée du navigateur
+            # — DemandeVente n'expose aucun champ pour l'imposer, et un test
+            # dédié prouve qu'une tentative d'injection est ignorée.
+            utilisateur_caisse_id = session.utilisateur_id
 
             # Vendeur = une fiche employé, jamais un compte utilisateur
             # (addendum point c, question 3, migration 040) : validé ici
