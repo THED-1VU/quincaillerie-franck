@@ -21,7 +21,7 @@ reste le nom du client — voir `ADDENDUM_CAHIER_DES_CHARGES.md`.
 | Exigence CDC §7 | Où elle est livrée |
 |---|---|
 | **Code source complet** (application, API, schéma, scripts, tests) | Ce dépôt Git (`main`), livré en continu ; propriété et accès formalisés dans [`OWNERSHIP.md`](OWNERSHIP.md) |
-| **Schéma de base + migrations** | [`QuincaillerieFranck_Test/creation_base_donnees.sql`](QuincaillerieFranck_Test/creation_base_donnees.sql) (schéma d'origine) + [`db/migrations/`](db/migrations/) (000–038 + inverses, appliquées par [`db/outils/migrer.sh`](db/outils/migrer.sh)) |
+| **Schéma de base + migrations** | [`QuincaillerieFranck_Test/creation_base_donnees.sql`](QuincaillerieFranck_Test/creation_base_donnees.sql) (schéma d'origine) + [`db/migrations/`](db/migrations/) (000–049 + inverses, appliquées par [`db/outils/migrer.sh`](db/outils/migrer.sh) sous Git Bash ou [`db/outils/migrer.ps1`](db/outils/migrer.ps1) sous PowerShell seul) |
 | **Scripts de fabrication des exécutables** | [`server/fabrication/`](server/fabrication/) : `construire.ps1` (script humain), `quincaillerie_franck.spec` (PyInstaller), `lanceur.py` ; trace de la dernière construction dans [`server/fabrication/DERNIER_RESULTAT.md`](server/fabrication/DERNIER_RESULTAT.md) |
 | **Scripts + guide de sauvegarde/restauration** | [`db/outils/sauvegarder.ps1`](db/outils/sauvegarder.ps1), [`restaurer.ps1`](db/outils/restaurer.ps1), [`planifier_sauvegarde.ps1`](db/outils/planifier_sauvegarde.ps1) + [`db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md`](db/outils/GUIDE_SAUVEGARDE_RESTAURATION.md) (RPO 1 h, RTO 2 h, chiffrement AES-256) |
 | **Jeux de tests** | [`server/tests/`](server/tests/) (pytest, 248 tests, vraie base PostgreSQL), [`db/tests/`](db/tests/) (protections, habilitations, concurrence, réversibilité, volume réaliste), [`maquette/verification/`](maquette/verification/) (suites Playwright) |
@@ -56,7 +56,8 @@ QuincaillerieFranck_Test/
 │   ├── tests/                  Suite pytest (aucun mock, vraie base)
 │   └── fabrication/            construire.ps1 + .spec PyInstaller + lanceur.py
 ├── db/
-│   ├── migrations/             000–038 + inverses (appliquées/annulées par migrer.sh)
+│   ├── migrations/             000–049 + inverses (appliquées/annulées par migrer.sh
+│   │                           ou migrer.ps1, équivalent PowerShell pour un poste sans Git)
 │   ├── outils/                 migrer.sh, sauvegarde/restauration, générateur de volume,
 │   │                           premier compte responsable, rapprochement d'articles, etc.
 │   └── tests/                  Vérification PAR EXÉCUTION (protections, habilitations,

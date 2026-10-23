@@ -34,7 +34,12 @@ QuincaillerieFranck_Test/diagnostic_*/
 # --- Node / outils de vérification ---
 node_modules/
 package-lock.json
+# Exception (cycle 62) : le lockfile Playwright EST versionné, sinon `npm ci`
+# est impossible en CI et l'installation n'est pas reproductible.
+!maquette/verification/package-lock.json
 .playwright-mcp/
+# Logo factice généré par verifier-exploitation-reel.mjs à chaque exécution.
+maquette/verification/_logo_test_c13.png
 
 # --- Serveur PostgreSQL portable de développement (binaires + données) ---
 # Installé par db/outils/demarrer_pg.ps1 au premier lancement. Ne se
@@ -57,6 +62,12 @@ _worktrees/
 .venv/
 venv/
 env/
+
+# --- Journaux de la CI Playwright (cycle 62) ---
+# Produits par maquette/verification/executer_suites_reelles.sh ; publiés en
+# artefact GitHub en cas d'échec, jamais versionnés.
+maquette/verification/rapports-playwright/
+rapports-playwright-serveur.log
 
 # --- Divers OS / éditeurs ---
 Thumbs.db
