@@ -1,0 +1,72 @@
+OK   D2 mixte 4000+2500 accepté
+OK   D2 mode stocké = mixte
+OK   D2 composantes tracées par mode
+OK   D2 une seule recette du total
+OK   D2 somme ≠ total refusée (422)
+OK   D2 mode_paiement + paiements simultanés refusés
+OK   D2 même mode deux fois : refus propre, pas de 500
+OK   D2 composante crédit refusée
+OK   D2 composante négative refusée
+OK   D2 base : composantes ≠ total rejetées même en SQL direct
+OK   D2 caisse : attendu ventilé par mode
+OK   D4 agent : −10 % ligne accepté (seuil strict >)
+OK   D4 agent : −10,01 % ligne → 403
+OK   D4 agent : remise_montant 651/6500 → 403
+OK   D4 agent : contournement par prix_unitaire 5800 → 403
+OK   D4 agent : remise globale 10,5 % → 403
+OK   D4 agent : remise globale 700/6500 → 403
+OK   D4 responsable : −50 % accepté
+FAIL D4 [DÉFAUT NOUVEAU] cumul ligne −10 % + globale −10 % (≈ −19 %) par un agent doit exiger le responsable :: HTTP 201 — vente acceptée à 5265.00 FCFA sur 6500
+OK   D9 injection utilisateur_caisse_id ignorée : encaisseur = agent authentifié
+OK   D9 responsable encaisse = lui-même
+OK   D9 agent du comptoir : encaisseur = id 5
+OK   D6 jeton réel : exp − iat = 480 min
+OK   D6 jeton correctement signé mais 600 min → 401
+OK   D6 jeton expiré → 401
+OK   D6 jeton signé mais session non enregistrée en base → 401
+OK   D6 mauvaise signature → 401
+OK   D6 session normale → 200
+OK   D6 expiration côté serveur (session échue) → 401
+OK   D6 révocation par déconnexion
+OK   D6 désactivation du compte coupe toutes ses sessions
+OK   D6 réinitialisation du mot de passe coupe la session en cours
+OK   D7 /moi expose l'union des rôles
+OK   D7 compte cumulé : vente (droit comptabilité) accepté
+OK   D7 compte cumulé : /admin/comptes reste interdit
+OK   D7 rôle retiré en base : effet immédiat sur la session en cours (403)
+OK   C12-02 succès daté → succes
+OK   C12-02 succès SANS date → inconnu (jamais de succès sans preuve)
+OK   C12-02 échec → echec avec motif
+OK   C12-02 fichier absent → absent
+OK   C12-02 JSON corrompu → inconnu
+FAIL C12-02 [DÉFAUT NOUVEAU] JSON valide mais non-objet ([]) → pas de 500 :: (500, b'Internal Server Error')
+FAIL C12-02 [DÉFAUT NOUVEAU] JSON chaîne → pas de 500 :: (500, b'Internal Server Error')
+FAIL C12-02 [DÉFAUT NOUVEAU] dernier succès vieux de ~2 ans : alerte de péremption attendue :: {'etat': 'succes', 'horodatage': '2024-01-01T03:00:00'}
+OK   C12-02 agent → 403
+OK   C12-02 sans jeton → 401
+OK   C7 liste à compter sans quantité attendue ni écart
+OK   C7 comptage aveugle : réponse sans attendu ni écart
+OK   C7 doublon article/moment/jour → 409
+OK   C7 au-dessus du plafond (10 000) → 422
+OK   C7 au plafond (10 000) accepté
+OK   C7 quantité négative → 422
+FAIL C7 [DÉFAUT NOUVEAU] décimal sur article entier → 422 (et non 500) :: (500, {'detail': 'Erreur interne.'})
+OK   C7 article d'un autre site → 422
+OK   C7 site_id injecté ignoré pour un agent
+OK   C7 agent stock : /inventaire/ecarts interdit
+OK   C7 responsable voit l'écart, égal à comptée − attendue
+OK   C7 régularisation → 201
+OK   C7 seconde régularisation du même écart refusée (pas 500)
+OK   C7 la régularisation ne touche jamais le stock
+OK   C7 régularisation par un agent → 403
+OK   C7 historique : tous les comptages, régularisation incluse
+OK   C7 export : nb d'écarts et cumul = somme des lignes
+OK   C10-02 [DÉFAUT NOUVEAU] 20 ventes du même article, 1 client(s) simultané(s) : toutes acceptées
+OK   C10-02 [DÉFAUT NOUVEAU] 20 ventes du même article, 2 client(s) simultané(s) : toutes acceptées
+FAIL C10-02 [DÉFAUT NOUVEAU] 20 ventes du même article, 4 client(s) simultané(s) : toutes acceptées :: {201: 2, 503: 18}
+FAIL ENTRÉE ABERRANTE [DÉFAUT NOUVEAU] vente 2,5 sur article entier : refus 4xx et non 500 :: 500
+FAIL ENTRÉE ABERRANTE [DÉFAUT NOUVEAU] vente 0,0001 : refus 4xx et non 500 :: 500
+FAIL ENTRÉE ABERRANTE [DÉFAUT NOUVEAU] vente prix 1e15 : refus 4xx et non 500 :: 500
+FAIL ENTRÉE ABERRANTE [DÉFAUT NOUVEAU] entrée de stock 1e12 : refus 4xx et non 500 :: 500
+
+BILAN : 60 OK / 70 contrôles ; FAIL : ['D4 [DÉFAUT NOUVEAU] cumul ligne −10 % + globale −10 % (≈ −19 %) par un agent doit exiger le responsable', 'C12-02 [DÉFAUT NOUVEAU] JSON valide mais non-objet ([]) → pas de 500', 'C12-02 [DÉFAUT NOUVEAU] JSON chaîne → pas de 500', 'C12-02 [DÉFAUT NOUVEAU] dernier succès vieux de ~2 ans : alerte de péremption attendue', 'C7 [DÉFAUT NOUVEAU] décimal sur article entier → 422 (et non 500)', 'C10-02 [DÉFAUT NOUVEAU] 20 ventes du même article, 4 client(s) simultané(s) : toutes acceptées', 'ENTRÉE ABERRANTE [DÉFAUT NOUVEAU] vente 2,5 sur article entier : refus 4xx et non 500', 'ENTRÉE ABERRANTE [DÉFAUT NOUVEAU] vente 0,0001 : refus 4xx et non 500', 'ENTRÉE ABERRANTE [DÉFAUT NOUVEAU] vente prix 1e15 : refus 4xx et non 500', 'ENTRÉE ABERRANTE [DÉFAUT NOUVEAU] entrée de stock 1e12 : refus 4xx et non 500']

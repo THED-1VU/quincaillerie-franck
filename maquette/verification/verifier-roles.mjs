@@ -87,7 +87,7 @@ psql(`INSERT INTO utilisateurs (nom_complet, identifiant, mot_de_passe_hash, rol
 if (!existsSync(CAPTURES)) mkdirSync(CAPTURES, { recursive: true });
 console.log("Prêt.\n");
 
-const navigateur = await chromium.launch({ channel: "chrome" });
+const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });
 
 async function nouvellePage() {
   const contexte = await navigateur.newContext({ viewport: { width: 1366, height: 900 } });
