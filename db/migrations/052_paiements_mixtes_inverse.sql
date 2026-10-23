@@ -13,7 +13,7 @@ DROP FUNCTION IF EXISTS verifier_somme_paiements_vente();
 DROP TABLE IF EXISTS ventes_paiements;
 
 ALTER TABLE ventes DROP CONSTRAINT IF EXISTS chk_ventes_mode_paiement;
-ALTER TABLE ventes ADD CONSTRAINT ventes_mode_paiement
+ALTER TABLE ventes ADD CONSTRAINT ventes_mode_paiement_check
   CHECK (mode_paiement IN
     ('especes', 'orange_money', 'mtn_momo', 'autre', 'credit_client'));
 

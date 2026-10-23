@@ -23,6 +23,7 @@ DB = "quincaillerie_codex_a_" + uuid.uuid4().hex[:10]
 NAVIGATEUR = "--navigateur" in sys.argv
 PORT = int(os.environ.get("QF_AUDIT_PGPORT", "5548" if NAVIGATEUR else "5547"))
 OUT = ROOT / ("_preuves_lot_a_browser" if NAVIGATEUR else
+              "_preuves_lot_a_migrations" if "--migration-seule" in sys.argv else
               "_preuves_lot_a_temporaires" if "--temporaires" in sys.argv else
               "_preuves_lot_a_cible" if "--cible" in sys.argv else "_preuves_lot_a")
 OUT.mkdir(exist_ok=True)
@@ -82,6 +83,56 @@ def sonder_paiements(database):
             finally:
                 connection.rollback()
     return result
+
+
+def verifier_upgrade_051():
+    legacy = DB + "_legacy051"
+    previous_database = ENV["PGDATABASE"]
+    with psycopg.connect(**ADMIN, autocommit=True) as connection:
+        connection.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(legacy)))
+    ENV["PGDATABASE"] = legacy
+    try:
+        psql("legacy051_schema", ROOT / "QuincaillerieFranck_Test/creation_base_donnees.sql")
+        for migration in migrations:
+            if int(migration.name[:3]) <= 51:
+                psql("legacy051_" + migration.stem, migration)
+        psql("legacy051_seed", ROOT / "db/tests/00_jeu_essai.sql")
+        with psycopg.connect(**{**ADMIN, "dbname": legacy}) as connection:
+            ident = connection.execute("INSERT INTO ventes(site_id,utilisateur_id,statut,mode_paiement,sous_total_ht,taux_tva,montant_tva,total_ttc) "
+                                       "VALUES(1,4,'en_attente','especes',0,0,0,0) RETURNING id").fetchone()[0]
+            ident_pending = connection.execute("INSERT INTO ventes(site_id,utilisateur_id,statut,mode_paiement,sous_total_ht,taux_tva,montant_tva,total_ttc) "
+                                              "VALUES(1,4,'en_attente','especes',100,0,0,100) RETURNING id").fetchone()[0]
+        original = subprocess.check_output(["git", "show", "2dae406:db/migrations/052_paiements_mixtes.sql"], cwd=ROOT)
+        initial_file = OUT / "052_initiale.sql"
+        initial_file.write_bytes(original)
+        psql("052_initiale_refuse_brouillon_zero", initial_file, required=False)
+        assert RESULTS["052_initiale_refuse_brouillon_zero"] != 0
+        RESULTS["052_initiale_refuse_brouillon_zero"] = 0  # défaut ancien reproduit
+        psql("052_corrigee_depuis_051", ROOT / "db/migrations/052_paiements_mixtes.sql")
+        with psycopg.connect(**{**ADMIN, "dbname": legacy}) as connection:
+            assert connection.execute("SELECT count(*) FROM ventes WHERE id=%s", (ident,)).fetchone()[0] == 1
+            assert connection.execute("SELECT count(*) FROM ventes_paiements WHERE vente_id=%s", (ident,)).fetchone()[0] == 0
+            assert connection.execute("SELECT count(*) FROM ventes_paiements WHERE vente_id=%s", (ident_pending,)).fetchone()[0] == 0
+        psql("052_inverse_sans_mixte", ROOT / "db/migrations/052_paiements_mixtes_inverse.sql")
+        with psycopg.connect(**{**ADMIN, "dbname": legacy}) as connection:
+            # Compatibilité avec une base déjà passée par l'ancien inverse.
+            connection.execute("ALTER TABLE ventes RENAME CONSTRAINT ventes_mode_paiement_check TO ventes_mode_paiement")
+        psql("052_reapplication_apres_inverse", ROOT / "db/migrations/052_paiements_mixtes.sql")
+        with psycopg.connect(**{**ADMIN, "dbname": legacy}) as connection:
+            ident = connection.execute("INSERT INTO ventes(site_id,utilisateur_id,statut,mode_paiement,utilisateur_caisse_id,"
+                "sous_total_ht,taux_tva,montant_tva,total_ttc,date_encaissement,numero_facturier,vendeur_id) "
+                "VALUES(1,1,'payee','mixte',1,100,0,0,100,NOW(),'MAG-AR052',1) RETURNING id").fetchone()[0]
+            connection.execute("INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) "
+                               "VALUES(%s,'especes',50),(%s,'orange_money',50)", (ident, ident))
+        psql("052_inverse_mixte_refuse_atomiquement", ROOT / "db/migrations/052_paiements_mixtes_inverse.sql", required=False)
+        assert RESULTS["052_inverse_mixte_refuse_atomiquement"] != 0
+        RESULTS["052_inverse_mixte_refuse_atomiquement"] = 0
+        with psycopg.connect(**{**ADMIN, "dbname": legacy}) as connection:
+            assert connection.execute("SELECT count(*) FROM ventes_paiements WHERE vente_id=%s", (ident,)).fetchone()[0] == 2
+    finally:
+        ENV["PGDATABASE"] = previous_database
+        with psycopg.connect(**ADMIN, autocommit=True) as connection:
+            connection.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(legacy)))
 
 
 CONFIG.write_text("[database]\nhost=127.0.0.1\nport=" + str(PORT) + "\ndbname=" + DB +
@@ -155,7 +206,8 @@ try:
             cibles = ["server/tests/test_exploitation_etat.py",
                       "server/tests/test_securite.py::test_config_refuse_le_compte_superutilisateur",
                       "server/tests/test_securite.py::test_config_refuse_la_cle_secrete_exemple"]
-        run("pytest_complet", [sys.executable, "-B", "-m", "pytest", *cibles, "-q",
+        if "--migration-seule" not in sys.argv:
+            run("pytest_complet", [sys.executable, "-B", "-m", "pytest", *cibles, "-q",
                             "--tb=short", "-p", "no:cacheprovider", "--basetemp",
                             OUT / ("pytest_" + uuid.uuid4().hex[:8])], required=False)
         # Restauration logique directe : aucun outil de sauvegarde en quarantaine.
@@ -197,6 +249,7 @@ try:
         with psycopg.connect(**{**ADMIN, "dbname": restored}) as connection:
             assert connection.execute("SELECT count(*) FROM schema_migrations WHERE version IN ('053','054')").fetchone()[0] == 2
         RESULTS["reprise_et_upgrade"] = 0
+        verifier_upgrade_051()
         with psycopg.connect(**ADMIN, autocommit=True) as connection:
             connection.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(restored)))
 finally:
