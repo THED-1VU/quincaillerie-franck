@@ -102,10 +102,11 @@ psql(`INSERT INTO regularisations_ecarts_comptage (comptage_id, type_resolution,
 // (Ciment), 5 720 = 12 % sous le catalogue (au-delà du seuil de 10 % →
 // signalée) et 5 980 = 8 % (visible, non signalée), plus la recette
 // cohérente — le même chemin qu'une vente encaissée par POST /ventes.
-psql(`INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
+psql(`WITH v AS (INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
         utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva, total_ttc,
         date_encaissement, numero_facturier, vendeur_id)
-      VALUES (905, 1, 4, 'payee', 'especes', 1, 11700, 0, 0, 11700, NOW(), 'MAG-UI-ECART', 1);`);
+      VALUES (905, 1, 4, 'payee', 'especes', 1, 11700, 0, 0, 11700, NOW(), 'MAG-UI-ECART', 1) RETURNING id,total_ttc)
+      INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) SELECT id,'especes',total_ttc FROM v;`);
 psql(`INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
       VALUES (905, 1, 1, 5720, 1, 6500, 780);`);
 psql(`INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)

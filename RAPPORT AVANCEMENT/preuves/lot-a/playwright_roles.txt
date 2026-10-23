@@ -1,0 +1,72 @@
+== Préparation (base + comptes temporaires) ==
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ecarts_stock_ventes"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "jetons_revoques"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "clotures_caisse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "rapprochements_articles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "regularisations_ecarts_comptage"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "utilisateurs_roles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_casse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_retour_client"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_article_offert"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "reglements_creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ventes_paiements"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "sessions_serveur"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "journal_securite"
+Prêt.
+
+
+== Nettoyage (rejeu d'essai — les comptes tmp.% partent en CASCADE) ==
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ecarts_stock_ventes"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "jetons_revoques"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "clotures_caisse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "rapprochements_articles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "regularisations_ecarts_comptage"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "utilisateurs_roles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_casse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_retour_client"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_article_offert"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "reglements_creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ventes_paiements"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "sessions_serveur"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "journal_securite"
+
+OK : 35
+  ✓ responsable : connexion
+  ✓ responsable : accueil = tableau-bord.html (obtenu : tableau-bord.html)
+  ✓ responsable : page autorisée comptes.html accessible
+  ✓ responsable : page autorisée rh.html accessible
+  ✓ responsable : page autorisée declarations.html accessible
+  ✓ responsable : page autorisée cloture-caisse.html accessible
+  ✓ responsable : page refusée inventaire.html redirigée vers tableau-bord.html (obtenu : tableau-bord.html)
+  ✓ agent-comptabilite : connexion
+  ✓ agent-comptabilite : accueil = vente.html (obtenu : vente.html)
+  ✓ agent-comptabilite : page autorisée clients.html accessible
+  ✓ agent-comptabilite : page autorisée rapports.html accessible
+  ✓ agent-comptabilite : page refusée comptes.html redirigée vers vente.html (obtenu : vente.html)
+  ✓ agent-comptabilite : page refusée tableau-bord.html redirigée vers vente.html (obtenu : vente.html)
+  ✓ agent-stock : connexion
+  ✓ agent-stock : accueil = inventaire.html (obtenu : inventaire.html)
+  ✓ agent-stock : page autorisée stock.html accessible
+  ✓ agent-stock : page autorisée rapports.html accessible
+  ✓ agent-stock : page refusée vente.html redirigée vers inventaire.html (obtenu : inventaire.html)
+  ✓ agent-stock : page refusée clients.html redirigée vers inventaire.html (obtenu : inventaire.html)
+  ✓ force : connexion avec mot de passe provisoire
+  ✓ force : renvoyé vers changer-mot-de-passe.html (obtenu : changer-mot-de-passe.html)
+  ✓ force : deep-link vers vente.html ramené à l'écran de changement
+  ✓ force : mauvais actuel refusé avec le message serveur (obtenu : Mot de passe actuel incorrect.)
+  ✓ force : changement réussi -> accueil comptabilité (obtenu : vente.html)
+  ✓ force : drapeau local repassé à faux après changement
+  ✓ cumul : connexion
+  ✓ cumul : accueil = inventaire.html (rôle principal agent_stock) (obtenu : inventaire.html)
+  ✓ cumul : le bandeau propose vente.html (union D7)
+  ✓ cumul : le bandeau propose articles et stock
+  ✓ cumul : le bandeau propose rapports
+  ✓ cumul : aucun écran responsable dans le bandeau (aucun)
+  ✓ cumul : vente.html accessible depuis le bandeau (obtenu : vente.html)
+  ✓ cumul : vente.html fonctionnelle — prix catalogue (6 500) dans le total TTC
+  ✓ cumul : retour inventaire sans redirection (obtenu : inventaire.html)
+  ✓ nettoyage : aucun compte tmp.% résiduel (restant : 0)
+
+Tous les contrôles de la matrice des rôles sont passés.

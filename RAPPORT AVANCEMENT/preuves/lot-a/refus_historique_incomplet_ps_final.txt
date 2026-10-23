@@ -1,0 +1,8 @@
+== Application des migrations sur quincaillerie_codex_a_865e2dbb7d_restauree (127.0.0.1:5549) ==
+Historique incomplet : version 051 absente avant 52. Diagnostic requis.
+Au caractère C:\Users\USER\Documents\MES DOCUMENTS\PROFESSEIONNELS\THED
+CONNECT\QuincaillerieFranck_Test\_worktrees\codex-akuma-c1-c2-c3-100\db\outils\migrer.ps1:62 : 21
++ ...             throw "Historique incomplet : version $($f.Name.Substring ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Historique inco...gnostic requis.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Historique incomplet : version 051 absente avant 52. Diagnostic requis.

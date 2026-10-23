@@ -69,11 +69,14 @@ COMMENT ON TABLE ventes_paiements IS
 -- reprend UNE composante = son total, dans son mode d'origine — l'attendu
 -- de caisse recalculé est numériquement identique à l'ancien. Le crédit
 -- client n'a jamais été une recette de caisse (019) : aucune composante.
+-- Un montant nul (notamment un brouillon historique) n'est pas un paiement.
 -- ----------------------------------------------------------------------------
 INSERT INTO ventes_paiements (vente_id, mode_paiement, montant)
 SELECT id, mode_paiement, total_ttc
   FROM ventes
  WHERE mode_paiement IN ('especes', 'orange_money', 'mtn_momo', 'autre')
+   AND total_ttc > 0
+   AND statut IN ('payee', 'annulee')
 ON CONFLICT (vente_id, mode_paiement) DO NOTHING;
 
 -- ----------------------------------------------------------------------------
@@ -82,6 +85,7 @@ ON CONFLICT (vente_id, mode_paiement) DO NOTHING;
 -- est remplacée par une contrainte NOMMÉE, remplaçable proprement.
 -- ----------------------------------------------------------------------------
 ALTER TABLE ventes DROP CONSTRAINT IF EXISTS ventes_mode_paiement_check;
+ALTER TABLE ventes DROP CONSTRAINT IF EXISTS ventes_mode_paiement;
 ALTER TABLE ventes DROP CONSTRAINT IF EXISTS chk_ventes_mode_paiement;
 ALTER TABLE ventes ADD CONSTRAINT chk_ventes_mode_paiement
   CHECK (mode_paiement IN
