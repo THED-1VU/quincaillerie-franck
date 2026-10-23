@@ -22,26 +22,28 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **8 clôturés par vérification ou livraison** (C4-01 et
+40 écarts recensés, dont **9 clôturés par vérification ou livraison** (C4-01 et
 C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ; C1-04, C7-02 et C7-03
-livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04 reconstruit au cycle 70).
-32 écarts ouverts :
+livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04 reconstruit au cycle 70 ;
+C14-03 livré au cycle 72).
+31 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
 | P1 | **17** | 11 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
 | P2 | **11** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 2 |
-| P3 | **4** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 1 |
-| **Total ouverts** | **32** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 6 EN_COURS/OUVERT | **3** |
+| P3 | **3** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 0 |
+| **Total ouverts** | **31** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 5 EN_COURS/OUVERT | **2** |
 
 Lecture : **aucun écart d'intégrité**. Le chemin vers 99–100 % se joue sur
 trois catégories : (1) décisions du propriétaire déjà répertoriées dans
 `DECISIONS_PROPRIETAIRE.md` (D1–D13) ; (2) validations humaines (campagnes,
-impression, 2ᵉ poste) ; (3) **onze fusions Git** réservées au propriétaire
-(#78 → #88 dans l'ordre ; hors #60, doc ancienne — « fusionner ou fermer »
-comme décidé au cycle 56). Le développement garde **3 écarts actionnables**
-(C12-03, C14-03, C11-02) traités cycle par cycle ;
+impression, 2ᵉ poste) ; (3) **douze fusions Git** réservées au propriétaire
+(#78 → #89 dans l'ordre ; hors #60, doc ancienne — « fusionner ou fermer »
+comme décidé au cycle 56). Le développement garde **2 écarts actionnables**
+(C12-03, C11-02) — tous deux suspendus à l'installation réelle, donc
+reportables au jour J ;
 les correctifs codables mais suspendus à une décision
 (C1-01, C1-02, C2-02, C5-01, C5-02, C6-01, C6-02) démarreront dès que les
 décisions D2–D5, D9, D10 tombent.
@@ -553,7 +555,7 @@ reportages de preuves déjà établies.
 
 ---
 
-## C14 — Dossier de recette et mise en production (65 %)
+## C14 — Dossier de recette et mise en production (66 %)
 
 ### C14-01 — Versions candidates non fusionnées
 - **Exigence source :** cycle 63/64 — exécutable + dossier d'installation.
@@ -579,14 +581,24 @@ reportages de preuves déjà établies.
 
 ### C14-03 — Procédure de transfert (escrow)
 - **Exigence source :** lot E — « transfert si dépendance à un tiers ».
-- **État :** non rédigé — le dépôt est autonome mais la procédure de reprise par un tiers n'est pas documentée.
-- **Preuve :** absence de document de transfert à la racine.
+- **État :** `NOTE_DE_TRANSFERT.md` rédigée à la racine (8 sections : contenu
+  du dépôt, architecture, modèle de comptes, reconstruction from scratch,
+  sauvegarde/restauration, état des décisions et risques, contacts/secrets à
+  compléter par le propriétaire, ordre de lecture). Aucune donnée nominative
+  inventée : la section contacts est volontairement en attente de saisie
+  propriétaire.
+- **Preuve :** relecture vérifiée au cycle 72 — 22/22 chemins cités existent
+  (contrôle automatisé), remote git conforme, faits spot-checkés (migration
+  023 : SECURITY DEFINER + garde-fou second compte ; 3 rôles métier dans
+  `db/tests/02_habilitations.sql` ; AES-256 dans `sauvegarder.ps1` ; 102
+  fichiers de migrations 000→050 ; « 334 tests pytest » = exécution réelle
+  du cycle 71).
 - **Gravité / risque métier :** P3 — dépendance à la connaissance du projet.
 - **Correction :** note de transfert (architecture, comptes, procédures de restauration, contacts).
 - **Dépendances :** lot E. **Responsable :** développement.
 - **Critère d'acceptation :** note présente et relue.
 - **Tests requis :** relecture.
-- **Statut :** OUVERT.
+- **Statut :** CLOS (livré au cycle 72, PR #89).
 
 ---
 
