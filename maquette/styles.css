@@ -111,6 +111,26 @@ a { color: var(--c-primaire); }
 .champ__saisie--caisse { height: var(--champ-hauteur-caisse); font-size: var(--t-md); }
 .champ__aide { font-size: var(--t-xs); color: var(--c-texte-doux); margin-top: var(--e-2); }
 
+/* ---- Case à cocher tactile (cible ≥ 44 px, exigence mobile du contrôle
+   cablage : l'input lui-même est mesuré, pas son libellé) ---- */
+.case-tactile {
+  appearance: none; -webkit-appearance: none;
+  width: 44px; height: 44px; flex: 0 0 44px; margin: 0;
+  border: 2px solid var(--c-bordure); border-radius: var(--r-md);
+  background: var(--c-surface); cursor: pointer;
+  display: inline-grid; place-content: center;
+  transition: background var(--duree-rapide), border-color var(--duree-rapide);
+}
+.case-tactile::after {
+  content: ""; width: 20px; height: 10px; opacity: 0;
+  border-left: 3px solid var(--c-surface); border-bottom: 3px solid var(--c-surface);
+  transform: rotate(-45deg) translate(1px, -2px);
+}
+.case-tactile:checked { background: var(--c-primaire); border-color: var(--c-primaire); }
+.case-tactile:checked::after { opacity: 1; }
+.case-tactile:disabled { opacity: .5; cursor: not-allowed; }
+.case-tactile:focus-visible { outline: 2px solid var(--c-primaire); outline-offset: 2px; }
+
 /* ---- Message d'erreur au plus près du champ ---- */
 .erreur-champ {
   display: flex; gap: var(--e-2); align-items: flex-start;
