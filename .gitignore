@@ -67,6 +67,7 @@ env/
 # Produits par maquette/verification/executer_suites_reelles.sh ; publiés en
 # artefact GitHub en cas d'échec, jamais versionnés.
 maquette/verification/rapports-playwright/
+maquette/verification/rapports-playwright-exe-c73/
 rapports-playwright-serveur.log
 
 # --- Divers OS / éditeurs ---

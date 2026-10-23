@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Exécute les 12 suites Playwright « serveur réel » avec un délai maximal par
-# suite, et conserve un journal par suite (cycle 62, CI Playwright).
+# Exécute les 13 suites Playwright « serveur réel » avec un délai maximal par
+# suite, et conserve un journal par suite (cycle 62, CI Playwright ; 13ᵉ suite
+# `roles` ajoutée au cycle 73 — la CI n'exécutait que 12 des 13 suites,
+# recommandation du cycle 71).
 #
 # Pourquoi ce script existe : en CI, une suite qui se bloque (constat du
 # cycle 61 : navigateur jamais fermé, processus vivant après 26/26 contrôles)
@@ -40,6 +42,7 @@ SUITES=(
   "rh:verifier-rh-reel.mjs"
   "exploitation:verifier-exploitation-reel.mjs"
   "echappement:verifier-echappement-html.mjs"
+  "roles:verifier-roles.mjs"
 )
 
 TOTAL=0

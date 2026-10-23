@@ -1,8 +1,8 @@
-# Dernier résultat d'exécution — chantier C0, cycle 64
+# Dernier résultat d'exécution — chantier C0, cycle 73
 
-Exécuté le **2026-10-20**, PyInstaller **6.11.1**, Python **3.13.3**
-(venv `server/.venv/` monté sur le lockfile haché
-`server/requirements.txt` — FastAPI 0.141.1, starlette 1.7.0).
+Exécuté le **2026-10-23**, PyInstaller **6.11.1**, Python **3.13.3**
+(venv `server/.venv/`), depuis `main` = d0fa264 (après fusion des
+PR #78→#89 + #90).
 
 Trace rejouable :
 
@@ -13,7 +13,50 @@ powershell -NoProfile -ExecutionPolicy Bypass -File server\fabrication\construir
 
 ---
 
-## Cycle 64 — reconstruction avec correctif voyant (2026-10-20)
+## Cycle 73 — reconstruction, campagne Playwright CONTRE L'EXE, défaut de packaging trouvé et corrigé (2026-10-23)
+
+Environnement de test isolé (aucune installation réelle) : base dédiée
+`quincaillerie_c73` (schéma d'origine + migrations 000→050 + jeu
+d'essai), `Akuma.exe --sans-navigateur` sur le port 8000, configuration
+de test via `QF_CONFIG` (jamais `dist/config.ini` rempli),
+`QF_FICHIER_ETAT_SAUVEGARDE` vers `_pgdev/sauvegardes/` (procédure
+documentée du cycle 63).
+
+**Parcours critiques contrôlés contre l'exe** : `GET /sante` →
+`{"etat":"ok","base":"joignable"}` ; `POST /auth/connexion` (`resp`) →
+jeton JWT réel (session 8 h) ; vente et clôture couvertes par les suites
+`vente` (49 contrôles) et `caisse` (24 contrôles).
+
+### Défaut trouvé PAR EXÉCUTION (1ʳᵉ campagne contre l'exe : 11/13 suites)
+
+- `stock` : 1 échec sur la mention « quantités décimales » — le race
+  connu depuis le cycle 62 ; **49/49 au rejeu**.
+- `roles` : timeout sur `#actuel` — **vrai défaut de packaging** :
+  l'écran `changer-mot-de-passe.html` (migration 050, arrivé avec les PR
+  fusionnées #78→#89) manquait à `FICHIERS_MAQUETTE` dans
+  `quincaillerie_franck.spec` → l'exe le servait en **404** et le
+  parcours « connexion avec mot de passe à changer » était mort sur
+  l'exe. Invisible de la régression uvicorn (le serveur de développement
+  sert le disque) — exactement le piège du cycle 63, rejoué par les PR.
+  Preuve : `GET /app/changer-mot-de-passe.html` = 404 avant, **200
+  après** correctif du spec.
+
+### Version finale
+
+Correctif du spec puis reconstruction :
+
+- `Akuma.exe`, **30 215 772 octets (28,8 Mo)**
+- **SHA-256 : `15a355e932b1510f5437bd2b2ae44b4c252573878013b8b75a33b6998d249bd3`**
+
+Rejeux contre l'exe final : `stock` **49/49**, `roles` **30/30**
+(matrice des rôles complète) — soit **13/13 suites** équivalentes contre
+l'exécutable. Journal de l'exe : **0 erreur** (420 requêtes servies
+pendant la campagne) ; arrêt par signal après les tests. **Aucune
+installation réelle, aucun poste de boutique touché.**
+
+---
+
+## Cycle 64 (2026-10-20)
 
 Reconstruction après deux défauts trouvés PAR EXÉCUTION lors de la
 simulation d'installation complète du dossier `INSTALLATION/` (dossier
@@ -123,3 +166,4 @@ propriétaire dans `RAPPORT AVANCEMENT/loop-state.md`, cycle 63).
 | 2026-09-25 | 53 | Akuma.exe | 28,8 Mo | Kiosque + pile FastAPI/starlette à jour |
 | **2026-10-20** | **63** | **Akuma.exe** | **28,8 Mo** | **3 écrans 404 corrigés (clients/comptes/declarations), `--sans-navigateur`, build via `python -m PyInstaller`, 12 suites Playwright 431/431 contre l'exe** |
 | **2026-10-20** | **64** | **Akuma.exe** | **28,8 Mo** | **Voyant : racine figée → dossier de l'exe (fin de l'exigence `QF_FICHIER_ETAT_SAUVEGARDE`), vérifié en simulation d'installation complète** |
+| **2026-10-23** | **73** | **Akuma.exe** | **28,8 Mo** | **Écran `changer-mot-de-passe.html` ajouté au spec (404 → 200, défaut trouvé par la campagne 13 suites contre l'exe, sha-256 consigné)** |

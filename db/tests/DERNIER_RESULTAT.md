@@ -7,6 +7,27 @@ Trace rejouable : `bash db/tests/executer_tests.sh`.
 
 ---
 
+## Cycle 73 — régression sur le main intégré (2026-10-23)
+
+Exécuté via `bash db/outils/verifier_tout.sh` sur `main` = d0fa264 (après
+fusion des PR #78→#89 + #90). Suite SQL complète :
+
+- création de `quincaillerie_test` : OK ; migrations appliquées : OK ;
+  jeu d'essai chargé : OK
+- **protections : 202/202**
+- **habilitations : 55/55**
+- **concurrence : 6/6** (aucune survente, aucun blocage)
+- **aller-retour migrations 000→050 : OK** (schéma après retour
+  strictement identique à l'origine — différences : aucune)
+
+Incident d'invocation documenté au cycle 73 (voir
+`RAPPORT AVANCEMENT/loop-state.md`) : un `PSQL` relatif hérité de
+l'appelant cassait les suites Playwright (artefact d'invocation, pas une
+régression SQL). Correctif durable : `absolutiser_pour_node()` dans
+`verifier_tout.sh`.
+
+---
+
 ## Stabilisation de l'environnement (2026-09-12)
 
 Le serveur de développement tournait initialement dans le dossier temporaire

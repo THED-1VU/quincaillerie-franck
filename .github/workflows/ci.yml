@@ -2,7 +2,8 @@
 # dépendre de la vérification manuelle du poste de développement.
 #
 # Deux jobs indépendants : `pytest` (inchangé depuis le cycle 33) et
-# `playwright` (cycle 62 : 12 suites sur serveur et PostgreSQL réels). Un
+# `playwright` (cycle 62 : suites sur serveur et PostgreSQL réels ; 13
+# suites depuis le cycle 73). Un
 # échec Playwright ne masque jamais le verdict pytest, et réciproquement.
 #
 # Porté par le service PostgreSQL officiel (image postgres:17, qui inclut
@@ -97,7 +98,7 @@ jobs:
   # --------------------------------------------------------------------------
   # Suites Playwright sur serveur et PostgreSQL RÉELS (cycle 62).
   # Même topologie que le job pytest (service postgres:17 sur 5433, base et
-  # rôles recréés, config.ini de test non versionné). Les 12 suites sont
+  # rôles recréés, config.ini de test non versionné). Les 13 suites sont
   # exécutées séquentiellement par executer_suites_reelles.sh, avec un délai
   # maximal par suite ; leurs journaux sont publiés en artefact si le job
   # échoue. `affichage`/`flux` sont exclues (suites héritées du mode statique).

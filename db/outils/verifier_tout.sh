@@ -38,6 +38,29 @@ set -uo pipefail
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PSQL="${PSQL:-psql}"
 PG_DUMP="${PG_DUMP:-pg_dump}"
+
+# Cycle 73 : un PSQL/PG_DUMP relatif hérité de l'appelant casse les suites
+# Playwright — `npm run` exécute chaque suite depuis maquette/verification/
+# et les suites utilisent la variable telle quelle (spawnSync ENOENT sur
+# 11 suites, constat réel du cycle 73). Absolutisation de tout chemin
+# relatif existant depuis la racine ; sous Git Bash, conversion au format
+# Windows (les suites Node n'interprètent pas les chemins /c/...). Sur la
+# CI (psql dans le PATH, fichier inexistant relativement à la racine), la
+# valeur est inchangée.
+absolutiser_pour_node() {
+    local valeur="$1"
+    case "$valeur" in
+        /*|[A-Za-z]:[\\/]*) : ;;
+        *) if [ -f "$RACINE/$valeur" ]; then
+               valeur="$RACINE/$valeur"
+               command -v cygpath >/dev/null 2>&1 && valeur="$(cygpath -w "$valeur")"
+           fi ;;
+    esac
+    printf '%s' "$valeur"
+}
+PSQL="$(absolutiser_pour_node "$PSQL")"
+PG_DUMP="$(absolutiser_pour_node "$PG_DUMP")"
+export PSQL PG_DUMP
 export PGHOST="${PGHOST:-127.0.0.1}"
 export PGPORT="${PGPORT:-5433}"
 export PGUSER="${PGUSER:-postgres}"

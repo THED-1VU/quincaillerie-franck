@@ -33,7 +33,10 @@ let PGDEV = resolve(RACINE_DEPOT, "_pgdev");
 if (!existsSync(PGDEV)) {
   PGDEV = resolve(RACINE_DEPOT, "..", "..", "_pgdev");
 }
-const PSQL = resolve(PGDEV, "pgsql", "bin", "psql.exe");
+// Poste Windows : psql portable de _pgdev. CI (ubuntu) : psql du PATH.
+const PSQL = existsSync(resolve(PGDEV, "pgsql", "bin", "psql.exe"))
+  ? resolve(PGDEV, "pgsql", "bin", "psql.exe")
+  : "psql";
 
 const MDP_RESPONSABLE = "ResponsableTest123";
 const MDP_AGENT_STOCK = "AgentStockTest123";

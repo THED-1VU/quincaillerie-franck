@@ -4,6 +4,21 @@ Ce fichier est une **trace**. Les preuves restent rejouables depuis
 `maquette/verification/` (`npm run affichage`, `npm run flux`, ou directement
 `node verifier-cablage.mjs`).
 
+## Cycle 73 — régression sur le main intégré, 13 suites (2026-10-23)
+
+Via `bash db/outils/verifier_tout.sh` (uvicorn 8010, `main` = d0fa264) :
+**13/13 suites, 477 contrôles, 0 échec** — routes 65, cablage 94,
+vente 49, stock 49, rapports 52, inventaire 17, ux 27, comptes 26,
+caisse 24, rh 21, exploitation 12, echappement 11, roles 30 (matrice
+des rôles complète, captures régénérées).
+
+Le même jour, campagne contre l'**exécutable** `Akuma.exe` reconstruit
+depuis ce même `main` (port 8000, base dédiée `quincaillerie_c73`) :
+voir `server/fabrication/DERNIER_RESULTAT.md` pour le détail et le
+sha-256.
+
+---
+
 ## État actuel (2026-09-13, cycle 20 — chantier C13)
 
 **Ce fichier n'avait plus été mis à jour depuis le cycle 5** (2026-09-12) —
