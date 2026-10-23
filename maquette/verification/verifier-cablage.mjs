@@ -70,10 +70,12 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_AGENT_COMPTA}', gen_salt('bf', 12)) WHERE identifiant='magasin.compta';`);
 // Deux ventes réelles du jour, pour que le tableau de bord du responsable
 // montre une vraie synthèse consolidée (un site chacun).
-psql(`INSERT INTO ventes (site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc, utilisateur_caisse_id, mode_paiement, date_encaissement)
-       VALUES (1, 4, 'payee', 6500, 0, 0, 6500, 1, 'especes', NOW());`);
-psql(`INSERT INTO ventes (site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc, utilisateur_caisse_id, mode_paiement, date_encaissement)
-       VALUES (2, 5, 'payee', 3200, 0, 0, 3200, 1, 'especes', NOW());`);
+psql(`WITH v AS (INSERT INTO ventes (site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc, utilisateur_caisse_id, mode_paiement, date_encaissement)
+       VALUES (1, 4, 'payee', 6500, 0, 0, 6500, 1, 'especes', NOW()) RETURNING id,total_ttc)
+       INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) SELECT id,'especes',total_ttc FROM v;`);
+psql(`WITH v AS (INSERT INTO ventes (site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc, utilisateur_caisse_id, mode_paiement, date_encaissement)
+       VALUES (2, 5, 'payee', 3200, 0, 0, 3200, 1, 'especes', NOW()) RETURNING id,total_ttc)
+       INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) SELECT id,'especes',total_ttc FROM v;`);
 console.log("Base prête.\n");
 
 const navigateur = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chrome" });

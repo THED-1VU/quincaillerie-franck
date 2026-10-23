@@ -1,0 +1,54 @@
+{
+  "quincaillerie_codex_a_97d7790a23": {
+    "utilisateurs": [
+      5,
+      "417a7f917296750aa68e5d5381fd1b3a"
+    ],
+    "utilisateurs_roles": [
+      5,
+      "3fa946e641f247714f3c99564befbc6e"
+    ],
+    "stocks_sites": [
+      4,
+      "4a8f30bd3b900f2a504257cc74cd50c3"
+    ],
+    "ventes": [
+      0,
+      "d41d8cd98f00b204e9800998ecf8427e"
+    ],
+    "ventes_paiements": [
+      0,
+      "d41d8cd98f00b204e9800998ecf8427e"
+    ],
+    "transactions": [
+      0,
+      "d41d8cd98f00b204e9800998ecf8427e"
+    ]
+  },
+  "quincaillerie_codex_a_97d7790a23_restauree": {
+    "utilisateurs": [
+      5,
+      "417a7f917296750aa68e5d5381fd1b3a"
+    ],
+    "utilisateurs_roles": [
+      5,
+      "3fa946e641f247714f3c99564befbc6e"
+    ],
+    "stocks_sites": [
+      4,
+      "4a8f30bd3b900f2a504257cc74cd50c3"
+    ],
+    "ventes": [
+      0,
+      "d41d8cd98f00b204e9800998ecf8427e"
+    ],
+    "ventes_paiements": [
+      0,
+      "d41d8cd98f00b204e9800998ecf8427e"
+    ],
+    "transactions": [
+      0,
+      "d41d8cd98f00b204e9800998ecf8427e"
+    ]
+  }
+}

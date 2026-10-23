@@ -40,12 +40,21 @@ function Executer-Migration {
 switch ($args[0]) {
     'appliquer' {
         Write-Host "== Application des migrations sur $env:PGDATABASE ($env:PGHOST`:$env:PGPORT) =="
+        $plancher = -1
+        $existe = & $Psql -v ON_ERROR_STOP=1 -Atqc "SELECT to_regclass('public.schema_migrations') IS NOT NULL"
+        if ($LASTEXITCODE -ne 0) { throw 'Lecture du suivi des migrations impossible' }
+        if ($existe -eq 't') {
+            $valeur = & $Psql -v ON_ERROR_STOP=1 -Atqc 'SELECT COALESCE(MAX(version::integer),-1) FROM schema_migrations'
+            if ($LASTEXITCODE -ne 0) { throw 'Lecture de la version courante impossible' }
+            $plancher = [int]$valeur
+        }
         # -Filter Win32 ne supporte pas les classes de caracteres repetes
         # ([0-9][0-9][0-9] retourne 0 fichier) : filtrage par regex ici.
         $fichiers = Get-ChildItem -Path $Migrations -Filter '*.sql' |
             Where-Object { $_.Name -match '^[0-9]{3}_.*\.sql$' -and $_.Name -notlike '*_inverse.sql' } |
             Sort-Object Name
         foreach ($f in $fichiers) {
+            if ([int]$f.Name.Substring(0,3) -le $plancher) { continue }
             Write-Host "-- $($f.Name)"
             Executer-Migration -Fichier $f.FullName
         }
