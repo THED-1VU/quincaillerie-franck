@@ -9,6 +9,7 @@
     "cablage": "node verifier-cablage.mjs",
     "vente": "node verifier-vente-reelle.mjs",
     "inventaire": "node verifier-inventaire-reel.mjs",
+    "ux": "node verifier-ux-corrections.mjs",
     "echappement": "node verifier-echappement-html.mjs",
     "stock": "node verifier-stock-reel.mjs",
     "exploitation": "node verifier-exploitation-reel.mjs",

@@ -76,3 +76,6 @@ Desktop.ini
 *.swp
 .idea/
 .vscode/
+
+# Artefact transitoire de la suite exploitation (régénéré à chaque run)
+maquette/verification/_logo_test_c13.png

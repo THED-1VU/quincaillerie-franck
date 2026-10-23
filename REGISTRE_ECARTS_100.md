@@ -31,19 +31,26 @@ livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04 reconstruit au cycle 70).
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
 | P1 | **17** | 11 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
-| P2 | **11** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 3 |
+| P2 | **11** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 2 |
 | P3 | **4** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 1 |
-| **Total ouverts** | **32** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 6 EN_COURS/OUVERT | **4** |
+| **Total ouverts** | **32** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 6 EN_COURS/OUVERT | **3** |
 
 Lecture : **aucun écart d'intégrité**. Le chemin vers 99–100 % se joue sur
 trois catégories : (1) décisions du propriétaire déjà répertoriées dans
 `DECISIONS_PROPRIETAIRE.md` (D1–D13) ; (2) validations humaines (campagnes,
-impression, 2ᵉ poste) ; (3) sept fusions Git réservées au propriétaire
-(#78 → #82 + #83, #84). Le développement garde **4 écarts actionnables**
-(C12-03, C13-02, C14-03, C11-02) traités cycle par cycle ;
+impression, 2ᵉ poste) ; (3) **onze fusions Git** réservées au propriétaire
+(#78 → #88 dans l'ordre ; hors #60, doc ancienne — « fusionner ou fermer »
+comme décidé au cycle 56). Le développement garde **3 écarts actionnables**
+(C12-03, C14-03, C11-02) traités cycle par cycle ;
 les correctifs codables mais suspendus à une décision
 (C1-01, C1-02, C2-02, C5-01, C5-02, C6-01, C6-02) démarreront dès que les
 décisions D2–D5, D9, D10 tombent.
+
+**Rattrapage d'en-têtes de score (cycle 71)** — les en-têtes de sections
+suivent désormais les scores prouvés par cycle : C4 77→**78** (cycle 67),
+C7 65→**67** (cycle 68), C8 85→**86** (cycle 69), C13 76→**77** (cycle 71,
+C13-02). Aucune de ces corrections n'est un score nouveau : ce sont des
+reportages de preuves déjà établies.
 
 ---
 
@@ -208,7 +215,7 @@ décisions D2–D5, D9, D10 tombent.
 
 ---
 
-## C4 — Articles et stock (77 %)
+## C4 — Articles et stock (78 %)
 
 ### C4-01 — Modèle point a vérifié (articles sans site, stock par site)
 - **Exigence source :** addendum point a ; cycle 35.
@@ -321,7 +328,7 @@ décisions D2–D5, D9, D10 tombent.
 
 ---
 
-## C7 — Inventaire et comptage (65 %)
+## C7 — Inventaire et comptage (67 %)
 
 ### C7-01 — Plafond de vraisemblance à confirmer
 - **Exigence source :** cycle 57 ; `plafond_vraisemblance_comptage`.
@@ -371,7 +378,7 @@ décisions D2–D5, D9, D10 tombent.
 
 ---
 
-## C8 — Interfaces et parcours (85 %)
+## C8 — Interfaces et parcours (86 %)
 
 ### C8-01 — Divergences d'affichage recensées (D1–D4 de la matrice)
 - **Exigence source :** cycle 65 — divergences entre maquette et comportement réel.
@@ -502,7 +509,7 @@ décisions D2–D5, D9, D10 tombent.
 
 ---
 
-## C13 — Intégration continue (76 %)
+## C13 — Intégration continue (77 %)
 
 ### C13-01 — Job Playwright dans GitHub Actions
 - **Exigence source :** cycle 62 — CI Playwright.
@@ -517,14 +524,32 @@ décisions D2–D5, D9, D10 tombent.
 
 ### C13-02 — Régression complète automatisée en CI
 - **Exigence source :** C13 — « régression complète Playwright ».
-- **État :** les suites sont exécutées localement cycle par cycle (94 câblage, rôles 30/30, etc.) ; aucune exécution unique et exhaustive de toutes les suites n'est automatisée (le job CI de #79 couvre un sous-ensemble parcours).
-- **Preuve :** `maquette/verification/` (suites séparées) ; PR #79.
+- **État :** correction livrée en deux parties au cycle 71 : (1) orchestrateur
+  local — `db/outils/verifier_tout.sh` enchaîne désormais les **13 suites**
+  (il en oubliait 5 : routes, comptes, caisse, ux, roles) avec un délai
+  maximal par suite (600 s, code 124 explicite) et un `--basetemp` pytest
+  (contournement documenté du symlink résiduel du cycle 56) ; (2) tableau de
+  correspondance `maquette/verification/SUITES_CHANTIERS.md` (15 suites :
+  mode, chantier(s), preuve, orchestration). La partie CI reste portée par la
+  PR #79 (12 suites) — ajout de `roles` recommandé après sa fusion (une
+  entrée dans le tableau `SUITES` du script ; le job exporte déjà
+  `PGDATABASE_PISTE`).
+- **Preuve (exécutée au cycle 71) :** 3 exécutions réelles de
+  `verifier_tout.sh` — (1) blocage réel de la suite comptes (navigateur
+  jamais fermé, défaut du cycle 61 corrigé dans PR #78 non fusionnée :
+  correctif identique reporté) ; (2) 3 échecs honnêtes — nettoyage pytest
+  (symlink cycle 56, `--basetemp` ajouté), course d'inventaire (correctif
+  cycle 62 de PR #79 reporté), script npm `ux` **jamais commité** (ajouté) ;
+  (3) **exécution complète verte : SQL (protections + habilitations +
+  concurrence + aller/retour des migrations) OK, pytest 334/334, 13/13
+  suites / 477 contrôles / 0 échec, EXIT=0**. Les 5 suites « oubliées » sont
+  toutes passées (routes 65, ux 27, comptes 26, caisse 24, roles matrice OK).
 - **Gravité / risque métier :** P2 — le risque de « suite oubliée » croît avec le nombre de suites.
 - **Correction :** script orchestrateur « toutes les suites » rejoué en CI (ou matrice) ; tableau de correspondance suites↔chantiers.
-- **Dépendances :** C13-01. **Responsable :** développement (lot B).
-- **Critère d'acceptation :** une commande unique rejoue l'ensemble, résultat consolidé.
-- **Tests requis :** le script orchestrateur.
-- **Statut :** OUVERT.
+- **Dépendances :** C13-01 (PR #79, fusion propriétaire). **Responsable :** développement (lot B).
+- **Critère d'acceptation :** une commande unique rejoue l'ensemble, résultat consolidé — **satisfait localement** (`bash db/outils/verifier_tout.sh`, bilan + code de sortie) ; satisfait en CI après fusion de la PR #79.
+- **Tests requis :** le script orchestrateur — **rejoué 3 fois, preuves ci-dessus**.
+- **Statut :** EN_COURS (PR #79 pour la partie CI, PR #88 pour l'outillage local et la correspondance ; clôture à la fusion des deux).
 
 ---
 
