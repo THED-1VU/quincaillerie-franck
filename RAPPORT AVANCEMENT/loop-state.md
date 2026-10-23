@@ -4607,6 +4607,45 @@ production sans mon autorisation explicite »*.
   aucun import de données réelles, aucune mise en production sans
   autorisation explicite.
 
+### Cycle 74 — Intégration PR #91 + arbitrage des 27 écarts + préparation du tronçon humain
+
+- **ORDRE PROPRIÉTAIRE** : « ORDRE DE REPRISE CYCLE 74 » (5 sections) —
+  intégration de la PR #91 (fusion autorisée si verte), présentation des
+  16 décisions (aucune décision à sa place), D11 (empreintes + procédure,
+  aucune exclusion générale ni désactivation), calendrier des 9 campagnes,
+  pilotage 99-100 % par chantier (« aucun score relevé sans preuve »).
+- **§1 INTÉGRATION (exécutée)** : PR #91 vérifiée (OPEN, MERGEABLE, CLEAN ;
+  CI verte ×2 — runs 39900668426 et 39902590567, « 13/13 suites réussies »)
+  puis **fusionnée sur autorisation explicite** → merge commit **37b7b79** ;
+  `git checkout main && git pull --ff-only` (après abandon de 7 captures
+  régénérées par la 3ᵉ régression locale — artefacts jetables) ; intégrité
+  : 0 marqueur de conflit, sections cycles 70→73 en ordre, statut = un seul
+  `D db/outils/sauvegarder.ps1` (Kaspersky, jamais commité).
+- **§3 D11 (préparé, pas exécuté)** : empreinte SHA-256 de la version Git
+  attendue = `3684aae048cdd66afeeda1a9bfe11855023add940bf385b22a3fe5f4759607a2`
+  (25 965 octets, figé depuis le commit 9b0c07b du 2026-09-18) ; fichier
+  constaté **absent du disque** (quarantaine, détection heuristique
+  `PDM:Trojan.Win32.Generic`) ; `restaurer.ps1` non touché. Procédure de
+  résolution soumise : `RAPPORT AVANCEMENT/CYCLE_74_D11_KASPERSKY_PROCEDURE.md`
+  (restauration voie Git ou quarantaine → vérification d'empreinte AVANT
+  exécution → signalement faux positif opentip.kaspersky.com → si re-quarantaine
+  à l'exécution seulement : exclusion ciblée PAR FICHIER, jamais de dossier,
+  jamais de désactivation).
+- **§2/§4/§5 (préparés)** : arbitrage des 16 décisions consolidé
+  (`CYCLE_74_ARBITRAGE.md`, sur `main` depuis #91) ; calendrier des 9
+  campagnes A-I par poste/testeur + modèles de PV
+  (`CYCLE_74_CAMPAGNES_CALENDRIER.md`) ; tableau de pilotage des 15 chantiers
+  vers 99-100 % (`CYCLE_74_PILOTAGE_CHANTIERS.md`).
+- **SCORES** : aucun relevé ce cycle — aucune preuve d'exécution nouvelle
+  hors intégration (les scores restent la référence cycle 73, moyenne ≈ 80,8 %).
+- **STATUT** : READY_FOR_REVIEW (PR du cycle 74 ; fusion réservée au
+  propriétaire). BLOCAGE CENTRAL : les réponses aux 16 décisions ; D11 est
+  la seule décision qui débloque matériellement des campagnes (E, F, H).
+- **PROCHAINE BOUCLE** : dès la première réponse — (1) si D11 « exécuté » :
+  mise à jour registre C11-01 sur preuve du propriétaire ; (2) correctifs
+  courts D4/D9 ou migration 051 (D2) selon réponses ; (3) bascules
+  `a_decider=FALSE` (C2-01) ; (4) accompagnement des campagnes lancées.
+
 ---
 
 ## Tableau de pilotage — reprise du 2026-10-20 (après cycle 73)
