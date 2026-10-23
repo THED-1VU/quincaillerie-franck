@@ -22,41 +22,45 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **15 clôturés par vérification ou livraison** (C4-01 et
+40 écarts recensés, dont **16 clôturés par vérification ou livraison** (C4-01 et
 C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ; C1-04, C7-02 et C7-03
 livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04 reconstruit au cycle 70 ;
 C14-03 livré au cycle 72 ; **C0-01, C13-01, C13-02 et C14-01 acquittés au
 cycle 73 par l'intégration des PR #78→#89 (+ #90) dans `main`** ; **C5-01 et
-C5-02 résorbés au cycle 75 sur les décisions D9 et D4 du propriétaire**).
-25 écarts ouverts :
+C5-02 résorbés au cycle 75 sur les décisions D9 et D4 du propriétaire ;
+C1-01 (paiements mixtes) livré au cycle 75 sur la décision D2, PR #95**).
+24 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
-| P1 | **13** | 7 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
+| P1 | **12** | 6 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
 | P2 | **10** | 7 BLOQUE_PROPRIETAIRE / TEST HUMAIN | 2 |
 | P3 | **2** | 2 BLOQUE_PROPRIETAIRE (confirmations) | 0 |
-| **Total ouverts** | **25** | 14 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 4 EN_COURS/OUVERT | **2** |
+| **Total ouverts** | **24** | 13 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 4 EN_COURS/OUVERT | **2** |
 
 Lecture (mise à jour cycle 75) : **aucun écart d'intégrité** et **les douze
 fusions Git sont faites** — le chemin vers 99–100 % ne passe plus que par
 deux catégories : (1) décisions du propriétaire — D2, D4, D5, D6, D7, D8, D9,
 D10 et C12-02 validées le 2026-10-23 et en cours d'implémentation au cycle 75
-(C5-01 et C5-02 déjà résorbés) ; restent D1, D3, C6-02, C2-01, C7-01, le sort
+(C5-01 et C5-02 déjà résorbés, C1-01 livré sur D2) ; restent D1, D3, C6-02,
+C2-01, C7-01, le sort
 de la PR #60 et D11 (action propriétaire) ; (2) validations humaines (campagnes
 — fiches prêtes dans `RAPPORT AVANCEMENT/CYCLE_73_FICHES_RECETTE.md`,
 impression, 2ᵉ poste). Le développement garde **2 écarts actionnables**
 (C12-03, C11-02) — tous deux suspendus à l'installation réelle, donc
 reportables au jour J ;
 les correctifs codables mais suspendus à une décision
-(C1-01, C1-02, C2-02, C6-01, C6-02) sont traités au cycle 75 pour les
-décisions validées (D2, D5, D10) et attendent D3 pour le reste.
+(C1-02, C2-02, C6-01, C6-02) sont traités au cycle 75 pour les
+décisions validées (D5, D10) et attendent D3 pour le reste.
 
 **Rattrapage d'en-têtes de score (cycle 71)** — les en-têtes de sections
 suivent désormais les scores prouvés par cycle : C4 77→**78** (cycle 67),
 C7 65→**67** (cycle 68), C8 85→**86** (cycle 69), C13 76→**77** (cycle 71,
 C13-02), C5 81→**88** (cycle 75, C5-01 et C5-02 résorbés sur décisions D9 et
-D4 — seul C5-03, test humain, reste ouvert). Aucune de ces corrections n'est un
+D4 — seul C5-03, test humain, reste ouvert), C1 92→**96** (cycle 75, C1-01
+livré sur décision D2 — restent C1-02 et C1-03, suspendus à D5 et à
+l'installation réelle). Aucune de ces corrections n'est un
 score nouveau : ce sont des
 reportages de preuves déjà établies.
 
@@ -123,18 +127,19 @@ reportages de preuves déjà établies.
 
 ---
 
-## C1 — Base de données et intégrité (92 %)
+## C1 — Base de données et intégrité (96 %)
 
 ### C1-01 — Paiements mixtes (addendum point a)
-- **Exigence source :** addendum point a ; décision D2 (`DECISIONS_PROPRIETAIRE.md`).
-- **État :** non construit — `ventes.mode_paiement` est une valeur unique (espèces/Mobile Money/chèque/virement), une vente ne peut pas combiner deux modes.
+- **Exigence source :** addendum point a ; décision D2 (`DECISIONS_PROPRIETAIRE.md`, validée le 2026-10-23).
+- **État (avant cycle 75) :** non construit — `ventes.mode_paiement` est une valeur unique (espèces/Mobile Money/chèque/virement), une vente ne peut pas combiner deux modes.
 - **Preuve :** `db/migrations` (aucune table de répartition de paiement) ; `POST /ventes` accepte un mode unique.
 - **Gravité / risque métier :** P1 — une vente réelle « 30 000 espèces + 20 000 Mobile Money » ne peut pas être enregistrée fidèlement.
-- **Correction :** après décision D2 : table `ventes_paiements` (vente_id, mode, montant) avec contrôle du total — migration 051+.
-- **Dépendances :** D2 (propriétaire). **Responsable :** développement après décision.
+- **Correction (exécutée cycle 75-C) :** migration **052** (`052_paiements_mixtes.sql` + inverse) : table `ventes_paiements` (une composante par mode, `UNIQUE(vente_id, mode_paiement)`, `montant > 0`), backfill des ventes existantes, **invariant somme = encaissé porté par la base** (constraint trigger DIFFÉRÉ vérifié au COMMIT, valable même en SQL direct), `ventes.mode_paiement` = mode unique ou `'mixte'`, `calculer_attendu_caisse` recalculée sur les composantes (le repartage espèces / Mobile Money de la clôture suit), grants + RLS par site ; API `paiements[]` (somme inexacte refusée 422, jamais avec `mode_paiement`), **toute vente encaissée écrit ses composantes** (chemin historique = 1 composante du total), recette de journal toujours **UNE du TOTAL** (aucun double comptage), crédit sans composante, annulation 017 inchangée, reçu PDF décomposé ; écran `vente.html` (case paiement mixte, décomposition affichée avant validation, jamais avec le crédit).
+- **Dépendances :** D2 (validée). **Responsable :** développement.
 - **Critère d'acceptation :** une vente à deux modes enregistrée, tracée, exportée ; total vérifié par la base.
 - **Tests requis :** protections SQL + pytest + Playwright parcours vente.
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **Preuves (cycle 75-C) :** pytest `test_paiements_mixtes_d2.py` **10/10** (dont invariant SQL direct → `CheckViolation` au COMMIT) ; suite vente Playwright **63/63** dont 12 nouveaux contrôles écran (mode `'mixte'` et composantes `especes=3000.00 + orange_money=3500.00` en base, **une seule recette journal de 6 500**) ; régression pytest complète **354/354** ; migration appliquée sur base reconstruite (52 migrations). **PR #95** (empilée sur #94).
+- **Statut :** CLOS (cycle 75).
 
 ### C1-02 — Ventilation HT/TTC sur les documents (addendum point d, question 5)
 - **Exigence source :** addendum point d ; décision D5.
@@ -653,7 +658,7 @@ reportages de preuves déjà établies.
 | Décision | Écart(s) lié(s) | Statut |
 |----------|-----------------|--------|
 | D1 prix caissier | C3-01, C8-01 | BLOQUE_PROPRIETAIRE |
-| D2 paiements mixtes | C1-01 | **VALIDÉE (2026-10-23)** — implémentation cycle 75-C |
+| D2 paiements mixtes | C1-01 | **VALIDÉE (2026-10-23) — implémentée, C1-01 CLOS (cycle 75)** |
 | D3 fond caisse / seuil écart | C6-01, C5-01 (afférent) | BLOQUE_PROPRIETAIRE |
 | D4 seuil remises | C5-02 (+ C1-04 drift seed) | **VALIDÉE (2026-10-23) — implémentée, C5-02 CLOS (cycle 75)** |
 | D5 ventilation HT/TTC | C1-02 | **VALIDÉE (2026-10-23)** — audit TTC cycle 75-G |

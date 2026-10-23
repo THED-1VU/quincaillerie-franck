@@ -72,6 +72,17 @@ class LigneVenteDemande(BaseModel):
         return self
 
 
+class ComposantPaiementDemande(BaseModel):
+    """Une composante de paiement (décision D2, 2026-10-23) : la part de la
+    vente réglée dans UN mode. Une vente mixte espèces + Mobile Money en
+    fournit deux ; la somme doit exactement égaler le total encaissé —
+    revérifié par la base elle-même (trigger de contrainte différé,
+    migration 052), jamais cru sur parole au client."""
+
+    mode_paiement: Literal["especes", "orange_money", "mtn_momo", "autre"]
+    montant: Decimal = Field(gt=0)
+
+
 class DemandeVente(BaseModel):
     """``site_id`` n'est utilisé QUE pour un compte responsable (deux
     sites) : pour un agent comptabilité, le site vient toujours de sa
@@ -87,19 +98,28 @@ class DemandeVente(BaseModel):
     séparé d'une remise par ligne — au plus un des deux, aucun n'est
     obligatoire (pas de remise globale par défaut).
 
+    ``mode_paiement``/``paiements`` : deux façons d'exprimer
+    l'encaissement, UNE SEULE à la fois (décision D2, 2026-10-23, même
+    discipline que les remises). ``mode_paiement`` reprend le comportement
+    historique (un seul mode, crédit client compris) ; ``paiements`` liste
+    les composantes par mode — la vente devient 'mixte' dès qu'il y en a
+    plusieurs, et une vente à crédit n'accepte AUCUNE composante (le
+    règlement passe par la créance, 045/047).
+
     ``client_id`` (addendum point b, décidé le 2026-09-25) : obligatoire
     uniquement quand ``mode_paiement == 'credit_client'`` — la vérification
     elle-même (obligatoire, client actif, plafond) est faite dans la route,
     pas ici, car elle dépend de l'état de la base."""
 
     site_id: Optional[int] = None
-    mode_paiement: str = Field(min_length=1, max_length=30)
+    mode_paiement: Optional[str] = Field(default=None, min_length=1, max_length=30)
     numero_facturier: str = Field(min_length=1, max_length=30)
     vendeur_id: int
     lignes: List[LigneVenteDemande] = Field(min_length=1)
     remise_globale_montant: Optional[float] = Field(default=None, ge=0)
     remise_globale_pct: Optional[float] = Field(default=None, ge=0, le=100)
     client_id: Optional[int] = None
+    paiements: Optional[List[ComposantPaiementDemande]] = None
 
     @model_validator(mode="after")
     def _au_plus_une_remise_globale(self) -> "DemandeVente":
@@ -107,6 +127,18 @@ class DemandeVente(BaseModel):
             raise ValueError(
                 "Fournir au plus un des deux : remise_globale_montant ou remise_globale_pct."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _un_seul_mode_d_encaissement(self) -> "DemandeVente":
+        if self.paiements is not None and self.mode_paiement is not None:
+            raise ValueError(
+                "Fournir soit mode_paiement, soit paiements — jamais les deux."
+            )
+        if self.paiements is not None:
+            modes = [c.mode_paiement for c in self.paiements]
+            if len(modes) != len(set(modes)):
+                raise ValueError("Au plus une composante de paiement par mode.")
         return self
 
 
@@ -119,6 +151,11 @@ class LigneEcartReponse(BaseModel):
     quantite_manquante: float
 
 
+class ComposantPaiementReponse(BaseModel):
+    mode_paiement: str
+    montant: float
+
+
 class ReponseVente(BaseModel):
     vente_id: int
     site_id: int
@@ -129,6 +166,7 @@ class ReponseVente(BaseModel):
     total_ttc: float
     remise_totale: float
     ecarts: List[LigneEcartReponse]
+    paiements: Optional[List[ComposantPaiementReponse]] = None
 
 
 class DemandeAnnulationVente(BaseModel):

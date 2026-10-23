@@ -674,17 +674,18 @@ def _creer_client_credit_test(nom: str, plafond: float = 1000000) -> int:
 
 def test_retour_client_credit_partiellement_regle_partage_dette_et_especes(client):
     """Le maçon avec un acompte, bout en bout via la vraie route HTTP :
-    100 000 à crédit, acompte de 40 000, retour de 70 000 -> 60 000
-    réduisent la créance, 10 000 (l'excédent) partent réellement en
-    espèces."""
+    600 000 à crédit (100 × 6 000 — sous le seuil de remise de 10 %, D4,
+    cycle 75 : un agent ne peut plus saisir un prix plus bas), acompte de
+    240 000, retour de 70 unités (420 000) -> 360 000 réduisent la créance,
+    60 000 (l'excédent) partent réellement en espèces."""
     client_id = _creer_client_credit_test("Client HTTP Maçon")
-    vente_id = _creer_vente_credit_test(client, "MAG-TESTCREDIT01", client_id, quantite=100, prix_unitaire=1000)
+    vente_id = _creer_vente_credit_test(client, "MAG-TESTCREDIT01", client_id, quantite=100, prix_unitaire=6000)
 
     session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     reglement = client.post(
         f"/clients/{client_id}/reglements",
         headers=entete_autorisation(session_resp["jeton"]),
-        json={"montant": 40000},
+        json={"montant": 240000},
     )
     assert reglement.status_code == 201, reglement.text
 
@@ -715,11 +716,11 @@ def test_retour_client_credit_partiellement_regle_partage_dette_et_especes(clien
     with psycopg.connect(PG_ADMIN_DSN) as conn:
         with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
             cur.execute("SELECT montant_retourne FROM creances WHERE vente_id = %s", (vente_id,))
-            assert float(cur.fetchone()["montant_retourne"]) == 60000.0
+            assert float(cur.fetchone()["montant_retourne"]) == 360000.0
             cur.execute(
                 "SELECT montant FROM transactions WHERE vente_id = %s AND type = 'depense'", (vente_id,)
             )
-            assert float(cur.fetchone()["montant"]) == 10000.0
+            assert float(cur.fetchone()["montant"]) == 60000.0
             assert float(conn.execute("SELECT encours_client(%s)", (client_id,)).fetchone()[0]) == 0.0
 
 

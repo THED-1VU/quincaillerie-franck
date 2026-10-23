@@ -20,6 +20,10 @@
       prix négocié, remise globale saisie et répercutée sur l'aperçu, remise
       atteignant le total refusée AVANT tout envoi, puis vente réelle avec
       les deux remises contrôlée en base et dans la réponse serveur.
+   7. Paiement mixte (D2, cycle 75) : case « mixte », second mode + montant
+      saisis à l'écran, décomposition affichée avant validation, vente
+      201 avec `paiements[]` dans la réponse, mode 'mixte' et composantes
+      en base (ventes_paiements, migration 052), UNE recette du TOTAL.
 
    Prérequis : serveur démarré sur SERVEUR_URL, servant /app (cycle 5).
    Réinitialise elle-même la base (jeu d'essai + mots de passe réels).
@@ -298,6 +302,103 @@ async function seConnecter(page, identifiant, motDePasse) {
   );
   verifier(/^6500\.00\|300\.00\|6200\.00$/.test(ligneDb),
     `base réelle : ligne catalogue/remise/payé = 6500/300/6200 (${ligneDb})`);
+
+  await contexte.close();
+}
+
+// ============================================================================
+// 1 ter. Paiement MIXTE (D2, cycle 75) : espèces + Orange Money sur une
+// même vente, décomposition tracée, UNE recette de journal du TOTAL
+// ============================================================================
+{
+  const contexte = await navigateur.newContext({ viewport: { width: 1366, height: 900 } });
+  const page = await contexte.newPage();
+  await seConnecter(page, "magasin.compta", MDP_AGENT_COMPTA);
+
+  // Ciment (6 500 TTC au catalogue).
+  await page.fill("#recherche", "ciment");
+  await page.waitForFunction(() => !document.getElementById("suggestions").hidden, { timeout: 5000 });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.getElementById("panier").textContent.includes("Ciment"), { timeout: 5000 });
+
+  await page.fill("#numero-facturier", "MAG-D2MIX01");
+  await page.selectOption("#vendeur", "1");
+
+  // La case révèle le second mode : hors espèces (déjà le premier mode) et
+  // hors crédit (une vente à crédit n'encaisse rien du jour).
+  await page.check("#mixte-actif");
+  verifier(await page.isVisible("#mixte-detail"), "mixte : bloc second mode révélé par la case");
+  const optionsMixte = await page.locator("#mixte-mode option").allTextContents();
+  verifier(optionsMixte.length === 3,
+    `mixte : second mode propose 3 choix hors espèces et crédit (${optionsMixte.join(", ")})`);
+
+  // Montant >= total : refusé AVANT tout envoi (le premier mode doit
+  // encaisser le reste — le serveur, lui, refuse une composante nulle).
+  let envoisMixte = 0;
+  page.on("request", (r) => {
+    if (r.url().endsWith("/ventes") && r.method() === "POST") envoisMixte++;
+  });
+  await page.selectOption("#mixte-mode", "orange_money");
+  await page.fill("#mixte-montant", "6500");
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const messageMixteRefuse = await page.textContent("#zone-confirmation");
+  verifier(/strictement inférieur/i.test(messageMixteRefuse),
+    `mixte : montant atteignant le total refusé à l'écran ("${messageMixteRefuse}")`);
+  verifier(envoisMixte === 0, "mixte : aucun POST /ventes envoyé quand le montant atteint le total");
+
+  // 3 500 FCFA sur Orange Money, le reste (3 000) en espèces. Les montants
+  // attendus passent par fcfaAttendu() : même séparateur de milliers que le
+  // DOM (espace fine insécable), jamais une comparaison de texte naïve.
+  const lib3000 = fcfaAttendu(3000);
+  const lib3500 = fcfaAttendu(3500);
+  await page.fill("#mixte-montant", "3500");
+  const aideMixte = await page.textContent("#mixte-aide");
+  verifier(aideMixte.includes(lib3000) && aideMixte.includes(lib3500),
+    `mixte : décomposition affichée avant validation ("${aideMixte}")`);
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const messageConfirmationMixte = await page.textContent("#zone-confirmation");
+  verifier(messageConfirmationMixte.includes("Espèces " + lib3000 + " · Orange Money " + lib3500),
+    `mixte : confirmation avec la décomposition ("${messageConfirmationMixte}")`);
+  const [reponseMixte] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/ventes") && r.request().method() === "POST", { timeout: 10000 }),
+    page.keyboard.press("F9"),
+  ]);
+  verifier(reponseMixte.ok(), "mixte : POST /ventes -> 201");
+  const corpsMixte = await reponseMixte.json();
+  verifier(
+    Array.isArray(corpsMixte.paiements) && corpsMixte.paiements.length === 2
+    && corpsMixte.paiements.some((c) => c.mode_paiement === "especes" && c.montant === 3000)
+    && corpsMixte.paiements.some((c) => c.mode_paiement === "orange_money" && c.montant === 3500),
+    `mixte : réponse serveur décomposée par mode (${JSON.stringify(corpsMixte.paiements)})`
+  );
+  await page.waitForFunction(() => !document.getElementById("zone-succes").hidden, { timeout: 10000 });
+  const messageSuccesMixte = await page.textContent("#zone-succes");
+  verifier(
+    messageSuccesMixte.includes("Décomposition : Espèces " + lib3000 + " · Orange Money " + lib3500),
+    `mixte : message de succès avec la décomposition ("${messageSuccesMixte}")`
+  );
+
+  // Base réelle : mode 'mixte', composantes mode par mode, UNE recette.
+  const modeDb = psqlValeur(
+    "SELECT mode_paiement FROM ventes WHERE numero_facturier = 'MAG-D2MIX01'"
+  );
+  verifier(modeDb === "mixte", `base réelle : ventes.mode_paiement = mixte (${modeDb})`);
+  const composantesDb = psqlValeur(
+    "SELECT string_agg(vp.mode_paiement || '=' || vp.montant::text, ' + ' ORDER BY vp.mode_paiement) "
+    + "FROM ventes_paiements vp JOIN ventes v ON v.id = vp.vente_id "
+    + "WHERE v.numero_facturier = 'MAG-D2MIX01'"
+  );
+  verifier(/^especes=3000\.00 \+ orange_money=3500\.00$/.test(composantesDb),
+    `base réelle : composantes = espèces 3 000 + Orange Money 3 500 (${composantesDb})`);
+  const recettesDb = psqlValeur(
+    "SELECT string_agg(t.montant::text, ', ' ORDER BY t.id) FROM transactions t "
+    + "JOIN ventes v ON v.id = t.vente_id "
+    + "WHERE v.numero_facturier = 'MAG-D2MIX01' AND t.type = 'recette'"
+  );
+  verifier(/^6500\.00$/.test(recettesDb),
+    `base réelle : UNE recette de journal, du TOTAL (pas des composantes) (${recettesDb})`);
 
   await contexte.close();
 }
