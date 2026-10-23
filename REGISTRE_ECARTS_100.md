@@ -285,14 +285,22 @@ reportages de preuves déjà établies.
 
 ### C5-01 — `utilisateur_caisse_id` toujours attribué au responsable
 - **Exigence source :** addendum h (caissier fusionné) + décision D9.
-- **État :** confirmé ce cycle — `POST /ventes` attribue **systématiquement** l'encaissement au compte responsable (`SELECT id FROM utilisateurs WHERE role='responsable' LIMIT 1`), même quand un agent comptabilité saisit réellement ; le commentaire du code (`server/app/routes/ventes.py:210-227`) documente ce désaccord comme volontairement non corrigé.
-- **Preuve :** `server/app/routes/ventes.py:210-227` (lu ce cycle).
+- **État :** corrigé au cycle 75 (décision D9 validée par le propriétaire le
+  2026-10-23) — `POST /ventes` attribue désormais l'encaissement au compte
+  **authentifié** (identifiant porté par le jeton signé) ; l'ancienne
+  requête « premier responsable trouvé » est supprimée. Résistance à
+  l'usurpation prouvée : `DemandeVente` n'expose aucun champ d'encaisseur et
+  un test injecte le champ dans le JSON pour prouver qu'il est ignoré.
+- **Preuve (exécutée cycle 75) :** `server/tests/test_encaissement_d9.py`
+  **3/3** (agent saisit → encaisseur = agent ; responsable → encaisseur =
+  responsable ; injection du champ ignorée) ; non-régression ventes
+  **45/45**, caisse + crédit **35/35**.
 - **Gravité / risque métier :** P2 — le journal d'audit prête l'encaissement au mauvais utilisateur ; en cas de litige caisse, la traçabilité « qui a encaissé » est faussée ; contradiction visible avec la décision de fusion du rôle caissier (2026-09-13).
-- **Correction :** attribuer `utilisateur_caisse_id` au compte authentifié ayant créé la vente (le jeton le porte déjà), en gardant une contrainte de rôle ; trancher D9 (journal actuel conservé ou corrigé rétroactivement — les environnements de test sont réinitialisés, aucune donnée réelle touchée).
-- **Dépendances :** D9. **Responsable :** développement après décision.
-- **Critère d'acceptation :** une vente saisie par `agent_comptabilite` porte son identifiant dans `utilisateur_caisse_id` ; tests qui l'affirment.
-- **Tests requis :** pytest (vente par agent compta → colonne = son id) + protections SQL.
-- **Statut :** BLOQUE_PROPRIETAIRE (point de décision) — correctif prêt à être codé.
+- **Correction :** `ventes.py` : `utilisateur_caisse_id = session.utilisateur_id` (décision D9 du 2026-10-23) — aucune migration (colonne inchangée).
+- **Dépendances :** D9 (validée). **Responsable :** développement.
+- **Critère d'acceptation :** une vente saisie par `agent_comptabilite` porte son identifiant dans `utilisateur_caisse_id` ; tests qui l'affirment — **atteint**.
+- **Tests requis :** pytest (vente par agent compta → colonne = son id) + protections SQL — 3 tests dédiés verts.
+- **Statut :** CLOS (cycle 75).
 
 ### C5-02 — Seuil de validation des remises non décidé
 - **Exigence source :** addendum f ; décision D4.
