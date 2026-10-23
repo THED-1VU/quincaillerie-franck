@@ -66,6 +66,9 @@ def connexion(demande: DemandeConnexion, request: Request):
             except Exception:  # noqa: BLE001 - repli en mémoire, jamais bloquant
                 autorise = limiteur.autorise(cle_limite)
             if not autorise:
+                cur.execute("SELECT journaliser_limitation_connexion(%s, %s)",
+                            (demande.identifiant, adresse_ip))
+                conn.commit()
                 raise HTTPException(
                     status.HTTP_429_TOO_MANY_REQUESTS,
                     "Trop de tentatives de connexion. Réessayez dans une minute.",
@@ -110,22 +113,23 @@ def connexion(demande: DemandeConnexion, request: Request):
                     )
                 except Exception:  # noqa: BLE001 - repli en mémoire
                     limiteur.reinitialiser(cle_limite)
+                duree_minutes = min(duree_minutes, 480)
+                gestionnaire = request.app.state.gestionnaire_sessions
+                jeton = gestionnaire.emettre(
+                    utilisateur_id=ligne["utilisateur_id"], role=ligne["role"],
+                    site_id=ligne["site_id"], nom_complet=ligne["nom_complet"],
+                    doit_changer_mot_de_passe=ligne["doit_changer_mot_de_passe"],
+                    duree_minutes=duree_minutes, roles=roles,
+                )
+                session_emise = gestionnaire.verifier(jeton)
+                cur.execute("SELECT enregistrer_session(%s, %s, %s)",
+                            (session_emise.jti, session_emise.utilisateur_id, session_emise.expire_a))
         conn.commit()
 
     if not ligne["ok"]:
         message = _MESSAGES_PUBLICS.get(ligne["motif"], "Connexion refusée.")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, message)
 
-    gestionnaire: securite.GestionnaireSessions = request.app.state.gestionnaire_sessions
-    jeton = gestionnaire.emettre(
-        utilisateur_id=ligne["utilisateur_id"],
-        role=ligne["role"],
-        site_id=ligne["site_id"],
-        nom_complet=ligne["nom_complet"],
-        doit_changer_mot_de_passe=ligne["doit_changer_mot_de_passe"],
-        duree_minutes=duree_minutes,
-        roles=roles,
-    )
     return ReponseConnexion(
         jeton=jeton,
         expire_dans_secondes=duree_minutes * 60,
@@ -173,6 +177,7 @@ def changer_mot_de_passe(
         role_pg(session.role), site_id=session.site_id, utilisateur_id=session.utilisateur_id
     ) as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT set_config('qf.session_courante', %s, true)", (session.jti,))
             cur.execute(
                 "SELECT changer_mon_mot_de_passe(%s, %s) AS ok",
                 (demande.mot_de_passe_actuel, nouveau_hash),

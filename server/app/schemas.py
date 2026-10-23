@@ -4,14 +4,23 @@ from __future__ import annotations
 
 from datetime import date as _date, datetime
 from decimal import Decimal
-from typing import List, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AfterValidator, BaseModel, Field, model_validator
+
+
+def _limite_bcrypt(valeur: str) -> str:
+    if len(valeur.encode("utf-8")) > 72:
+        raise ValueError("Le mot de passe dépasse la limite technique de 72 octets UTF-8.")
+    return valeur
+
+
+MotDePasseBcrypt = Annotated[str, AfterValidator(_limite_bcrypt)]
 
 
 class DemandeConnexion(BaseModel):
     identifiant: str = Field(min_length=1, max_length=50)
-    mot_de_passe: str = Field(min_length=1, max_length=200)
+    mot_de_passe: MotDePasseBcrypt = Field(min_length=1, max_length=200)
 
 
 class ReponseConnexion(BaseModel):
@@ -25,8 +34,8 @@ class ReponseConnexion(BaseModel):
 
 
 class DemandeChangementMotDePasse(BaseModel):
-    mot_de_passe_actuel: str = Field(min_length=1, max_length=200)
-    nouveau_mot_de_passe: str = Field(min_length=8, max_length=200)
+    mot_de_passe_actuel: MotDePasseBcrypt = Field(min_length=1, max_length=200)
+    nouveau_mot_de_passe: MotDePasseBcrypt = Field(min_length=8, max_length=200)
 
 
 class ReponseProfil(BaseModel):
@@ -638,7 +647,7 @@ class DemandeCompte(BaseModel):
 
     nom_complet: str = Field(min_length=1, max_length=150)
     identifiant: str = Field(min_length=1, max_length=50)
-    mot_de_passe: str = Field(min_length=8, max_length=200)
+    mot_de_passe: MotDePasseBcrypt = Field(min_length=8, max_length=200)
     role: Literal["agent_stock", "agent_comptabilite"]
     site_id: int
     roles: list[Literal["agent_stock", "agent_comptabilite"]] = []
@@ -663,7 +672,7 @@ class DemandeReinitialisationMotDePasse(BaseModel):
     >= 8 caractères, jamais restitué, changement forcé à la première
     connexion."""
 
-    mot_de_passe: str = Field(min_length=8, max_length=200)
+    mot_de_passe: MotDePasseBcrypt = Field(min_length=8, max_length=200)
 
 
 class ReponseReinitialisationMotDePasse(BaseModel):

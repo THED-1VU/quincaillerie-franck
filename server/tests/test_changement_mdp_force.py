@@ -123,5 +123,5 @@ def test_reinitialisation_responsable_coupe_jeton_encore_valide(client):
     assert reponse.json()["doit_changer_mot_de_passe"] is True
 
     reponse = client.get("/moi", headers=entetes)
-    assert reponse.status_code == 403
-    assert "mot de passe provisoire" in reponse.json()["detail"]
+    assert reponse.status_code == 401
+    assert "reconnectez" in reponse.json()["detail"]
