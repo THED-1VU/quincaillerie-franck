@@ -14,6 +14,14 @@ effectue son propre changement reste utilisable (204 inchangé). Les anciens
 jetons non enregistrés imposent une reconnexion. Rôles et site sont contrôlés
 en base à chaque requête. 054 est réservé aux invariants complémentaires des
 paiements et à la concurrence. Aucun fichier du Lot B modifié silencieusement.
+Complément C2 avant modification de `schemas.py` : les quatre modèles de mots
+de passe refuseront plus de 72 octets UTF-8 (limite technique bcrypt, troncature
+silencieuse reproduite). Aucun modèle de vente n'est modifié. Les paramètres
+administratifs et les seuils métier restent inchangés.
+Adaptation transversale annoncée : les seules fixtures SQL des suites
+`verifier-cablage.mjs`, `verifier-stock-reel.mjs`, `verifier-rapports-reel.mjs`
+doivent créer vente payée et composante dans une transaction, pour respecter
+054. Codex adapte uniquement ces amorçages de test ; aucun écran ni parcours.
 
 ## Socle vérifié
 
