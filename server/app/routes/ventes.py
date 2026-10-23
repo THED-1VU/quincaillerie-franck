@@ -59,6 +59,7 @@ from ..erreurs import erreur_metier
 from .configuration import DOSSIER_LOGO
 from ..roles import role_pg
 from ..schemas import (
+    ComposantPaiementReponse,
     DemandeAnnulationVente,
     DemandeVente,
     LigneEcartReponse,
@@ -146,9 +147,16 @@ def enregistrer_vente(
     request: Request,
     session: Session = Depends(exiger_role("responsable", "agent_comptabilite")),
 ):
+    # Décision D2 (2026-10-23) : l'encaissement s'exprime soit par UN mode
+    # (historique), soit par une liste de composantes (paiements mixtes
+    # espèces + Mobile Money) — jamais les deux (validateur du schéma, qui
+    # exclut du même coup une vente à crédit avec composantes : une vente à
+    # crédit n'a ni mode direct ni composante, le règlement passe par la
+    # créance 045/047).
     est_credit = demande.mode_paiement == "credit_client"
-    if not est_credit and demande.mode_paiement not in _MODES_PAIEMENT_ACTIFS:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Mode de paiement inconnu.")
+    if demande.paiements is None:
+        if not est_credit and demande.mode_paiement not in _MODES_PAIEMENT_ACTIFS:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Mode de paiement inconnu.")
     if est_credit and demande.client_id is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -385,6 +393,37 @@ def enregistrer_vente(
                         f"au-delà de son plafond ({plafond} FCFA).",
                     )
 
+            # Paiements mixtes (D2) : composantes validées ICI, une fois le
+            # total connu — somme exacte = encaissé, montants strictement
+            # positifs (schéma), un mode au plus une fois (schéma). La base
+            # revérifie l'invariant à COMMIT (trigger différé, migration
+            # 052), même pour un SQL direct.
+            #
+            # TOUTE vente encaissée a ses composantes — le chemin historique
+            # (un seul mode) écrit UNE composante du total, exactement comme
+            # le backfill 052 pour l'existant : calculer_attendu_caisse()
+            # somme les composantes, elles doivent donc être complètes.
+            if demande.paiements is not None:
+                composantes_paiement = [
+                    (c.mode_paiement, Decimal(str(c.montant))) for c in demande.paiements
+                ]
+                if sum(m for _, m in composantes_paiement) != total_ttc:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        "La somme des composantes de paiement "
+                        f"({sum(m for _, m in composantes_paiement)} FCFA) ne correspond "
+                        f"pas au total encaissé ({total_ttc} FCFA).",
+                    )
+                # Un seul mode : la vente reste déclarée sous ce mode, exactement
+                # comme avant D2 ; plusieurs : 'mixte' — le détail est dans
+                # ventes_paiements, jamais perdu.
+                mode_stocke = (
+                    composantes_paiement[0][0] if len(composantes_paiement) == 1 else "mixte"
+                )
+            else:
+                mode_stocke = demande.mode_paiement
+                composantes_paiement = [(mode_stocke, total_ttc)]
+
             try:
                 cur.execute(
                     """
@@ -397,7 +436,7 @@ def enregistrer_vente(
                     RETURNING id
                     """,
                     (
-                        site_cible, session.utilisateur_id, demande.mode_paiement,
+                        site_cible, session.utilisateur_id, mode_stocke,
                         utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva, total_ttc,
                         demande.numero_facturier, demande.vendeur_id, remise_globale,
                     ),
@@ -488,6 +527,20 @@ def enregistrer_vente(
                     """,
                     (site_cible, session.utilisateur_id, total_ttc, f"Vente #{vente_id}", vente_id),
                 )
+                # Paiements (D2) : le journal garde UNE recette du TOTAL
+                # (§3.3, sans mode par conception — l'attendu de caisse est
+                # calculé depuis ventes_paiements, jamais depuis
+                # transactions) ; les composantes, elles, disent part
+                # espèces / part Mobile Money. Une vente à mode unique a
+                # exactement une composante du total.
+                for mode_composante, montant_composante in composantes_paiement:
+                    cur.execute(
+                        """
+                        INSERT INTO ventes_paiements (vente_id, mode_paiement, montant)
+                        VALUES (%s, %s, %s)
+                        """,
+                        (vente_id, mode_composante, montant_composante),
+                    )
         # Commit automatique à la sortie de connexion_pour() (voir auth.py).
 
     return ReponseVente(
@@ -500,6 +553,10 @@ def enregistrer_vente(
         total_ttc=float(total_ttc),
         remise_totale=float(remise_totale),
         ecarts=ecarts,
+        paiements=[
+            ComposantPaiementReponse(mode_paiement=m, montant=float(m_))
+            for m, m_ in composantes_paiement
+        ] if not est_credit else None,
     )
 
 
@@ -545,7 +602,9 @@ def _fcfa(montant) -> str:
     return f"{round(float(montant)):,}".replace(",", " ") + " FCFA"
 
 
-def _construire_recu_pdf(boutique: dict, vente: dict, lignes: list[dict]) -> bytes:
+def _construire_recu_pdf(
+    boutique: dict, vente: dict, lignes: list[dict], composantes_paiement: list[dict]
+) -> bytes:
     """Reçu imprimable d'une vente (chantier C5, cycle 19, étendu au cycle
     27 — CDC §3.3, §7.1 « imprimer / réimprimer le reçu »). N'affiche QUE
     ce qui a été réellement décidé par le propriétaire :
@@ -602,13 +661,27 @@ def _construire_recu_pdf(boutique: dict, vente: dict, lignes: list[dict]) -> byt
 
     identifiant_document = vente["numero_facture"] or f"vente n°{vente['id']}"
     elements.append(Paragraph(_echapper_xml(f"Reçu — {identifiant_document}"), styles["Heading2"]))
-    elements.append(Paragraph(
-        _echapper_xml(
+    if len(composantes_paiement) > 1:
+        _libelles_modes = {
+            "especes": "Espèces",
+            "orange_money": "Orange Money",
+            "mtn_momo": "MTN MoMo",
+            "autre": "Autre",
+        }
+        _decomposition = " · ".join(
+            f"{_libelles_modes.get(c['mode_paiement'], c['mode_paiement'])} {_fcfa(c['montant'])}"
+            for c in composantes_paiement
+        )
+        texte_paiement = (
+            f"Date : {vente['date_encaissement']:%d/%m/%Y %H:%M} — "
+            f"Mode de paiement : mixte — {_decomposition}"
+        )
+    else:
+        texte_paiement = (
             f"Date : {vente['date_encaissement']:%d/%m/%Y %H:%M} — "
             f"Mode de paiement : {vente['mode_paiement']}"
-        ),
-        style_normal,
-    ))
+        )
+    elements.append(Paragraph(_echapper_xml(texte_paiement), style_normal))
     if vente["statut"] == "annulee":
         motif = vente.get("motif_annulation") or "non précisé"
         elements.append(Paragraph(_echapper_xml(f"VENTE ANNULÉE — motif : {motif}"), style_annule))
@@ -714,6 +787,20 @@ def recu_vente(
             if vente is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Vente introuvable.")
 
+            # Composantes de paiement (D2, migration 052) : une vente mixte
+            # détaille sur le reçu la part de chaque mode — jamais un seul
+            # mode qui cacherait l'autre.
+            cur.execute(
+                """
+                SELECT mode_paiement, montant
+                  FROM ventes_paiements
+                 WHERE vente_id = %s
+                 ORDER BY id
+                """,
+                (vente_id,),
+            )
+            composantes_recu = cur.fetchall()
+
             cur.execute(
                 """
                 SELECT a.nom, vl.quantite, vl.prix_unitaire, vl.prix_catalogue, vl.remise_montant
@@ -736,7 +823,7 @@ def recu_vente(
             # ailleurs mais pas approprié pour un simple affichage optionnel).
             boutique = {ligne["cle"]: ligne["valeur"] for ligne in cur.fetchall() if ligne["valeur"] != "a_definir"}
 
-    contenu = _construire_recu_pdf(boutique, vente, lignes)
+    contenu = _construire_recu_pdf(boutique, vente, lignes, composantes_recu)
     identifiant = vente["numero_facture"] or f"vente-{vente_id}"
     return Response(
         content=contenu,

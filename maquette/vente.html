@@ -167,6 +167,19 @@
             <label class="champ__label" for="paiement">Mode de paiement</label>
             <select class="champ__select" id="paiement"></select>
             <p class="champ__aide"><kbd>F4</kbd> pour changer de mode sans la souris.</p>
+            <label class="champ__label" for="mixte-actif"
+                   style="margin-top:var(--e-2); display:flex; align-items:center; gap:var(--e-2); cursor:pointer; font-weight:normal;">
+              <input type="checkbox" id="mixte-actif">
+              Paiement mixte — le reste du total sur un second mode
+            </label>
+            <div id="mixte-detail" hidden style="margin-top:var(--e-2); padding-left:var(--e-4);">
+              <div style="display:flex; gap:var(--e-2); align-items:center; flex-wrap:wrap;">
+                <select class="champ__select" id="mixte-mode" style="max-width:16rem;"></select>
+                <input class="champ__saisie" id="mixte-montant" type="number" min="1" step="1"
+                       placeholder="Montant sur ce mode" style="max-width:12rem;" autocomplete="off">
+              </div>
+              <p class="champ__aide" id="mixte-aide">Saisissez le montant encaissé sur ce second mode.</p>
+            </div>
           </div>
 
           <div class="champ" id="champ-client" style="margin-top:var(--e-4);" hidden>
@@ -337,6 +350,75 @@
   if (CREDIT_CLIENT_ACTIF) {
     paiementEl.addEventListener("change", rafraichirVisibiliteClient);
   }
+
+  // --- Paiement MIXTE (D2, décision 2026-10-23) : deux modes sur une même
+  // vente. Le champ porte le montant du SECOND mode ; le premier encaisse le
+  // reste. Aucun mode « mixte » dans la liste : c'est le serveur qui range la
+  // vente en 'mixte' quand deux composantes sont envoyées, et la
+  // décomposition est tracée mode par mode dans ventes_paiements (migration
+  // 052) — l'écran n'invente rien, il envoie `paiements[]` à sa place. ---
+  const mixteActifEl  = $("mixte-actif");
+  const mixteDetailEl = $("mixte-detail");
+  const mixteModeEl   = $("mixte-mode");
+  const mixteMontantEl = $("mixte-montant");
+  const mixteAideEl   = $("mixte-aide");
+
+  function libelleMode(code) {
+    const m = MODES_PAIEMENT.find((m) => m.code === code);
+    return m ? m.libelle : code;
+  }
+
+  // Même formule que majTotaux() : total TTC après remise globale.
+  function totalTtcVente() {
+    const totalArticles = panier.reduce((s, l) => s + l.quantite * l.prixUnitaire, 0);
+    return Math.max(0, totalArticles - remiseGlobaleValeur());
+  }
+
+  function majAideMixte() {
+    if (!mixteActifEl.checked) return;
+    const total = totalTtcVente();
+    const second = Number(mixteMontantEl.value);
+    if (!mixteMontantEl.value || Number.isNaN(second) || second <= 0) {
+      mixteAideEl.textContent = "Montant encaissé sur « " + libelleMode(mixteModeEl.value)
+        + " » — le reste (" + fcfa(total) + ") le sera sur « " + libelleMode(paiementEl.value) + " ».";
+      return;
+    }
+    if (second >= total) {
+      mixteAideEl.textContent = "Le montant du second mode doit rester strictement inférieur au total ("
+        + fcfa(total) + ") : le premier mode doit encaisser le reste.";
+      return;
+    }
+    mixteAideEl.textContent = "Décomposition : " + fcfa(total - second) + " sur « "
+      + libelleMode(paiementEl.value) + " » · " + fcfa(second) + " sur « "
+      + libelleMode(mixteModeEl.value) + " ».";
+  }
+
+  function rafraichirMixte() {
+    // Une vente à crédit n'encaisse RIEN du jour (addendum point b) : aucun
+    // paiement mixte possible avec elle, la case est même désactivée.
+    const estCredit = paiementEl.value === "credit_client";
+    mixteActifEl.disabled = estCredit;
+    if (estCredit) {
+      mixteActifEl.checked = false;
+      mixteDetailEl.hidden = true;
+      return;
+    }
+    if (mixteActifEl.checked) {
+      // Le second mode ne peut ni doubler le premier, ni être le crédit.
+      mixteModeEl.innerHTML = MODES_PAIEMENT
+        .filter((m) => m.code !== paiementEl.value && m.code !== "credit_client")
+        .map((m) => '<option value="' + m.code + '">' + m.libelle + "</option>")
+        .join("");
+      mixteDetailEl.hidden = false;
+      majAideMixte();
+    } else {
+      mixteDetailEl.hidden = true;
+    }
+  }
+  mixteActifEl.addEventListener("change", rafraichirMixte);
+  mixteModeEl.addEventListener("change", majAideMixte);
+  mixteMontantEl.addEventListener("input", majAideMixte);
+  paiementEl.addEventListener("change", rafraichirMixte);
 
   // --- Catalogue RÉEL, via /articles (filtré par rôle et par site côté serveur) ---
   try {
@@ -654,6 +736,9 @@
     if (remiseTropGrande) {
       zoneRemise.textContent = "La remise globale ne peut pas atteindre ni dépasser le total de la vente.";
     }
+
+    // La décomposition mixte suit le total (remise globale, panier modifié).
+    majAideMixte();
   }
 
   remiseGlobaleEl.addEventListener("input", majTotaux);
@@ -712,16 +797,46 @@
       zoneConfirmation.textContent = "Le client est obligatoire pour une vente à crédit.";
       return;
     }
+    // Paiement mixte (D2) : le montant du second mode doit être strictement
+    // positif et strictement inférieur au total — le premier mode encaisse
+    // le reste. (Le serveur refuse de toute façon une composante nulle et
+    // une somme inexacte, migration 052 ; ici on évite l'aller-retour.)
+    let composantesMixtes = null;
+    if (mixteActifEl.checked) {
+      const total = totalTtcVente();
+      const second = Number(mixteMontantEl.value);
+      if (!mixteMontantEl.value || Number.isNaN(second) || second <= 0) {
+        zoneConfirmation.hidden = false;
+        zoneConfirmation.textContent =
+          "Le montant du second mode de paiement est obligatoire pour un paiement mixte.";
+        mixteMontantEl.focus();
+        return;
+      }
+      if (second >= total) {
+        zoneConfirmation.hidden = false;
+        zoneConfirmation.textContent = "Le montant du second mode doit rester strictement inférieur au total ("
+          + fcfa(total) + ") : le premier mode doit encaisser le reste.";
+        mixteMontantEl.focus();
+        return;
+      }
+      composantesMixtes = [
+        { mode_paiement: paiementEl.value, montant: total - second },
+        { mode_paiement: mixteModeEl.value, montant: second },
+      ];
+    }
     if (!enAttenteConfirmation) {
       enAttenteConfirmation = true;
       zoneConfirmation.hidden = false;
       const estCredit = paiementEl.value === "credit_client";
       const mentionRemise = remiseGlobale > 0 ? " après remise de " + fcfa(remiseGlobale) : "";
+      const textePaiement = composantesMixtes
+        ? " — " + composantesMixtes
+            .map((c) => libelleMode(c.mode_paiement) + " " + fcfa(c.montant)).join(" · ")
+        : " (" + paiementEl.options[paiementEl.selectedIndex].text + ")";
       zoneConfirmation.textContent =
         (estCredit
           ? "Confirmer la vente à crédit de " + $("total-ttc").textContent + mentionRemise
-          : "Confirmer l'encaissement de " + $("total-ttc").textContent + mentionRemise
-            + " (" + paiementEl.options[paiementEl.selectedIndex].text + ")")
+          : "Confirmer l'encaissement de " + $("total-ttc").textContent + mentionRemise + textePaiement)
         + " ? Appuyez de nouveau sur F9 ou sur le bouton.";
       btnValider.textContent = estCredit ? "Confirmer la vente à crédit" : "Confirmer l'encaissement";
       return;
@@ -733,7 +848,6 @@
     try {
       const corpsEnvoi = {
         site_id: session.site_id || Number(siteVenteEl.value),
-        mode_paiement: paiementEl.value,
         numero_facturier: facturierEl.value.trim(),
         vendeur_id: Number(vendeurEl.value),
         client_id: paiementEl.value === "credit_client" ? Number(clientEl.value) : null,
@@ -744,6 +858,14 @@
           article_id: l.id, quantite: l.quantite, prix_unitaire: l.prixUnitaire,
         })),
       };
+      // Paiement mixte (D2) : `paiements[]` REMPLACE `mode_paiement` — jamais
+      // les deux, le validateur serveur les refuse ensemble. Sans mixte, le
+      // chemin historique reste exactement celui d'avant le cycle 75.
+      if (composantesMixtes) {
+        corpsEnvoi.paiements = composantesMixtes;
+      } else {
+        corpsEnvoi.mode_paiement = paiementEl.value;
+      }
       if (remiseGlobale > 0) corpsEnvoi.remise_globale_montant = remiseGlobale;
       const corps = await appelApi("/ventes", {
         method: "POST",
@@ -756,6 +878,10 @@
         + " (dont TVA " + fcfa(corps.montant_tva) + " à " + corps.taux_tva + " %).";
       if (corps.remise_totale > 0) {
         message += " Remise totale : " + fcfa(corps.remise_totale) + ".";
+      }
+      if (corps.paiements && corps.paiements.length > 1) {
+        message += " Décomposition : " + corps.paiements
+          .map((c) => libelleMode(c.mode_paiement) + " " + fcfa(c.montant)).join(" · ") + ".";
       }
       if (corps.ecarts.length > 0) {
         message += " Stock insuffisant sur " + corps.ecarts.length
@@ -773,6 +899,9 @@
 
       panier = [];
       remiseGlobaleEl.value = "";
+      mixteActifEl.checked = false;
+      mixteMontantEl.value = "";
+      rafraichirMixte();
       rendrePanier();
       $("dernier-ajout").textContent = "Aucun article ajouté pour le moment.";
       // Le numéro de facturier identifie UNE ligne du carnet papier — jamais
@@ -815,8 +944,10 @@
       paiementEl.selectedIndex = (paiementEl.selectedIndex + 1) % paiementEl.options.length;
       // Changer selectedIndex par script ne déclenche pas "change" : sans
       // cet appel explicite, F4 vers « Crédit client » laisserait le champ
-      // client caché.
+      // client caché — et un changement vers/depuis un autre mode
+      // laisserait le bloc de paiement mixte incohérent.
       if (CREDIT_CLIENT_ACTIF) rafraichirVisibiliteClient();
+      rafraichirMixte();
     }
     else if (e.key === "F9") { e.preventDefault(); valider(); }
   });
