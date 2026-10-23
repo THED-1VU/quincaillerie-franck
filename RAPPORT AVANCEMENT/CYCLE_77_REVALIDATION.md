@@ -95,7 +95,25 @@ indépendant de ce décalage.
   `835e0fb` a pour parent le merge d'alignement `76f3d5e`).
 - Run **40035602067** (« CI — pytest et Playwright ») sur **`835e0fb`** :
   **succès** — job `pytest` **succès**, job `playwright` **succès**.
-- La PR #103 pointe sur `835e0fb` (plus l'ancien `54ffea5`) ; la fusion
+- Run **40037134895** sur **`51035b8`** (commit de consignation, documents
+  seuls) : job `pytest` **succès**, job `playwright` **échec** — une seule
+  suite en échec, `caisse` : « attendu réel : espèces attendues = 0 (vente
+  réelle = 6500) ». **Défaut du TEST, aucun défaut applicatif** : la suite
+  capturait l'aperçu déclenché par le changement de SITE, parti avec la date
+  par défaut du NAVIGATEUR (23/10, runner en UTC) alors que la base date les
+  ventes du 24/10 (`Africa/Douala`) — le run a démarré à 23 h 00 UTC, soit
+  minuit passé à Douala. Le `POST /caisse` du même scénario réussissait avec
+  écart 0, ce qui exclut un défaut serveur ; l'écran affichait bien 6 500
+  (deuxième `GET`), seule la réponse capturée était périmée.
+- **Correctif (test uniquement, même famille que l'échec pytest de la
+  section 4)** : `verifier-caisse-reel.mjs` attend désormais précisément
+  l'URL `site_id=<site>&date_cloture=<jour lu en base>` (helper
+  `chargerAttenduExact`) et que l'ÉCRAN affiche le montant du jour avant
+  lecture. Preuve A/B sous conditions reproduites (fuseau navigateur forcé
+  à UTC-11 + 400 ms de latence sur l'aperçu) : version d'avant = échec
+  identique au CI (1/24), version corrigée = 24/24 ; suite réelle ensuite
+  24/24. Aucun code applicatif ni contrainte SQL touchés.
+- La PR #103 pointe sur la tête de `operation-100-lot-b` ; la fusion
   reste à la main du propriétaire (Claude in Chrome), merge commit uniquement.
 
 ## 6. Analyse séparée des PR #92 et #60 (aucune décision)
@@ -152,8 +170,9 @@ Divergences relevées, **signalées sans correction** :
 
 ## 8. Ce qui reste à la main du propriétaire
 
-- **Fusion de la PR #103** (Claude in Chrome) : CI verte sur l'état
-  combiné (run 40035602067, section 5).
+- **Fusion de la PR #103** (Claude in Chrome) : CI sur l'état combiné
+  (section 5 : run 40035602067 vert ; la course de test révélée par le run
+  40037134895 est corrigée et re-prouvée localement).
 - **Kaspersky** : procédure S1-S6 (restauration/exclusion de
   `sauvegarder.ps1`), décision propriétaire.
 - **Second PC** : épreuve physique P1-P9 (reprise, RTO ≤ 2 h).

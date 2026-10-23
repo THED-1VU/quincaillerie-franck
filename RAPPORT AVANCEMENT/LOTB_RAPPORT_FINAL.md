@@ -11,8 +11,9 @@ décisions bloquantes.
 base `2dae406` (CI verte run 39973236711), puis **alignée sur `main`
 `d745ead` au cycle 77** (fusion `76f3d5e` ; #100/#101/#102 intégrés) et
 revalidée sur l'état combiné (pytest 396/396, 13/13 suites ; CI verte run
-40035602067 sur `835e0fb`) — voir `CYCLE_77_REVALIDATION.md` ; fusion par
-le propriétaire.
+40035602067 sur `835e0fb` ; le run de consignation 40037134895 a révélé une
+course de la suite `caisse`, défaut du TEST corrigé et re-prouvé — voir
+`CYCLE_77_REVALIDATION.md` §5) — fusion par le propriétaire.
 
 **Contraintes respectées, traçables dans chaque document** : aucune
 production, aucune importation réelle, aucune exclusion antivirus ;

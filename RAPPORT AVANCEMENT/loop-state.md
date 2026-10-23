@@ -4786,6 +4786,16 @@ fusionnées** (fusion = propriétaire uniquement, dans l'ordre
   de divergence : 12/12, puis passe complète verte.
 - **CI** : run **40035602067** sur **`835e0fb`** — jobs `pytest` et
   `playwright` **succès** (détail dans `RAPPORT AVANCEMENT/CYCLE_77_REVALIDATION.md` §5).
+- **Échec CI du run 40037134895 (`51035b8`, docs seuls) — défaut du TEST,
+  corrigé** : job `pytest` succès, job `playwright` en échec sur la seule
+  suite `caisse` (« espèces attendues = 0 », vente réelle 6500). Même
+  famille que l'échec pytest : l'aperçu capturé partait avec la date du
+  NAVIGATEUR (UTC, 23/10) au lieu du jour en base (Africa/Douala, 24/10)
+  — course entre deux `GET /caisse/attendu` (changement de site puis de
+  date). Correctif du test : attente de l'URL exacte
+  `site_id`+`date_cloture` et du montant affiché à l'écran ; preuve A/B
+  reproduite (avant 1/24, après 24/24), suite réelle 24/24. Aucun code
+  applicatif ni SQL modifiés (détail : `CYCLE_77_REVALIDATION.md` §5).
 - **Docs** : `LOTB_RAPPORT_FINAL.md` et ce journal corrigés (#100/#101/#102
   fusionnées ; `main` = `d745ead` ; chaîne « #92 → #100 » retirée).
 - **Analyse #92/#60 (aucune décision)** : #92 = 3 docs cycle 74 uniques
