@@ -57,7 +57,15 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
   propriétaire seul peut le dire).
 - **Recommandation** : si les mixtes sont rares, option 1 en v1 (acompte
   partiel déjà couvert par les règlements de créance).
-- **Statut** : OUVERT (addendum le signale sans réponse explicite).
+- **Décision (2026-10-23)** : **option 2 — paiements mixtes retenus** :
+  une vente peut être réglée en plusieurs modes sur la même facture
+  (espèces + Mobile Money), avec traçabilité par mode.
+- **Chaîne** : VALIDÉE PAR LE PROPRIÉTAIRE (2026-10-23) → **IMPLÉMENTÉE**
+  (cycle 75-C, PR #95 : table `ventes_paiements`, décomposition tracée par
+  mode, caisse et rapports adaptés) → **TESTÉE** (pytest + Playwright,
+  régression complète du cycle 75) → **CLÔTURÉE côté développement**
+  (écart C1-01 CLOS — la fusion de la PR #95 reste au propriétaire).
+- **Statut** : VALIDÉE — IMPLÉMENTÉE — TESTÉE (fusion PR #95 : propriétaire).
 
 ## D3 — Fond de caisse initial et seuil d'écart (point g)
 
@@ -82,7 +90,17 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
 - **Impact** : **GO** (maîtrise des marges).
 - **Recommandation** : option 1, paramètre `seuil_remise_pct` par défaut 100 %
   (statu quo effectif) jusqu'à décision.
-- **Statut** : OUVERT.
+- **Décision (2026-10-23)** : remises **autorisées jusqu'à 10 %** pour tout
+  vendeur ; **au-delà de 10 %, la validation du responsable est obligatoire**
+  (jamais un simple avertissement).
+- **Chaîne** : VALIDÉE PAR LE PROPRIÉTAIRE (2026-10-23) → **IMPLÉMENTÉE**
+  (cycle 75-B, PR #94 : migration 051 `seuil_remise_validation_pct=10`,
+  blocage 403 côté serveur pour un agent au-delà du seuil — par ligne et
+  remise globale, condition strictement `>`) → **TESTÉE** (pytest dédiés +
+  Playwright, régression complète du cycle 75) → **CLÔTURÉE côté
+  développement** (écart C5-02 CLOS — la fusion de la PR #94 reste au
+  propriétaire).
+- **Statut** : VALIDÉE — IMPLÉMENTÉE — TESTÉE (fusion PR #94 : propriétaire).
 
 ## D5 — Prix saisis HT ou TTC (point d, question 3)
 
@@ -110,8 +128,17 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
   - **6 questions comptables** (Q1-Q6) listées pour confirmation AVANT tout
     import réel : régime fiscal, taux exact, confirmation TTC, ventilation
     ligne à ligne (écart C1-02), mentions obligatoires, arrondi.
-- **Statut** : OUVERT (addendum le signale ; réponses comptable Q1-Q6
-  attendues — aucune bascule de paramètre avant elles).
+- **Chaîne** : VALIDÉE PAR LE PROPRIÉTAIRE (2026-10-23 — TTC conservé,
+  traitement fiscal à confirmer avec le comptable avant tout import réel) →
+  **IMPLÉMENTÉE** (cycle 75-G, PR #99 : audit documenté
+  `RAPPORT AVANCEMENT/D5_AUDIT_TTC.md`, états réels vérifiés en SQL —
+  migrations vs seed — aucun taux inventé) → **TESTÉE** (vérifications SQL
+  exécutées, régression complète du cycle 75) → **reste une sous-condition
+  au propriétaire** : les réponses du comptable Q1-Q6, et aucune bascule de
+  paramètre avant elles (écart C1-02).
+- **Statut** : VALIDÉE — IMPLÉMENTÉE (audit) — TESTÉE ; réponses comptable
+  Q1-Q6 attendues avant tout import réel (C1-02 reste BLOQUE_PROPRIETAIRE ;
+  fusion PR #99 : propriétaire).
 
 ## D6 — Durée de session inactive (C2)
 
@@ -125,7 +152,16 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
 - **Impact** : **Score C2**.
 - **Recommandation** : option 1 pour la v1 (une valeur modifiable a des
   effets de sécurité à documenter).
-- **Statut** : OUVERT.
+- **Décision (2026-10-23)** : session limitée à **480 minutes maximum**, avec
+  expiration et révocation **vérifiables**.
+- **Chaîne** : VALIDÉE PAR LE PROPRIÉTAIRE (2026-10-23) → **IMPLÉMENTÉE**
+  (cycle 75-E, PR #97 : plafond porté par les jetons signés — migration 033 ;
+  révocation une à une — migration 018 ; aucune route de renouvellement) →
+  **TESTÉE** (`test_session_d6.py` : expiration et révocation prouvées par
+  exécution, régression complète du cycle 75) → **CLÔTURÉE côté
+  développement** (la moitié « session » de l'écart C2-01 est résorbée ;
+  la fusion de la PR #97 reste au propriétaire).
+- **Statut** : VALIDÉE — IMPLÉMENTÉE — TESTÉE (fusion PR #97 : propriétaire).
 
 ## D7 — Cumul de rôles à l'écran (divergence D2 du cycle 65)
 
@@ -140,7 +176,18 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
 - **Impact** : **Qualité** (aucun trou de sécurité — l'API reste le garde).
 - **Recommandation** : option 1 tant que le cumul reste rare ; réexaminer si
   des comptes réels cumulent au quotidien.
-- **Statut** : OUVERT.
+- **Décision (2026-10-23)** : **option 2 — union des rôles à l'écran** : un
+  utilisateur cumulant plusieurs rôles voit TOUTES les fonctions autorisées
+  par ses rôles (le bandeau de chaque page liste tous ses écrans).
+- **Chaîne** : VALIDÉE PAR LE PROPRIÉTAIRE (2026-10-23) → **IMPLÉMENTÉE**
+  (cycle 75-D, PR #96 : carte centralisée `ROLES_PAR_PAGE` dans `api.js`,
+  `ajusterNavigation()` retire les liens interdits ET ajoute les manquants ;
+  régressions connexes corrigées au cycle 75-H, PR #100) → **TESTÉE**
+  (Playwright par profil, régression complète du cycle 75) → **CLÔTURÉE
+  côté développement** (écart C3-03 CLOS — les fusions des PR #96 et #100
+  restent au propriétaire).
+- **Statut** : VALIDÉE — IMPLÉMENTÉE — TESTÉE (fusions PR #96 puis #100 :
+  propriétaire).
 
 ## D8 — Inventaire : le responsable peut-il compter ? (divergence D1 du cycle 65)
 
@@ -153,18 +200,38 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
   2. Ouvrir l'écran au responsable (gate `["responsable", "agent_stock"]`).
 - **Impact** : **Qualité**.
 - **Recommandation** : option 1 (cohérente avec l'esprit comptage aveugle).
-- **Statut** : OUVERT.
+- **Décision (2026-10-23)** : **option 1 confirmée** — l'agent stock effectue
+  le comptage, le responsable supervise et valide.
+- **Chaîne** : VALIDÉE PAR LE PROPRIÉTAIRE (2026-10-23) → **constat :
+  comportement déjà conforme** (`inventaire.html` réservé à l'agent stock ;
+  le responsable consulte les écarts et valide les déclarations) →
+  **TESTÉE** (preuve par exécution au cycle 75-D, PR #96 : suites inventaire
+  et stock, régression complète du cycle 75) → **CLÔTURÉE** (écart C3-02
+  CLOS ; la fusion de la PR #96 reste au propriétaire).
+- **Statut** : VALIDÉE — TESTÉE (conforme, aucun code requis ; fusion
+  PR #96 : propriétaire).
 
 ## D9 — Attribution `utilisateur_caisse_id` (anomalie relevée au cycle 65)
 
-- **Contexte** : `server/app/routes/ventes.py:210-227` — l'attribution du
-  caissier sur une vente suit une logique à auditer (compte qui enregistre ?
-  vendeur ? site ?). Anomalie relevée en exploration de la matrice, non
-  encore qualifiée (entrera au `REGISTRE_ECARTS_100.md`, cycle 66).
+- **Contexte** : `server/app/routes/ventes.py` — l'attribution du caissier sur
+  une vente suivait une logique à auditer (compte qui enregistre ? vendeur ?
+  site ?). Qualifiée au cycle 66 (écart C5-01 : `utilisateur_caisse_id`
+  attribué au responsable quel que soit l'encaisseur réel), corrigée au
+  cycle 75-A.
 - **Impact** : **Score C5/C13** (traçabilité de qui a encaissé).
 - **Recommandation** : audit d'abord, décision ensuite — ne pas trancher sans
   le constat chiffré.
-- **Statut** : OUVERT (audit planifié cycle 66).
+- **Décision (2026-10-23)** : chaque encaissement est attribué à
+  **l'utilisateur authentifié réel** qui l'enregistre (jamais substitué au
+  responsable).
+- **Chaîne** : VALIDÉE PAR LE PROPRIÉTAIRE (2026-10-23) → **IMPLÉMENTÉE**
+  (cycle 75-A, PR #93 : `utilisateur_caisse_id` tire du jeton authentifié,
+  plus jamais du corps de requête ni du rôle) → **TESTÉE** (pytest dédiés :
+  vente encaissée par un agent porte son identifiant, tentative de
+  substitution refusée ; régression complète du cycle 75) → **CLÔTURÉE côté
+  développement** (écart C5-01 CLOS — la fusion de la PR #93 reste au
+  propriétaire).
+- **Statut** : VALIDÉE — IMPLÉMENTÉE — TESTÉE (fusion PR #93 : propriétaire).
 
 ## D10 — Authentification forte (2FA) pour le responsable (C11)
 
@@ -203,7 +270,14 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
      action administrative restent tracées.
   L'ajout ultérieur du TOTP (option 3) viendra EN PLUS de ces mesures, qui
   ne dépendent d'aucune connectivité.
-- **Statut** : OUVERT.
+- **Chaîne** : VALIDÉE PAR LE PROPRIÉTAIRE (2026-10-23 — 2FA reportée après
+  V1, TOTP si retenu) → **mesures compensatoires IMPLÉMENTÉES** (liste
+  ci-dessus, cycles 3 à 44) et **TESTÉES une par une** (cycle 75-E, PR #97 :
+  chaque test cité rejoué vert dans la régression complète du cycle 75) →
+  **CLÔTURÉE pour la V1** (écart C2-02 CLOS — le TOTP éventuel est un
+  chantier post-V1 ; la fusion de la PR #97 reste au propriétaire).
+- **Statut** : VALIDÉE (reportée après V1) — mesures compensatoires
+  IMPLÉMENTÉES — TESTÉES (fusion PR #97 : propriétaire).
 
 ## D11 — Kaspersky : faux positif sur `sauvegarder.ps1`
 
@@ -235,11 +309,19 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
 
 ## D13 — Branches et PR en attente de fusion
 
-- **Contexte** : PR #78 (cycle 61, régression complète post-fusions), #79/#80
-  (cycles 62-63, exécutable), #81 (cycle 64, dossier d'installation) — numéros
-  tels que relevés en session, réseau indisponible au cycle 65 pour re-vérifier.
-  Ordre de fusion : #78 → #79 → #80 → #81, puis #82 (cycle 65).
-- **Impact** : **Score global** (main n'intègre pas encore ces cycles).
+- **Contexte** : les PR #78→#89 (+ #90) du cycle 73 sont **fusionnées**
+  (mission 1, `main` = d0fa264 puis PR #91 du cycle 74). Restent en attente :
+  - **PR #60** (doc chantier C, septembre) — sort à décider (recommandation
+    précédente : fusionner, doc seule) ;
+  - **PR #92** (cycle 74 : arbitrage, calendrier des campagnes, pilotage
+    99-100 %) — documentation seule ;
+  - **pile du cycle 75, à fusionner DANS L'ORDRE** (chacune empilée sur la
+    précédente, CI à vérifier après chaque fusion) :
+    **#93** (D9 encaissement) → **#94** (D4 remises) → **#95** (D2 mixtes) →
+    **#96** (D7+D8) → **#97** (D6+D10) → **#98** (C12-02 alerte sauvegarde) →
+    **#99** (D5 audit TTC) → **#100** (correctifs de régression D7/D4).
+- **Impact** : **Score global** (`main` n'intègre pas encore le cycle 75).
 - **Recommandation** : fusion par le propriétaire dans l'ordre ; chaque fusion
-  relance la CI (pytest + Playwright) avant la suivante.
+  relance la CI (pytest + Playwright) avant la suivante — ne pas fusionner une
+  PR dont les contrôles obligatoires échouent.
 - **Statut** : OUVERT — fusion propriétaire uniquement.

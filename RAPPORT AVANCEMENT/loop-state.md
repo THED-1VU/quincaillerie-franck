@@ -120,6 +120,17 @@ C12 92→95, C13 71→76) proviennent du relevé du propriétaire — sections d
 journal à reconstituer si demandé.
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
+**Moyenne indicative après le cycle 75 (exécution des 9 décisions du
+propriétaire, PR #93→#100 en attente de fusion) : ≈ 83 %** — référence
+cycle 73 transmise (C0 90, C1 92, C2 82, C3 77, C4 78, C5 81, C6 85, C7 67,
+C8 86, C9 60, C10 58, C11 85, C12 95, C13 100, C14 76), deltas prouvés au
+cycle 75 sur décisions du propriétaire : C1 **→ 96** (D2, écart C1-01),
+C5 **→ 88** (D9, D4 — écarts C5-01, C5-02), C2 **→ 90** (D6 + D10 — C2-02
+clos, moitié session de C2-01 résorbée), C3 **→ 88** (D7 + D8 — C3-02,
+C3-03), C12 **→ 97** (C12-02 livré et testé). Restent ouverts : D1 (C3-01),
+D3 (C6-01), C6-02, C7-01, C1-02 (réponses comptable), C11-02/C12-03 (jour J),
+tests humains (C9-01, C10-01, C12-01, C14-02), D11 (action propriétaire).
+
 ---
 
 ## Journal des cycles
@@ -4607,6 +4618,130 @@ production sans mon autorisation explicite »*.
   aucun import de données réelles, aucune mise en production sans
   autorisation explicite.
 
+### Cycle 74 — Arbitrage des écarts, décisions du propriétaire, pilotage 99-100 % — 2026-10-23
+
+Cycle de préparation de l'exécution, sans code applicatif (documentation,
+registre, procédures) :
+
+- **Arbitrage des 27 écarts ouverts** (`RAPPORT AVANCEMENT/CYCLE_74_ARBITRAGE.md`) :
+  chaque écart reclassé P1/P2/P3 avec statut (BLOQUE_PROPRIETAIRE /
+  BLOQUE_TEST_HUMAIN / actionnable) ; les 16 points de décision présentés au
+  propriétaire sous forme structurée (contexte, options, impact,
+  recommandation — jamais de décision prise à sa place).
+- **PR #91 fusionnée par le propriétaire** (cycle 73 : régression main
+  intégré, correctif durable PSQL, Akuma.exe vérifié, roles en CI) —
+  `main` = `37b7b79`, synchronisé localement, intégrité vérifiée. La PR #92
+  (documentation du cycle 74) reste ouverte — **sort réservé au
+  propriétaire**.
+- **D11 Kaspersky** : empreintes SHA-256 des objets légitimes consignées +
+  procédure de résolution pas à pas (restauration depuis la quarantaine,
+  exclusion ciblée, signalement du faux positif) — **action sur le poste du
+  propriétaire uniquement**, jamais d'exclusion posée par le développement
+  (limite §7).
+- **Calendrier des 9 campagnes humaines** (R1-R9, fiches prêtes dans
+  `CYCLE_73_FICHES_RECETTE.md`) + trame de PV de recette.
+- **Tableau de pilotage 99-100 % par chantier** : pour chaque chantier, ce
+  qui manque exactement pour atteindre 99-100 % (décision, campagne humaine,
+  installation) — référence du rapport consolidé.
+
+### Cycle 75 — Exécution des décisions du propriétaire (9 décisions, 8 PR) — 2026-10-23
+
+Le propriétaire a validé 9 décisions (D2, D4, D5, D6, D7, D8, D9, D10,
+C12-02) et ordonné leur implémentation par sous-cycles, chacun avec sa PR
+empilée (LOOP : ANALYSE → IMPLÉMENTATION → TESTS CIBLÉS → CORRECTIONS →
+RÉGRESSION → PREUVES → JOURNAL → PR). **Audit d'impact global préalable**
+(`CYCLE_75_AUDIT_IMPACT.md` : cartographie schéma/API/écrans/RLS/tests de
+chaque décision avant tout code). Les 8 PR sont **ouvertes, jamais
+fusionnées** (fusion = propriétaire uniquement, dans l'ordre
+#93 → #94 → #95 → #96 → #97 → #98 → #99 → #100).
+
+- **C75-A — D9 (PR #93, commit 84152ad)** : l'encaissement est attribué au
+  compte authentifié — `ventes.py` tire `utilisateur_caisse_id` du jeton
+  signé (`session.utilisateur_id`), l'ancienne requête « premier responsable
+  trouvé » est supprimée (écart C5-01, constat chiffré cycle 66).
+  `test_encaissement_d9.py` : 3 preuves (agent saisit → encaisseur = agent ;
+  responsable → responsable ; injection du champ depuis le navigateur
+  ignorée — `DemandeVente` n'expose aucun champ) + non-régression ventes
+  45/45, caisse+crédit 35/35.
+- **C75-B — D4 (PR #94, commit 15937f4)** : migration 051
+  `seuil_remise_validation_pct = 10` (+ inverse), blocage **403 côté serveur**
+  pour un agent au-delà de 10 % — par ligne ET remise globale, condition
+  strictement `>` ; refus propre pour un responsable inexistant.
+  `test_seuil_remise_d4.py` (150 lignes), jeu d'essai synchronisé
+  (`test_jeu_essai.py`), suite vente Playwright étendue.
+- **C75-C — D2 (PR #95, commit 69b55c0)** : paiements mixtes — migration 052
+  table `ventes_paiements` (une composante par mode, `UNIQUE(vente_id,
+  mode_paiement)`, montant > 0), backfill des ventes existantes, **invariant
+  « somme des composantes = encaissé » porté PAR LA BASE** (constraint
+  trigger différé, vérifié au COMMIT même en SQL direct), mode `mixte` dans
+  la CHECK, `calculer_attendu_caisse` rejointe sur les composantes (le
+  répartage espèces/Mobile Money suit automatiquement), RLS par site. API :
+  `paiements[]` (au plus une composante par mode, jamais avec
+  `mode_paiement`), somme inexacte refusée 422, toute vente encaissée écrit
+  ses composantes, recette de journal toujours UNIQUE du total (aucun double
+  comptage), annulation conservée, reçu PDF décomposé. Écran `vente.html` :
+  case « paiement mixte » + décomposition avant validation. 10 tests pytest
+  D2, vente Playwright 63/63 (+12), pytest complet **354/354**.
+- **C75-D — D7 + D8 (PR #96, commit 5dcd967)** : union des rôles à l'écran —
+  carte centralisée `ROLES_PAR_PAGE` dans `api.js` (miroir exact des gates
+  `exigerSession()`), `ajusterNavigation()` **retire** du bandeau tout lien
+  vers un écran interdit **ET ajoute** les liens manquants (un compte cumulé
+  voit TOUTES ses fonctions). D8 prouvée par exécution : l'agent stock
+  compte, le responsable supervise et valide (`declarations.html`, effet
+  stock réel). Captures régénérées.
+- **C75-E — D6 + D10 (PR #97, commit 50a8e3a)** : `test_session_d6.py` —
+  session bornée à 480 minutes avec expiration et révocation **prouvées par
+  exécution** (migration 033, révocation 018, aucune route de
+  renouvellement) ; D10 : 2FA reportée après V1 (TOTP si retenu), **7
+  mesures compensatoires** consignées dans `DECISIONS_PROPRIETAIRE.md` D10,
+  chacune adossée à son test exécuté.
+- **C75-F — C12-02 (PR #98, commit 3fd51a9)** : alerte de sauvegarde visible
+  et testée — endpoint interprété `GET /exploitation/etat-sauvegarde`
+  (succès daté / échec motivé / absent / inconnu — **jamais de succès sans
+  preuve**), bandeau persistant `role=alert` en haut du tableau de bord
+  nommant le motif consigné par le script, pastille d'alerte ;
+  `test_exploitation_etat.py` (8 tests via faux fichiers
+  `QF_FICHIER_ETAT_SAUVEGARDE` — `sauvegarder.ps1` jamais exécuté, limite §7).
+  Preuves : pytest exploitation+matrice 9/9, câblage 101/101, exploitation
+  14/14, routes 65/65.
+- **C75-G — D5 (PR #99, commits 1535236 + a4fcce2)** : audit TTC
+  (`RAPPORT AVANCEMENT/D5_AUDIT_TTC.md`) — prix saisis TTC conservés, TVA
+  extraite sur le total, **aucun taux inventé** : états réels vérifiés en
+  SQL (migrations = sentinelles ; base de test = valeurs cycle 6,
+  `taux_tva` 19,25) ; 6 questions comptables Q1-Q6 listées pour le
+  comptable AVANT tout import réel ; 6 lignes `a_decider=TRUE` relevées.
+- **C75-H — correctifs de régression (PR #100, commit 91d9b6f)** : la
+  régression complète et la CI ont révélé 3 régressions du cycle 75, toutes
+  corrigées : (1) crash `stock.html` — `ajusterNavigation` retire
+  `#lien-declarations` du bandeau agent stock avant l'init de la page, garde
+  null posé ; (2) débordements du bandeau à 768/1366 px (comptes, rapports,
+  caisse, rh) — `flex-wrap: wrap` dans la règle de base `.bandeau`
+  (l'union D7 remplit le bandeau au-delà d'une ligne) ; (3) suite UX-2 —
+  prix négocié 2900 sur Fer à béton 3500 = 17,1 % désormais refusé 403 à
+  l'agent (D4), remplacé par 3300 (5,7 %). Suites rejouées vertes : stock
+  49/49, ux 27/27, rapports 52/52, comptes OK, caisse 24/24, rh 21/21,
+  câblage 101/101 ; 43 captures régénérées.
+- **RÉGRESSION COMPLÈTE** (`bash db/outils/verifier_tout.sh`) : rejouée sur
+  la branche C75-H — résultat au rapport consolidé du cycle 75 ; CI GitHub
+  (pytest + playwright) à vérifier sur chaque PR avant toute fusion.
+- **REGISTRE** : consolidation des 9 décisions (chaîne VALIDÉE → IMPLÉMENTÉE
+  → TESTÉE) ; écarts clos au cycle 75 : **C5-01, C5-02, C1-01, C2-02,
+  C3-02, C3-03, C12-02** → **20 CLOS / 20 ouverts, 0 P3 restant** ;
+  confirmations de paramètres restantes : 6 lignes `a_decider=TRUE` +
+  `plafond_vraisemblance_comptage`.
+- **SCORES** : C1 92→**96** (C1-01), C5 81→**88** (C5-01, C5-02), C2
+  82→**90** (C2-02 clos, moitié session de C2-01 résorbée), C3 77→**88**
+  (C3-02, C3-03), C12 95→**97** (C12-02). Moyenne indicative ≈ 80,8 →
+  **≈ 83 %**. Aucune hausse sans preuve d'exécution réelle ; les chantiers
+  à décision restent ouverts (D1, D3, C6-02, C7-01, C1-02).
+- **STATUT** : 8 PR ouvertes en attente de fusion par le propriétaire
+  (#93→#100, dans l'ordre) ; restent à sa main : D1, D3, C6-02, C7-01, D11
+  (Kaspersky), D12 (tests physiques), sort des PR #60/#92, réponses
+  comptable Q1-Q6, campagnes humaines (fiches prêtes).
+- **PROCHAINE BOUCLE** : accompagnement des fusions dans l'ordre (CI verte à
+  chaque étape, aucun conflit masqué) ; à défaut, aucun chantier
+  dev-actionnable n'est débloqué en dehors du jour J (C11-02, C12-03).
+
 ---
 
 ## Tableau de pilotage — reprise du 2026-10-20 (après cycle 73)
@@ -4638,9 +4773,11 @@ production sans mon autorisation explicite »*.
 | 71 | C13 | Orchestrateur « toutes les suites » (écart C13-02) : verifier_tout.sh 8→13 suites, délai 600 s/suite, basetemp pytest ; SUITES_CHANTIERS.md (15 suites ↔ chantiers) ; 4 suites-outils corrigées (comptes, inventaire, echappement, script npm ux) | QODER | READY_FOR_REVIEW | 3 exécutions réelles ; la 3ᵉ verte : SQL OK, pytest 334/334, 13/13 suites / 477 contrôles / 0 échec, EXIT=0 | PR #87 (empilée) | fusion PR #88 après #87 par le propriétaire |
 | 72 | C14 | Note de transfert / escrow (écart C14-03) : `NOTE_DE_TRANSFERT.md` (8 sections, contacts laissés au propriétaire, aucune donnée nominative inventée) | QODER | READY_FOR_REVIEW | relecture = test : 22/22 chemins cités existent, remote conforme, spot-checks (023 SECURITY DEFINER + garde-fou, 3 rôles, AES-256, 102 migrations, pytest 334) | PR #88 (empilée) | fusion PR #89 après #88 par le propriétaire |
 | 73 | C0/C13/C14 | **Missions 1-5** : intégration des 12 PR #78→#89 dans `main` (ordre des dépendances, CI verte, aucun conflit masqué, aucun force-push ; incident #89 corrigé par #90 → `main` = d0fa264) + régression complète fraîche sur le nouveau main + relecture des 31 écarts du registre + tableau D1–D13 + 5 fiches de recette humaine + registre mis à jour (C0-01, C13-01, C13-02, C14-01 → CLOS ; 27 ouverts) | QODER | READY_FOR_REVIEW | SQL complet OK (000→050 aller-retour) ; pytest 334/334 ; régression Playwright relancée après incident d'invocation (PSQL relatif) — voir journal ; exe reconstruit et exécuté ; CI distante verte sur les 13 fusions | — | **fusion de la PR du cycle 73 par le propriétaire** ; puis décisions D1–D12 + campagnes (fiches R1-R5) + sort de la PR #60 |
-| — | C13/C14 | Régression complète : toutes les suites Playwright sur base isolée + rafraîchissement des captures obsolètes (tableau-bord/inventaire) | QODER | TODO | — | — | **prochaine tâche Phase 2** |
+| — | C13/C14 | Régression complète : toutes les suites Playwright sur base isolée + rafraîchissement des captures obsolètes (tableau-bord/inventaire) | QODER | DONE | exécutée aux cycles 73 (main) et 75 (branche C75-H) | — | — |
+| 74 | C0-C14 | Arbitrage des 27 écarts + 16 décisions présentées + calendrier 9 campagnes + pilotage 99-100 % + D11 empreintes/procédure Kaspersky ; PR #91 fusionnée par le propriétaire (main = 37b7b79) | QODER | READY_FOR_REVIEW | PR #92 ouverte (doc seule) | — | fusion PR #92 + sort PR #60 par le propriétaire |
+| 75 | C1/C2/C3/C5/C12 | **Exécution des 9 décisions validées** : D9 (#93), D4 (#94), D2 (#95), D7+D8 (#96), D6+D10 (#97), C12-02 (#98), D5 audit (#99), correctifs régression D7/D4 (#100) | QODER | READY_FOR_REVIEW | audit d'impact préalable ; pytest 354/354 ; suites ciblées vertes ; régression complète sur C75-H (voir rapport consolidé) ; registre 20 CLOS / 20 ouverts / 0 P3 | #92 (pile) | **fusions #93→#100 dans l'ordre par le propriétaire** ; restent D1, D3, C6-02, C7-01, D11, D12, Q1-Q6 comptable |
 | — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
-| — | C5/C6 | Décisions métier (HT/TTC, paiements mixtes, seuil caisse…) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire |
+| — | C5/C6 | Décisions métier restantes (D1, D3, C6-02, C7-01) + réponses comptable Q1-Q6 (D5) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire / du comptable |
 
 ---
 
@@ -4767,6 +4904,42 @@ d'un règlement (sous-questions du point b), la confirmation HT/TTC par le
 comptable (point d, question 3), la règle de rapprochement des fiches
 homonymes (point a). Le point **k** reste tranché depuis la première série
 du jour.
+
+### Décisions du propriétaire obtenues le 2026-10-23 (cycle 75)
+
+Neuf décisions tranchées en une série, puis **implémentées et testées le
+même jour** au cycle 75 (ordre §3 du propriétaire ; chaque sous-cycle avec
+sa PR empilée, aucune fusionnée sans lui) :
+
+- **D2 — paiements mixtes** : une vente peut être réglée en plusieurs modes
+  sur la même facture (espèces + Mobile Money), traçabilité par mode.
+  Implémentée C75-C (PR #95, migration 052, invariant porté par la base).
+- **D4 — seuil de remises** : remises jusqu'à 10 % pour tout vendeur ;
+  au-delà, validation obligatoire du responsable (blocage serveur, jamais
+  un avertissement). Implémentée C75-B (PR #94, migration 051).
+- **D5 — prix TTC** : saisie TTC conservée ; traitement fiscal à confirmer
+  avec le comptable avant tout import réel (6 questions Q1-Q6). Audit livré
+  C75-G (PR #99) — aucune bascule de paramètre avant les réponses.
+- **D6 — durée de session** : 480 minutes maximum, expiration et révocation
+  vérifiables. Prouvée par exécution C75-E (PR #97).
+- **D7 — cumul de rôles** : union — un compte cumulé voit TOUTES ses
+  fonctions à l'écran. Implémentée C75-D (PR #96), régressions connexes
+  corrigées C75-H (PR #100).
+- **D8 — inventaire** : l'agent stock compte, le responsable supervise et
+  valide. Comportement confirmé conforme, prouvé par tests C75-D.
+- **D9 — encaissement** : attribué à l'utilisateur authentifié réel (jamais
+  substitué au responsable). Implémentée C75-A (PR #93).
+- **D10 — 2FA** : reportée après V1 (TOTP si retenu) ; 7 mesures
+  compensatoires consignées et prouvées une par une C75-E (PR #97).
+- **C12-02 — alerte de sauvegarde** : visible et testée en cas d'échec ou
+  d'absence. Implémentée C75-F (PR #98).
+
+Restent à la main du propriétaire après cette série : **D1** (confirmation
+du statu quo prix caissier), **D3** (fond de caisse / seuil d'écart),
+**C6-02**, **C7-01** (confirmations de paramètres), **D11** (action
+Kaspersky sur son poste), **D12** (tests physiques / GO), le **sort des
+PR #60 et #92**, les **fusions #93→#100 dans l'ordre**, et les **réponses
+du comptable Q1-Q6**.
 
 ### Candidats
 

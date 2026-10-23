@@ -22,37 +22,38 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **16 clôturés par vérification ou livraison** (C4-01 et
-C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ; C1-04, C7-02 et C7-03
-livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04 reconstruit au cycle 70 ;
-C14-03 livré au cycle 72 ; **C0-01, C13-01, C13-02 et C14-01 acquittés au
-cycle 73 par l'intégration des PR #78→#89 (+ #90) dans `main`** ; **C5-01 et
-C5-02 résorbés au cycle 75 sur les décisions D9 et D4 du propriétaire ;
-C1-01 (paiements mixtes) livré au cycle 75 sur la décision D2, PR #95**).
-24 écarts ouverts :
+40 écarts recensés, dont **20 clôturés par vérification, livraison ou
+décision** (C4-01 et C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ;
+C1-04, C7-02 et C7-03 livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04
+reconstruit au cycle 70 ; C14-03 livré au cycle 72 ; **C0-01, C13-01, C13-02
+et C14-01 acquittés au cycle 73 par l'intégration des PR #78→#89 (+ #90) dans
+`main`** ; **au cycle 75 sur les décisions du propriétaire du 2026-10-23 :
+C5-01 et C5-02 (D9, D4), C1-01 (D2), C2-02 (D10), C3-02 (D8), C3-03 (D7),
+C12-02 (alerte sauvegarde)**).
+20 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
-| P1 | **12** | 6 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
-| P2 | **10** | 7 BLOQUE_PROPRIETAIRE / TEST HUMAIN | 2 |
-| P3 | **2** | 2 BLOQUE_PROPRIETAIRE (confirmations) | 0 |
-| **Total ouverts** | **24** | 13 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 4 EN_COURS/OUVERT | **2** |
+| P1 | **13** | 7 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
+| P2 | **7** | 4 BLOQUE_PROPRIETAIRE · 1 TEST HUMAIN · 2 EN_COURS/OUVERT | 2 |
+| P3 | **0** | les derniers P3 (C3-02, C3-03) sont clos au cycle 75 | — |
+| **Total ouverts** | **20** | 11 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 2 EN_COURS/OUVERT | **2** |
 
-Lecture (mise à jour cycle 75) : **aucun écart d'intégrité** et **les douze
-fusions Git sont faites** — le chemin vers 99–100 % ne passe plus que par
-deux catégories : (1) décisions du propriétaire — D2, D4, D5, D6, D7, D8, D9,
-D10 et C12-02 validées le 2026-10-23 et en cours d'implémentation au cycle 75
-(C5-01 et C5-02 déjà résorbés, C1-01 livré sur D2) ; restent D1, D3, C6-02,
-C2-01, C7-01, le sort
-de la PR #60 et D11 (action propriétaire) ; (2) validations humaines (campagnes
-— fiches prêtes dans `RAPPORT AVANCEMENT/CYCLE_73_FICHES_RECETTE.md`,
+Lecture (mise à jour cycle 75, clôture) : **aucun écart d'intégrité** et
+**aucun P3 restant** — les **neuf décisions validées le 2026-10-23** (D2, D4,
+D5, D6, D7, D8, D9, D10, C12-02) sont toutes **implémentées et testées**,
+chacune sur preuve d'exécution réelle (PR #93→#100, en attente de fusion par
+le propriétaire). Le chemin vers 99–100 % passe désormais par : (1) les
+décisions et actions restant au propriétaire — D1 (confirmation du statu quo
+prix caissier), D3 (fond de caisse/seuil d'écart), C6-02, C7-01
+(confirmations de paramètres), D11 (exclusion Kaspersky sur son poste), le
+sort des PR #60 et #92, les fusions #93→#100, et les réponses du comptable
+Q1-Q6 (D5, avant tout import réel) ; (2) les validations humaines (campagnes
+UX — fiches prêtes dans `RAPPORT AVANCEMENT/CYCLE_73_FICHES_RECETTE.md`,
 impression, 2ᵉ poste). Le développement garde **2 écarts actionnables**
 (C12-03, C11-02) — tous deux suspendus à l'installation réelle, donc
-reportables au jour J ;
-les correctifs codables mais suspendus à une décision
-(C1-02, C2-02, C6-01, C6-02) sont traités au cycle 75 pour les
-décisions validées (D5, D10) et attendent D3 pour le reste.
+reportables au jour J.
 
 **Rattrapage d'en-têtes de score (cycle 71)** — les en-têtes de sections
 suivent désormais les scores prouvés par cycle : C4 77→**78** (cycle 67),
@@ -60,7 +61,12 @@ C7 65→**67** (cycle 68), C8 85→**86** (cycle 69), C13 76→**77** (cycle 71,
 C13-02), C5 81→**88** (cycle 75, C5-01 et C5-02 résorbés sur décisions D9 et
 D4 — seul C5-03, test humain, reste ouvert), C1 92→**96** (cycle 75, C1-01
 livré sur décision D2 — restent C1-02 et C1-03, suspendus à D5 et à
-l'installation réelle). Aucune de ces corrections n'est un
+l'installation réelle). **Cycle 75, clôture** : C2 82→**90** (C2-02 clos par
+décision D10 — 7 mesures compensatoires prouvées ; moitié de C2-01 résorbée
+par D6 — reste la confirmation `tentatives_max_connexion`), C3 77→**88**
+(C3-02 clos par décision D8, C3-03 clos par décision D7 et livraison de
+l'union des écrans — reste C3-01/D1), C12 95→**97** (C12-02 livré et testé
+en échec simulé). Aucune de ces corrections n'est un
 score nouveau : ce sont des
 reportages de preuves déjà établies.
 
@@ -178,33 +184,48 @@ reportages de preuves déjà établies.
 
 ---
 
-## C2 — Authentification et comptes (82 %)
+## C2 — Authentification et comptes (90 %)
 
 ### C2-01 — Confirmations : tentatives_max_connexion (5) — duree_session (480) appliquée
 - **Exigence source :** cycle 38 ; `parametres.a_decider`.
-- **État :** `tentatives_max_connexion=5` porte encore `a_decider=TRUE` (à confirmer) ; `duree_session_minutes=480` est décidé (2026-09-22) mais sa confirmation formelle reste à glaner.
-- **Preuve (exécutée ce cycle) :** `SELECT cle, valeur, a_decider FROM parametres` sur base d'audit.
+- **État :** *moitié « session » résorbée au cycle 75* — D6 validée le
+  2026-10-23 (session ≤ 480 minutes) : plafond, expiration et révocation
+  prouvés par `test_session_d6.py` (migration 033, PR #97). La ligne
+  `tentatives_max_connexion=5` porte encore `a_decider=TRUE` (à confirmer).
+- **Preuve (exécutée cycle 75) :** `test_session_d6.py` vert (régression
+  complète) ; `SELECT cle, valeur, a_decider FROM parametres` sur base de test.
 - **Gravité / risque métier :** P2 — verrouillage trop laxé ou trop strict selon la confirmation.
 - **Correction :** confirmation orale/écrite → basculer `a_decider` à FALSE avec référence.
 - **Dépendances :** propriétaire. **Responsable :** PROPRIÉTAIRE.
-- **Critère d'acceptation :** les 5 lignes `a_decider=TRUE` restantes tranchées (voir C6-01, C7-01, C1-02).
+- **Critère d'acceptation :** la ligne `tentatives_max_connexion` tranchée (voir C6-01, C7-01, C1-02).
 - **Tests requis :** mise à jour du seed + contrôles `a_decider`.
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **Statut :** BLOQUE_PROPRIETAIRE (restreint à tentatives_max_connexion).
 
 ### C2-02 — Deuxième facteur (2FA)
 - **Exigence source :** décision D10.
-- **État :** non construit (jeton signé + bcrypt + verrouillage seulement).
-- **Preuve :** `DECISIONS_PROPRIETAIRE.md` D10.
-- **Gravité / risque métier :** P2 — mitigation si un mot de passe fuite.
-- **Correction :** après décision : TOTP ou équivalent hors-ligne.
-- **Dépendances :** D10. **Responsable :** développement après décision.
-- **Critère d'acceptation :** connexion avec 2ᵉ facteur, procédure de récupération documentée.
-- **Tests requis :** pytest + parcours Playwright.
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **État :** *clos par décision (cycle 75)* — D10 validée le 2026-10-23 :
+  2FA reportée après V1 (TOTP si retenu alors). Sept mesures compensatoires
+  consignées et prouvées une par une (bcrypt coût 12, mot de passe provisoire
+  forcé 403, limiteur de débit + verrouillage, sessions bornées 480 min
+  révocables, coupure par désactivation/réinitialisation, cloisonnement
+  PostgreSQL + RLS, journal d'audit non destructible) — liste et tests dans
+  `DECISIONS_PROPRIETAIRE.md` D10, cycle 75-E (PR #97).
+- **Preuve :** cycle 75-E, tous verts (régression complète) :
+  `test_hachage_genere_par_le_serveur_est_verifiable_par_pgcrypto`,
+  `test_changement_mdp_force.py`, `test_limitation_de_debit_sur_la_connexion`,
+  `test_verrouillage_apres_echecs_repetes`, `test_deverrouillage_refuse_a_un_agent`,
+  `test_session_d6.py`, `test_reinitialisation_responsable_coupe_jeton_encore_valide`,
+  `test_privileges_sql_roles.py`.
+- **Gravité / risque métier :** P2 — levé pour la V1 par décision ; le TOTP éventuel est un chantier post-V1.
+- **Correction :** aucune en V1 (décision) ; TOTP après V1 si retenu.
+- **Dépendances :** D10 (tranchée). **Responsable :** développement post-V1.
+- **Critère d'acceptation :** décision écrite obtenue (2026-10-23).
+- **Tests requis :** mesures compensatoires testées (voir preuve).
+- **Statut :** CLOS (cycle 75, décision D10).
 
 ---
 
-## C3 — Habilitations et cloisonnement (77 %)
+## C3 — Habilitations et cloisonnement (88 %)
 
 ### C3-01 — Visibilité des prix du caissier (addendum point h, question 3)
 - **Exigence source :** addendum h q3 ; décision D1.
@@ -219,25 +240,41 @@ reportages de preuves déjà établies.
 
 ### C3-02 — Inventaire : le responsable ne compte pas (D8)
 - **Exigence source :** décision D8 (`comptage à l'aveugle`, inventaire réservé `agent_stock`).
-- **État :** l'écran inventaire est réservé à l'agent stock ; le responsable ne peut ni saisir ni valider un comptage, seulement consulter les écarts. D8 demandait confirmation de cette répartition.
-- **Preuve :** `MATRICE_ROLES_AKUMA.md` (table UI).
-- **Gravité / risque métier :** P3 — praticité du jour J si l'agent stock est absent.
-- **Correction :** confirmation D8 ou déléguer la saisie.
-- **Dépendances :** D8. **Responsable :** PROPRIÉTAIRE.
-- **Critère d'acceptation :** décision écrite.
-- **Tests requis :** adaptateur Playwright si délégation.
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **État :** *clos par décision (cycle 75)* — D8 validée le 2026-10-23 :
+  l'agent stock effectue le comptage, le responsable supervise et valide.
+  Le comportement livré est exactement celui-là : `inventaire.html` réservé
+  à l'agent stock (gate), le responsable consulte les écarts et valide les
+  déclarations (casse/retour client/article offert) sur `declarations.html`
+  avec effet stock réel — répartition prouvée au cycle 75-D (PR #96).
+- **Preuve :** Playwright inventaire 17/17 + stock 49/49 (régression
+  complète cycle 75 : validation responsable décrémente/réintègre
+  réellement) ; `MATRICE_ROLES_AKUMA.md` (table UI).
+- **Gravité / risque métier :** P3 — levé.
+- **Correction :** aucune (confirmation obtenue).
+- **Dépendances :** D8 (tranchée). **Responsable :** —.
+- **Critère d'acceptation :** décision écrite obtenue (2026-10-23).
+- **Tests requis :** rejoués (voir preuve).
+- **Statut :** CLOS (cycle 75, décision D8).
 
 ### C3-03 — Cumul de rôles : affichage à l'écran (D7)
 - **Exigence source :** décision D7 ; cycle 43 (livré).
-- **État :** livré et testé (case « cumuler » + affichage des rôles dans `comptes.html`) ; D7 listée au registre des décisions pour confirmation formelle.
-- **Preuve :** cycle 43 — pytest 229/229, `comptes.html`, PR associée.
-- **Gravité / risque métier :** P3.
-- **Correction :** confirmation écrite → fermer D7.
-- **Dépendances :** propriétaire. **Responsable :** PROPRIÉTAIRE.
-- **Critère d'acceptation :** D7 marquée décidée.
-- **Tests requis :** aucun (déjà livré).
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **État :** *clos par décision et livraison (cycle 75)* — D7 validée le
+  2026-10-23 : un compte cumulant plusieurs rôles voit TOUTES ses fonctions
+  (union). Implémenté au cycle 75-D (PR #96) : carte `ROLES_PAR_PAGE`
+  centralisée dans `api.js`, `ajusterNavigation()` retire du bandeau tout
+  lien vers un écran interdit ET ajoute les liens manquants — chaque page
+  liste l'union des écrans autorisés du compte. Les régressions découvertes
+  par la régression complète (crash `stock.html` sur un lien retiré,
+  débordements du bandeau à 768/1366 px) corrigées au cycle 75-H (PR #100).
+- **Preuve :** Playwright roles (union des écrans par profil) + stock 49/49
+  + comptes/rapports/caisse/rh verts (régression complète cycle 75) ;
+  captures régénérées (bandeau à deux lignes = comportement voulu).
+- **Gravité / risque métier :** P3 — levé.
+- **Correction :** livrée (cycles 75-D et 75-H).
+- **Dépendances :** D7 (tranchée). **Responsable :** —.
+- **Critère d'acceptation :** décision écrite obtenue + implémentation testée.
+- **Tests requis :** rejoués (voir preuve).
+- **Statut :** CLOS (cycle 75, décision D7, PR #96 + #100).
 
 ---
 
@@ -506,7 +543,7 @@ reportages de preuves déjà établies.
 
 ---
 
-## C12 — Sauvegarde et reprise (95 %)
+## C12 — Sauvegarde et reprise (97 %)
 
 ### C12-01 — Restauration complète vérifiée sur un second poste
 - **Exigence source :** C12 — RTO 2 h prouvé.
@@ -520,15 +557,24 @@ reportages de preuves déjà établies.
 - **Statut :** BLOQUE_TEST_HUMAIN.
 
 ### C12-02 — Alerte en cas d'échec de sauvegarde
-- **Exigence source :** C12 — notification d'échec.
-- **État :** documentée comme **limite acceptée** (cycle 40, décision du propriétaire) : l'échec n'est notifié que dans le journal local.
-- **Preuve :** `loop-state.md` C1 (cycle 40) — « notification d'échec documentée comme limite ».
-- **Gravité / risque métier :** P2 — une sauvegarde silencieusement en échec pendant des semaines reste invisible.
-- **Correction :** décision : mécanisme minimal (fichier d'alerte visible au démarrage de l'app + carte tableau de bord) ou acceptation écrite renouvelée.
-- **Dépendances :** décision propriétaire (peut être glanée avec C12-03). **Responsable :** PROPRIÉTAIRE.
-- **Critère d'acceptation :** décision écrite ; si mécanisme : alerte testée en échec simulé.
-- **Tests requis :** pytest (alerte) si mécanisme retenu.
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **Exigence source :** C12 — notification d'échec ; décision validée le
+  2026-10-23 (alerte visible ET testée).
+- **État :** *livré et testé (cycle 75-F, PR #98)* — endpoint interprété
+  `GET /exploitation/etat-sauvegarde` (quatre états fermés : succès daté /
+  échec motivé / absent / inconnu — jamais de succès sans preuve), bandeau
+  persistant `role=alert` en haut du tableau de bord nommant le motif
+  consigné par le script, état absent = attention explicite, illisible =
+  « protection non confirmée » ; pastille d'alerte sur la carte.
+- **Preuve :** pytest `test_exploitation_etat.py` (8 tests via faux fichiers
+  `QF_FICHIER_ETAT_SAUVEGARDE` — `sauvegarder.ps1` jamais exécuté, limite §7)
+  + exploitation 14/14 + routes 65/65 + câblage 101/101 (bandeau : 4 états) ;
+  route déclarée dans la matrice des rôles (403 agents).
+- **Gravité / risque métier :** P2 — levé.
+- **Correction :** livrée (cycle 75-F).
+- **Dépendances :** décision obtenue (2026-10-23). **Responsable :** —.
+- **Critère d'acceptation :** alerte testée en échec simulé — fait.
+- **Tests requis :** rejoués (voir preuve).
+- **Statut :** CLOS (cycle 75, PR #98).
 
 ### C12-03 — Cause racine : résilience du service PostgreSQL
 - **Exigence source :** C12 — comportement au redémarrage / coupure de courant.
@@ -663,22 +709,23 @@ reportages de preuves déjà établies.
 | D3 fond caisse / seuil écart | C6-01, C5-01 (afférent) | BLOQUE_PROPRIETAIRE |
 | D4 seuil remises | C5-02 (+ C1-04 drift seed) | **VALIDÉE (2026-10-23) — implémentée, C5-02 CLOS (cycle 75)** |
 | D5 ventilation HT/TTC | C1-02 | **VALIDÉE (2026-10-23)** — audit TTC cycle 75-G |
-| D6 durée session | — (décidée 480, confirmation rétrospective) | **VALIDÉE (2026-10-23)** — tests cycle 75-E |
-| D7 cumul rôles UI | C3-03 (livré cycle 43) | **VALIDÉE (2026-10-23)** — implémentation cycle 75-D |
+| D6 durée session | — (décidée 480, confirmation rétrospective) | **VALIDÉE (2026-10-23) — tests cycle 75-E** |
+| D7 cumul rôles UI | C3-03 (livré cycle 43) | **VALIDÉE (2026-10-23) — implémentation cycle 75-D** |
 | D8 inventaire responsable | C3-02 | **VALIDÉE (2026-10-23) — comportement conforme, preuve par tests cycle 75-D** |
 | D9 utilisateur_caisse_id | C5-01 | **VALIDÉE (2026-10-23) — implémentée, C5-01 CLOS (cycle 75)** |
-| D10 2FA | C2-02 | **VALIDÉE (2026-10-23 — reportée après V1, mesures compensatoires)** — cycle 75-E |
+| D10 2FA | C2-02 | **VALIDÉE (2026-10-23 — reportée après V1, mesures compensatoires) — cycle 75-E** |
 | D11 Kaspersky | C11-01 | BLOQUE_PROPRIETAIRE |
 | D12 tests physiques / GO | C9-01, C10-01, C12-01, C14-02 | BLOQUE_PROPRIETAIRE / TEST HUMAIN |
-| D13 fusions PR | C0-01, C13-01, C14-01 | **SOLDEE (cycle 73** — 12 fusions + #90 exécutées ; reste le sort de la PR #60, décision propriétaire**)** |
+| D13 fusions PR | C0-01, C13-01, C14-01 | **SOLDEE (cycle 73** — 12 fusions + #90 exécutées ; restent le sort de la PR #60, la PR #92 et la pile cycle 75 #93→#100, décisions propriétaire**)** |
+| C12-02 alerte sauvegarde | C12-02 | **VALIDÉE (2026-10-23) — implémentée et testée en échec simulé, C12-02 CLOS (cycle 75-F, PR #98)** |
 
-**Confirmations de paramètres restantes (4 lignes `a_decider=TRUE`, base du
-2026-10-23 après migration 051) :** `boutique_numero_contribuable`,
-`boutique_telephone`, `seuil_alerte_plancher`, `seuil_ecart_caisse_tolere`
-(C6-01), `tentatives_max_connexion` (C2-01) — plus la confirmation écrite du
-`plafond_vraisemblance_comptage` (C7-01). *Le seuil de remises
-(`seuil_remise_validation_pct`) est sorti de cette liste au cycle 75 :
-décidé à 10 % (migration 051, décision D4).*
+**Confirmations de paramètres restantes (6 lignes `a_decider=TRUE`, base du
+2026-10-23 après migration 051)** : `boutique_numero_contribuable`,
+`boutique_telephone`, `contact_support_technique`, `seuil_alerte_plancher`,
+`seuil_ecart_caisse_tolere` (C6-01), `tentatives_max_connexion` (C2-01) —
+plus la confirmation écrite du `plafond_vraisemblance_comptage` (C7-01).
+*Le seuil de remises (`seuil_remise_validation_pct`) est sorti de cette liste
+au cycle 75 : décidé à 10 % (migration 051, décision D4).*
 
 ---
 
