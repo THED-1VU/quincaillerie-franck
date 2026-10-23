@@ -22,26 +22,28 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **9 clôturés par vérification ou livraison** (C4-01 et
+40 écarts recensés, dont **13 clôturés par vérification ou livraison** (C4-01 et
 C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ; C1-04, C7-02 et C7-03
 livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04 reconstruit au cycle 70 ;
-C14-03 livré au cycle 72).
-31 écarts ouverts :
+C14-03 livré au cycle 72 ; **C0-01, C13-01, C13-02 et C14-01 acquittés au
+cycle 73 par l'intégration des PR #78→#89 (+ #90) dans `main`**).
+27 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
-| P1 | **17** | 11 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
-| P2 | **11** | 8 BLOQUE_PROPRIETAIRE / TEST HUMAIN / fusion PR | 2 |
-| P3 | **3** | 3 BLOQUE_PROPRIETAIRE (confirmations) | 0 |
-| **Total ouverts** | **31** | 19 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 5 EN_COURS/OUVERT | **2** |
+| P1 | **15** | 9 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
+| P2 | **10** | 7 BLOQUE_PROPRIETAIRE / TEST HUMAIN | 2 |
+| P3 | **2** | 2 BLOQUE_PROPRIETAIRE (confirmations) | 0 |
+| **Total ouverts** | **27** | 16 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 4 EN_COURS/OUVERT | **2** |
 
-Lecture : **aucun écart d'intégrité**. Le chemin vers 99–100 % se joue sur
-trois catégories : (1) décisions du propriétaire déjà répertoriées dans
-`DECISIONS_PROPRIETAIRE.md` (D1–D13) ; (2) validations humaines (campagnes,
-impression, 2ᵉ poste) ; (3) **douze fusions Git** réservées au propriétaire
-(#78 → #89 dans l'ordre ; hors #60, doc ancienne — « fusionner ou fermer »
-comme décidé au cycle 56). Le développement garde **2 écarts actionnables**
+Lecture (mise à jour cycle 73) : **aucun écart d'intégrité** et **les douze
+fusions Git sont faites** — le chemin vers 99–100 % ne passe plus que par
+deux catégories : (1) décisions du propriétaire déjà répertoriées dans
+`DECISIONS_PROPRIETAIRE.md` (D1–D12 ; D13 soldée, reste le sort de la PR #60,
+doc ancienne — « fusionner ou fermer ») ; (2) validations humaines (campagnes
+— fiches prêtes dans `RAPPORT AVANCEMENT/CYCLE_73_FICHES_RECETTE.md`,
+impression, 2ᵉ poste). Le développement garde **2 écarts actionnables**
 (C12-03, C11-02) — tous deux suspendus à l'installation réelle, donc
 reportables au jour J ;
 les correctifs codables mais suspendus à une décision
@@ -56,18 +58,30 @@ reportages de preuves déjà établies.
 
 ---
 
-## C0 — Infrastructure et dépôt (86 %)
+## C0 — Infrastructure et dépôt (90 %)
 
 ### C0-01 — Fusions des PR #78 → #82 en attente
 - **Exigence source :** PROMPT MAÎTRE (« fusion des PR = propriétaire uniquement ») + D13.
-- **État :** 5 PR ouvertes empilées : #78 (cycle 61 régression), #79 (CI Playwright), #80 (exe cycle 63), #81 (dossier installation cycle 64), #82 (matrice rôles cycle 65).
-- **Preuve :** `gh pr list` — les 5 au statut OPEN ; `main` à `c1784c6`.
-- **Gravité / risque métier :** P1 — chaque chantier livré mais non sur `main` ; la base commune dérive des branches, la recette finale ne peut pas se figer.
-- **Correction :** fusion dans l'ordre #78 → #79 → #80 → #81 → #82 (+ #83 ce registre), rebase au besoin, CI verte à chaque étape.
-- **Dépendances :** approbation propriétaire. **Responsable :** PROPRIÉTAIRE.
-- **Critère d'acceptation :** `main` contient tous les cycles 61–66, CI verte, aucun conflit masqué, historique linéaire sans force-push.
-- **Tests requis :** CI GitHub complète (pytest) sur chaque PR ; régression complète une fois la dernière fusion faite.
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **État :** *acquitté (cycle 73)* — l'intégration des 12 PR #78→#89 a été
+  exécutée dans l'ordre des dépendances, sous l'autorisation explicite du
+  propriétaire (mission 1 du cycle 73) : base et dépendances vérifiées avant
+  chaque fusion, protections et CI GitHub vertes à chaque étape, aucun conflit
+  masqué (fusion refusée ou reportée sinon), fusions `--merge` sans force-push
+  ni rebase. L'incident de fusion de la PR #89 dans sa base empilée (retarget
+  omis) a été corrigé sans réécriture d'historique par la PR #90 → `main`
+  = `d0fa264` contient les cycles 61-72.
+- **Preuve (exécutée cycle 73) :** registre des fusions #78→fd707b5, #79→13c1338,
+  #80→b8d82f8, #81→b809cc4, #82→0b29f04, #83→56eb6c7, #84→9cca716, #85→b7c547d,
+  #86→3b73d6e, #87→36812ff, #88→c4e0e9b, #89→2eb36ba, #90→d0fa264 ; CI verte
+  sur chaque PR (ex. run 39894259707 : playwright 8 min 39 s + pytest 8 min 57 s)
+  ; `main` = d0fa264 (parents c4e0e9b + 805d479) ; régression complète fraîche
+  sur le nouveau `main` (journal du cycle 73).
+- **Gravité / risque métier :** P1 — levé.
+- **Correction :** exécutée (voir §État).
+- **Dépendances :** — **Responsable :** développement (autorisé mission 1 du cycle 73).
+- **Critère d'acceptation :** `main` contient tous les cycles 61-72, CI verte, aucun conflit masqué, historique sans force-push — **atteint**.
+- **Tests requis :** régression complète sur le nouveau `main` — faite au cycle 73.
+- **Statut :** CLOS (cycle 73).
 
 ### C0-02 — Enregistrement PostgreSQL en service + tâche de sauvegarde planifiée (poste cible)
 - **Exigence source :** chantier C0/C12 (livraison poste client) ; ordre permanent « aucune installation réelle sans autorisation ».
@@ -467,10 +481,10 @@ reportages de preuves déjà établies.
 - **Preuve :** PR #80/#81 ouvertes.
 - **Gravité / risque métier :** P2.
 - **Correction :** checklist d'installation (déjà dans le dossier) exécutée sur place.
-- **Dépendances :** C0-01, C0-02. **Responsable :** développement lors de l'installation accompagnée.
+- **Dépendances :** C0-01 (soldée). **Responsable :** développement lors de l'installation accompagnée.
 - **Critère d'acceptation :** empreinte SHA de l'exe conforme, venv issu du lockfile.
 - **Tests requis :** `pip-compile --check` équivalent + hash.
-- **Statut :** EN_COURS (PR ouvertes).
+- **Statut :** EN_COURS (le contenu à vérifier est sur `main` depuis le cycle 73 ; exécution de la checklist au jour J, sur le poste cible).
 
 ---
 
@@ -511,18 +525,24 @@ reportages de preuves déjà établies.
 
 ---
 
-## C13 — Intégration continue (77 %)
+## C13 — Intégration continue (100 %)
 
 ### C13-01 — Job Playwright dans GitHub Actions
 - **Exigence source :** cycle 62 — CI Playwright.
-- **État :** livré dans PR #79 ; `main` ne contient que le job pytest (« CI — tests pytest »). Tant que la PR n'est pas fusionnée, la CI ne joue pas les parcours navigateur.
-- **Preuve :** `.github/workflows/ci.yml` sur `main` (un seul job) ; PR #79 ouverte.
-- **Gravité / risque métier :** P2 — une régression UI peut atteindre `main` sans être vue (les suites restent jouées localement à chaque cycle).
-- **Correction :** fusion de PR #79 (propriétaire) ; ajustement si la CI distante révèle des écarts d'environnement.
-- **Dépendances :** C0-01 (ordre des fusions). **Responsable :** PROPRIÉTAIRE (fusion).
-- **Critère d'acceptation :** workflow « CI — pytest + Playwright » vert sur `main`.
-- **Tests requis :** le job lui-même (chaque push).
-- **Statut :** EN_COURS (PR #79).
+- **État :** *acquitté (cycle 73)* — la PR #79 est fusionnée dans `main`
+  (commit 13c1338) ; le workflow `main` porte désormais les deux jobs
+  `pytest` **et** `playwright` (postgres:17 isolé sur 5433, 12 suites,
+  délai 600 s par suite, artefacts d'échec conservés 7 jours).
+- **Preuve (exécutée cycle 73) :** `.github/workflows/ci.yml` sur `main`
+  (jobs pytest ligne 26, playwright ligne 105) ; le job playwright a tourné
+  vert sur chacune des 13 fusions du cycle 73 (ex. run 39894259707 :
+  playwright 8 min 39 s, 12 suites / 431 contrôles).
+- **Gravité / risque métier :** P2 — levé.
+- **Correction :** fusion de PR #79 — exécutée.
+- **Dépendances :** — **Responsable :** développement (autorisé mission 1 du cycle 73).
+- **Critère d'acceptation :** workflow « CI — pytest et Playwright » vert sur `main` — **atteint**.
+- **Tests requis :** le job lui-même (chaque push) — vert sur les 13 fusions.
+- **Statut :** CLOS (cycle 73).
 
 ### C13-02 — Régression complète automatisée en CI
 - **Exigence source :** C13 — « régression complète Playwright ».
@@ -549,24 +569,30 @@ reportages de preuves déjà établies.
 - **Gravité / risque métier :** P2 — le risque de « suite oubliée » croît avec le nombre de suites.
 - **Correction :** script orchestrateur « toutes les suites » rejoué en CI (ou matrice) ; tableau de correspondance suites↔chantiers.
 - **Dépendances :** C13-01 (PR #79, fusion propriétaire). **Responsable :** développement (lot B).
-- **Critère d'acceptation :** une commande unique rejoue l'ensemble, résultat consolidé — **satisfait localement** (`bash db/outils/verifier_tout.sh`, bilan + code de sortie) ; satisfait en CI après fusion de la PR #79.
-- **Tests requis :** le script orchestrateur — **rejoué 3 fois, preuves ci-dessus**.
-- **Statut :** EN_COURS (PR #79 pour la partie CI, PR #88 pour l'outillage local et la correspondance ; clôture à la fusion des deux).
+- **Critère d'acceptation :** une commande unique rejoue l'ensemble, résultat consolidé — **satisfait localement** (`bash db/outils/verifier_tout.sh`, bilan + code de sortie) et **en CI** (job playwright du workflow, vert sur `main` depuis la fusion de #79 au cycle 73).
+- **Tests requis :** le script orchestrateur — preuve cycle 71 (3 exécutions, la 3ᵉ entièrement verte) + **preuve fraîche cycle 73** sur le nouveau `main` (journal du cycle 73).
+- **Statut :** CLOS (cycle 73 — fusion des PR #79 et #88, condition de clôture énoncée au cycle 71).
 
 ---
 
-## C14 — Dossier de recette et mise en production (66 %)
+## C14 — Dossier de recette et mise en production (76 %)
 
 ### C14-01 — Versions candidates non fusionnées
 - **Exigence source :** cycle 63/64 — exécutable + dossier d'installation.
-- **État :** PR #80 (Akuma.exe reconstruit, 28,8 Mo) et PR #81 (dossier `QuincaillerieFranck_Test/` : guide testeur, schéma, outil premier responsable) ouvertes.
-- **Preuve :** `gh pr list`.
-- **Gravité / risque métier :** P1 — la version candidate de référence doit être sur `main` pour la recette finale.
-- **Correction :** fusion dans l'ordre (après #78/#79).
-- **Dépendances :** C0-01. **Responsable :** PROPRIÉTAIRE.
-- **Critère d'acceptation :** `main` contient exe + dossier ; CI verte.
-- **Tests requis :** CI.
-- **Statut :** EN_COURS (PR ouvertes).
+- **État :** *acquitté (cycle 73)* — les PR #80 (Akuma.exe reconstruit,
+  28,8 Mo) et #81 (dossier `INSTALLATION/` + guide testeur, schéma, outil
+  premier responsable) sont fusionnées ; `main` = `d0fa264` porte la version
+  candidate de référence de la recette finale.
+- **Preuve (exécutée cycle 73) :** `server/fabrication/dist/` versionné +
+  `INSTALLATION/` (README, CHECKLIST_INSTALLATION, PREUVE_SIMULATION) présents
+  sur `main` ; CI verte sur les fusions #80/#81 ; exe reconstruit et exécuté
+  sur le nouveau `main` au cycle 73 (journal).
+- **Gravité / risque métier :** P1 — levé.
+- **Correction :** fusion dans l'ordre — exécutée.
+- **Dépendances :** — **Responsable :** développement (autorisé mission 1 du cycle 73).
+- **Critère d'acceptation :** `main` contient exe + dossier ; CI verte — **atteint**.
+- **Tests requis :** CI — verte.
+- **Statut :** CLOS (cycle 73).
 
 ### C14-02 — PV de recette + dossier GO/NO-GO complet
 - **Exigence source :** objectif final LOOP — « dossier de recette complet ».
@@ -592,7 +618,10 @@ reportages de preuves déjà établies.
   023 : SECURITY DEFINER + garde-fou second compte ; 3 rôles métier dans
   `db/tests/02_habilitations.sql` ; AES-256 dans `sauvegarder.ps1` ; 102
   fichiers de migrations 000→050 ; « 334 tests pytest » = exécution réelle
-  du cycle 71).
+  du cycle 71). **Cycle 73 :** le contenu est désormais réellement sur
+  `main` via la PR #90 (`NOTE_DE_TRANSFERT.md`, 8 674 octets, vérifié sur
+  `main` = `d0fa264`) — la PR #89 ayant été fusionnée par erreur dans sa
+  base empilée, corrigée sans réécriture d'historique.
 - **Gravité / risque métier :** P3 — dépendance à la connaissance du projet.
 - **Correction :** note de transfert (architecture, comptes, procédures de restauration, contacts).
 - **Dépendances :** lot E. **Responsable :** développement.
@@ -618,7 +647,7 @@ reportages de preuves déjà établies.
 | D10 2FA | C2-02 | BLOQUE_PROPRIETAIRE |
 | D11 Kaspersky | C11-01 | BLOQUE_PROPRIETAIRE |
 | D12 tests physiques / GO | C9-01, C10-01, C12-01, C14-02 | BLOQUE_PROPRIETAIRE / TEST HUMAIN |
-| D13 fusions PR | C0-01, C13-01, C14-01 | BLOQUE_PROPRIETAIRE |
+| D13 fusions PR | C0-01, C13-01, C14-01 | **SOLDEE (cycle 73** — 12 fusions + #90 exécutées ; reste le sort de la PR #60, décision propriétaire**)** |
 
 **Confirmations de paramètres restantes (5 lignes `a_decider=TRUE`, base d'audit du
 2026-10-21) :** `boutique_numero_contribuable`, `boutique_telephone`,

@@ -9,6 +9,20 @@ server\.venv\Scripts\python.exe -m pytest server\tests\ -v
 
 ---
 
+## Cycle 73 — régression sur le main intégré (2026-10-23)
+
+Via `bash db/outils/verifier_tout.sh`, base reconstruite, serveur non
+démarré (pytest monte sa propre application) :
+
+```
+334 passed, 70 warnings in 714.39s (0:11:54)
+```
+
+Inclut la matrice des rôles (`test_matrice_roles.py ::
+test_matrice_complete_route_par_role`, présente dans la trace du run).
+
+---
+
 ## Cycle 21 — révocation de session et en-têtes HTTP (chantier C11), 2026-09-13
 
 Migration 018 (`revocation_jetons`) : deux des trois lacunes de sécurité

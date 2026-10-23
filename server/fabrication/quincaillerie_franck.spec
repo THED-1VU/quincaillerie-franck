@@ -39,6 +39,12 @@ DOSSIER_MAQUETTE = (RACINE_SERVEUR.parent / "maquette").resolve()
 # restent volontairement hors du paquet.
 FICHIERS_MAQUETTE = [
     "api.js",
+    # Cycle 73 : l'écran du changement de mot de passe forcé (migration 050,
+    # arrivé avec les PR #78→#89) manquait ici — l'exécutable le servait en
+    # 404 et le parcours « connexion avec mot de passe à changer » était
+    # mort sur l'exe, invisible de la régression uvicorn (trouvé par la
+    # campagne Playwright contre l'exe, suite roles).
+    "changer-mot-de-passe.html",
     # Cycle 63 : trois écrans livrés après la dernière construction (cycle 53)
     # manquaient ici — ils étaient donc servis en 404 par l'exécutable alors
     # que le serveur de développement les sert. Toute nouvelle page doit être
