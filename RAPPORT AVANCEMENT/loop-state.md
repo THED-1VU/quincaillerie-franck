@@ -4539,7 +4539,12 @@ production sans mon autorisation explicite »*.
   PSQL/PG_DUMP relatif existant depuis la racine est absolutisé (format
   Windows sous Git Bash via cygpath), valeur inchangée en CI ; preuve de
   transformation sur les 3 cas réels (relatif de l'incident → chemin
-  Windows absolu ; absolu → inchangé ; CI « psql » → inchangé).
+  Windows absolu ; absolu → inchangé ; CI « psql » → inchangé) puis
+  **preuve de bout en bout : 3ᵉ régression complète relancée avec
+  l'invocation EXACTE de l'incident (PSQL/PG_DUMP relatifs) — SQL OK,
+  pytest 334/334, 13/13 suites / 477 contrôles / 0 échec,
+  EXIT_CODE_SCRIPT=0** : le défaut ne peut plus réapparaître au
+  prochain cycle.
   **Akuma.exe** : reconstruit depuis ce `main` (PyInstaller 6.11.1) et
   exécuté (`--sans-navigateur`, base dédiée `quincaillerie_c73` migrée
   000→050 + seed, `QF_CONFIG` isolé, port 8000) : `/sante` OK, connexion
@@ -4553,6 +4558,12 @@ production sans mon autorisation explicite »*.
   et **roles 30/30** — 13/13 équivalentes contre l'exe final ; journal de
   l'exe : 0 erreur, 420 requêtes servies ; arrêt par signal. Aucune
   installation réelle. Détail : `server/fabrication/DERNIER_RESULTAT.md`.
+- **C13 — PREUVE FINALE EN CI** : PR #91 (`cycle-73-integration-regression`
+  → `main`) — run **39900668426** : job playwright **pass** (5 min 02 s,
+  journal : « **13/13 suites réussies** », `roles` OK — **première
+  exécution de la 13ᵉ suite en CI**, recommandation du cycle 71 exécutée)
+  et job pytest **pass** (9 min 26 s). Le C13 à 100 % repose sur ces
+  exécutions réelles, pas sur une inférence.
 - **INCIDENT ENVIRONNEMENT (récurrent, C11-01/D11)** : `sauvegarder.ps1` a
   de nouveau été supprimé du disque par Kaspersky pendant le cycle (constaté
   au `git status` après le pull). Le fichier reste versionné dans Git ; la

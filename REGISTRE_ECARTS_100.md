@@ -531,17 +531,20 @@ reportages de preuves déjà établies.
 - **Exigence source :** cycle 62 — CI Playwright.
 - **État :** *acquitté (cycle 73)* — la PR #79 est fusionnée dans `main`
   (commit 13c1338) ; le workflow `main` porte désormais les deux jobs
-  `pytest` **et** `playwright` (postgres:17 isolé sur 5433, 12 suites,
-  délai 600 s par suite, artefacts d'échec conservés 7 jours).
+  `pytest` **et** `playwright` (postgres:17 isolé sur 5433, **13 suites
+  depuis le cycle 73**, délai 600 s par suite, artefacts d'échec conservés
+  7 jours).
 - **Preuve (exécutée cycle 73) :** `.github/workflows/ci.yml` sur `main`
   (jobs pytest ligne 26, playwright ligne 105) ; le job playwright a tourné
   vert sur chacune des 13 fusions du cycle 73 (ex. run 39894259707 :
-  playwright 8 min 39 s, 12 suites / 431 contrôles).
+  playwright 8 min 39 s, 12 suites / 431 contrôles) **et sur la PR du
+  cycle 73 avec la 13ᵉ suite (run 39900668426 : « 13/13 suites réussies »,
+  roles compris — première exécution de `roles` en CI)**.
 - **Gravité / risque métier :** P2 — levé.
 - **Correction :** fusion de PR #79 — exécutée.
 - **Dépendances :** — **Responsable :** développement (autorisé mission 1 du cycle 73).
 - **Critère d'acceptation :** workflow « CI — pytest et Playwright » vert sur `main` — **atteint**.
-- **Tests requis :** le job lui-même (chaque push) — vert sur les 13 fusions.
+- **Tests requis :** le job lui-même (chaque push) — vert sur les 13 fusions + PR cycle 73.
 - **Statut :** CLOS (cycle 73).
 
 ### C13-02 — Régression complète automatisée en CI
@@ -552,10 +555,12 @@ reportages de preuves déjà établies.
   maximal par suite (600 s, code 124 explicite) et un `--basetemp` pytest
   (contournement documenté du symlink résiduel du cycle 56) ; (2) tableau de
   correspondance `maquette/verification/SUITES_CHANTIERS.md` (15 suites :
-  mode, chantier(s), preuve, orchestration). La partie CI reste portée par la
-  PR #79 (12 suites) — ajout de `roles` recommandé après sa fusion (une
-  entrée dans le tableau `SUITES` du script ; le job exporte déjà
-  `PGDATABASE_PISTE`).
+  mode, chantier(s), preuve, orchestration). La partie CI (12 suites) a été
+  portée par la PR #79 ; **complétée au cycle 73 : `roles` ajoutée au
+  tableau `SUITES` de `executer_suites_reelles.sh` (recommandation du
+  cycle 71, exécutée) + repli PATH psql dans `verifier-roles.mjs` —
+  prouvé par le run CI 39900668426 de la PR du cycle 73
+  (« 13/13 suites réussies », roles compris)**.
 - **Preuve (exécutée au cycle 71) :** 3 exécutions réelles de
   `verifier_tout.sh` — (1) blocage réel de la suite comptes (navigateur
   jamais fermé, défaut du cycle 61 corrigé dans PR #78 non fusionnée :

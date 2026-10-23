@@ -39,9 +39,10 @@ echappement 11, roles 30). **Code de sortie RÉEL du script vérifié = 0**
 **Correctif durable (exigé §1) :** `absolutiser_pour_node()` dans
 `verifier_tout.sh` — tout `PSQL`/`PG_DUMP` relatif existant depuis la
 racine est absolutisé (format Windows sous Git Bash, valeur inchangée en
-CI). Preuve de transformation sur les 3 cas réels + **3ᵉ régression
-complète relancée avec l'invocation EXACTE de l'incident (chemins
-relatifs)** — résultat consigné au journal une fois terminée.
+CI). Preuves : transformation vérifiée sur les 3 cas réels + **3ᵉ
+régression complète avec l'invocation EXACTE de l'incident (chemins
+relatifs) : SQL OK, pytest 334/334, 13/13 suites / 477 contrôles /
+0 échec, EXIT_CODE_SCRIPT=0** — le défaut ne peut plus réapparaître.
 
 ## 2. Vérification d'Akuma.exe (§2)
 
@@ -84,9 +85,10 @@ installation réelle.**
 **Honnêteté C13 :** le 100 % n'est pas déduit d'un CI vert quelconque.
 Les deux écarts C13 sont clos sur preuves réelles (CI verte sur les 13
 fusions ; orchestrateur complet prouvé localement). Le cycle 73 ajoute la
-**13ᵉ suite (`roles`) au job CI** (recommandation du cycle 71) — la preuve
-finale sera le run CI de la présente PR ; en cas d'échec, le score est
-révisé. Scores : **C0 86→90, C13 77→100, C14 66→76** (moyenne indicative
+**13ᵉ suite (`roles`) au job CI** (recommandation du cycle 71) — **preuve
+finale : run CI 39900668426 de la PR #91, job playwright « 13/13 suites
+réussies » (roles compris, première exécution en CI) + job pytest pass**.
+Scores : **C0 86→90, C13 77→100, C14 66→76** (moyenne indicative
 ≈ 78,3 → **≈ 80,8 %**). Référence : REGISTRE.
 
 ## 4. Cycle 74 préparé (§4)
