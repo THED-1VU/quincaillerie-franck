@@ -11,8 +11,7 @@
 (202 rows)
 
 
- reussis | echecs | total 
+ reussis | echecs | total
 ---------+--------+-------
      202 |      0 |   202
 (1 row)
-
