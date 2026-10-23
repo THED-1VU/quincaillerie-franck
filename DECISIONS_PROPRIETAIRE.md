@@ -158,6 +158,32 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
   3. TOTP sur application mobile du responsable (hors ligne possible).
 - **Impact** : **Qualité** (menace réelle faible sur un poste dédié local).
 - **Recommandation** : reporter après la v1 ; si retenu, TOTP (option 3).
+- **Mesures compensatoires en place (V1)** — consignées au cycle 75-E
+  (D10 validée le 2026-10-23 : 2FA reportée après V1, TOTP si retenu) ;
+  chacune est prouvée par exécution, pas déclarée :
+  1. Mots de passe bcrypt coût 12, préfixe $2a$ compatible pgcrypto
+     (migration 009, `test_hachage_genere_par_le_serveur_est_verifiable_par_pgcrypto`) ;
+  2. mot de passe provisoire OBLIGATOIRE à la première connexion et après
+     réinitialisation (migration 050, contrôle 403 à chaque requête —
+     `test_changement_mdp_force.py`) ;
+  3. limitation de débit sur /auth/connexion (038, fenêtre partagée en
+     base — `test_limitation_de_debit_sur_la_connexion`) et verrouillage
+     du compte après échecs répétés, levé par le responsable seul
+     (migration 009 — `test_verrouillage_apres_echecs_repetes`,
+     `test_deverrouillage_refuse_a_un_agent`) ;
+  4. sessions signées bornées à 480 minutes (D6, migration 033),
+     révocables une à une (migration 018), AUCUNE route de
+     renouvellement — `test_session_d6.py` ;
+  5. coupure immédiate d'un jeton encore valide : désactivation du compte
+     (024) et réinitialisation par le responsable
+     (`test_reinitialisation_responsable_coupe_jeton_encore_valide`) ;
+  6. cloisonnement PostgreSQL : rôles PG par métier + RLS par site
+     (migration 029) — un mot de passe volé ne sort pas du périmètre du
+     compte (`test_privileges_sql_roles.py`, matrice des rôles) ;
+  7. journal d'audit non destructible (004/005) : toute connexion et toute
+     action administrative restent tracées.
+  L'ajout ultérieur du TOTP (option 3) viendra EN PLUS de ces mesures, qui
+  ne dépendent d'aucune connectivité.
 - **Statut** : OUVERT.
 
 ## D11 — Kaspersky : faux positif sur `sauvegarder.ps1`
