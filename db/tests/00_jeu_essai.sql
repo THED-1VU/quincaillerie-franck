@@ -103,12 +103,11 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
  'une ligne de vente figure au signalement dans le rapport « écarts '
  'de prix par vendeur ». Signale sans jamais bloquer.',
  TRUE, FALSE, 'Décision 2026-09-18 (addendum point c, question 5)'),
-('seuil_remise_validation_pct', 'a_definir', 'decimal',
+('seuil_remise_validation_pct', '10', 'decimal',
  'Pourcentage de remise (ligne ou globale) au-delà duquel seul un '
- 'responsable peut enregistrer la vente. Aucune remise bloquée tant '
- 'que non fixé. Distinct du seuil d''écart de prix vendeur (point c, '
- 'question 5, jamais construit) : usages différents.',
- TRUE, TRUE, 'décision propriétaire 2026-09-22/23 — valeur à fixer');
+ 'responsable peut enregistrer la vente. Distinct du seuil d''écart de '
+ 'prix vendeur (point c, question 5) : usages différents.',
+ TRUE, FALSE, 'Décision D4 du propriétaire 2026-10-23 (cycle 75)');
 
 INSERT INTO fournisseurs (id, nom, contact, telephone) VALUES
   (1, 'Cimenterie du Cameroun', 'M. Ateba', '+237 6 99 00 11 22');

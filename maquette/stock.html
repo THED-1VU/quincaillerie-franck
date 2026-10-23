@@ -61,7 +61,11 @@
   $("bouton-deconnexion").addEventListener("click", deconnecter);
   afficherLogoBoutiqueDansBandeau();
   $("lien-retour").href = estResponsable ? "tableau-bord.html" : "inventaire.html";
-  $("lien-declarations").hidden = !estResponsable;
+  // ajusterNavigation (api.js, D7) retire du bandeau tout lien vers un écran
+  // interdit au rôle : pour l'agent stock, #lien-declarations n'existe donc
+  // plus au moment d'arriver ici — l'écriture doit tolérer son absence.
+  const lienDeclarations = document.getElementById("lien-declarations");
+  if (lienDeclarations) lienDeclarations.hidden = !estResponsable;
 
   let articles = [];
 

@@ -72,6 +72,7 @@ MATRICE: list[tuple[str, str, object]] = [
     ("POST", "/caisse", {R}),
     ("GET", "/caisse", {R}),
     ("GET", "/exploitation/derniere-sauvegarde", {R}),
+    ("GET", "/exploitation/etat-sauvegarde", {R}),
     ("POST", "/configuration/logo", {R}),
     ("DELETE", "/configuration/logo", {R}),
     ("POST", "/rh/employes", {R}),

@@ -8,10 +8,12 @@
       à la connexion, un deep-link vers une autre page est ramené au même
       écran, le serveur refuse le reste (403, prouvé en pytest), et le
       changement réussi libère la session.
-   3. Cumul de rôles : un compte portant agent_stock + agent_comptabilite
-      est accepté par l'API sur les deux périmètres (test_cumul_roles.py),
-      mais l'UI ne regarde que le rôle PRINCIPAL — divergence documentée
-      dans RAPPORT_TESTS_ROLES.md, pas corrigée (décision d'ergonomie).
+   3. Cumul de rôles (D7, validée le 2026-10-23) : un compte portant
+      agent_stock + agent_comptabilite accède à l'UNION de ses écrans —
+      accueil inventaire (rôle principal), vente.html atteignable depuis le
+      bandeau ET en deep-link, catalogue de vente portant les PRIX (fusion
+      /articles), jamais un écran du responsable. L'ancienne divergence
+      « l'UI ne regarde que le rôle principal » est corrigée, pas contournée.
 
    Prérequis : serveur démarré sur SERVEUR_URL (défaut http://127.0.0.1:8010),
    servant /app. Réinitialise elle-même la base (jeu d'essai, mots de passe
@@ -217,8 +219,8 @@ for (const role of ROLES) {
 }
 
 // ============================================================================
-// Cumul de rôles : l'API accepte les deux périmètres, l'UI ne regarde que le
-// rôle principal (divergence documentée, non corrigée)
+// Cumul de rôles : D7 (cycle 75) — l'union est EFFECTIVE à l'écran : le
+// compte atteint les écrans de ses deux rôles, jamais ceux du responsable.
 // ============================================================================
 {
   const { contexte, page } = await nouvellePage();
@@ -227,24 +229,42 @@ for (const role of ROLES) {
   verifier(page.url().endsWith("/app/inventaire.html"),
     `cumul : accueil = inventaire.html (rôle principal agent_stock) (obtenu : ${page.url().split("/app/")[1] || page.url()})`);
 
-  // L'API accepte ce compte sur le périmètre comptabilité (rôle secondaire) :
-  // preuve directe par appel réel, puisque l'UI ne le laissera pas passer.
-  const apiAccepte = await page.evaluate(async () => {
-    const session = JSON.parse(sessionStorage.getItem("qf_session"));
-    const reponse = await fetch("/ventes/parametres", {
-      headers: { Authorization: "Bearer " + session.jeton },
-    });
-    return reponse.status;
-  });
-  verifier(apiAccepte === 200, `cumul : l'API accepte GET /ventes/parametres (rôle secondaire) -> ${apiAccepte}`);
+  // D7 : le bandeau liste désormais TOUS les écrans de l'union — vente
+  // (rôle secondaire), articles et stock, rapports, clients — et AUCUN
+  // écran du responsable (tableau-bord, rh, comptes, clôture, déclarations).
+  const hrefs = await page.$$eval(".bandeau a[href]", (as) => as.map((a) => a.getAttribute("href")));
+  verifier(hrefs.includes("vente.html"), "cumul : le bandeau propose vente.html (union D7)");
+  verifier(hrefs.includes("stock.html"), "cumul : le bandeau propose articles et stock");
+  verifier(hrefs.includes("rapports.html"), "cumul : le bandeau propose rapports");
+  const interdits = hrefs.filter((h) => ["tableau-bord.html", "rh.html", "comptes.html",
+    "cloture-caisse.html", "declarations.html"].includes(h));
+  verifier(interdits.length === 0, `cumul : aucun écran responsable dans le bandeau (${interdits.join(", ") || "aucun"})`);
+  await capturer(page, "cumul-01-bandeau-union");
 
-  // ... mais l'écran vente.html redirige (exigerSession ne regarde que le
-  // rôle principal de /moi).
-  await page.goto(`${SERVEUR_URL}/app/vente.html`, { waitUntil: "networkidle" });
-  await page.waitForURL((u) => !u.pathname.endsWith("/vente.html"), { timeout: 10000 }).catch(() => {});
+  // L'écran de vente est atteignable DEPUIS LE MENU et ne redirige plus :
+  // exigerSession regarde la liste complète des rôles renvoyée par /moi.
+  await page.click('.bandeau a[href="vente.html"]');
+  await page.waitForURL((u) => u.pathname.endsWith("/vente.html"), { timeout: 10000 });
+  await page.waitForLoadState("networkidle");
+  verifier(page.url().endsWith("/app/vente.html"),
+    `cumul : vente.html accessible depuis le bandeau (obtenu : ${page.url().split("/app/")[1] || page.url()})`);
+
+  // Vente FONCTIONNELLE pour le cumul : le catalogue porte les PRIX (fusion
+  // /articles du cumul stock + comptabilité, chaque colonne lue via le rôle
+  // PG qui la porte). Ajout réel d'un article : le prix catalogue 6 500
+  // arrive dans le total TTC — le PU de la ligne est un <input>, donc la
+  // preuve passe par le total, qui en dérive directement.
+  await page.fill("#recherche", "ciment");
+  await page.waitForFunction(() => !document.getElementById("suggestions").hidden, { timeout: 5000 });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => /6\s500/.test(document.getElementById("total-ttc").textContent), { timeout: 5000 });
+  verifier(true, "cumul : vente.html fonctionnelle — prix catalogue (6 500) dans le total TTC");
+  await capturer(page, "cumul-02-vente-accessible-avec-prix");
+
+  // Deep-link direct : même verdict, sans passer par un lien.
+  await page.goto(`${SERVEUR_URL}/app/inventaire.html`, { waitUntil: "networkidle" });
   verifier(page.url().endsWith("/app/inventaire.html"),
-    `cumul : vente.html refusée par l'UI (rôle principal seul) -> ${page.url().split("/app/")[1] || page.url()}`);
-  await capturer(page, "cumul-01-ui-refuse-perimetre-secondaire");
+    `cumul : retour inventaire sans redirection (obtenu : ${page.url().split("/app/")[1] || page.url()})`);
 
   await contexte.close();
 }

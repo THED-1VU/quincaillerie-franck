@@ -180,7 +180,11 @@ async function seConnecter(page, identifiant, motDePasse) {
   await page.keyboard.press("F3");
   const cibleFocus = await page.evaluate(() => document.activeElement.className);
   verifier(cibleFocus.includes("panier__mini"), "UX-2 : F3 amène le focus clavier directement sur le champ de prix");
-  await page.keyboard.type("2900");
+  // Prix négocié SOUS le seuil D4 de 10 % (cycle 75-B, migration 051) : le
+  // contrôle porte sur le clavier seul, pas sur la remise — mais 2900 sur
+  // le Fer à béton 3500 du jeu d'essai (17,1 %) est désormais refusé 403 à
+  // un agent comptabilité ; 3300 = 5,7 %, accepté.
+  await page.keyboard.type("3300");
   await page.keyboard.press("Enter");
   const focusApresEntree = await page.evaluate(() => document.activeElement.id);
   verifier(focusApresEntree === "recherche", "UX-2 : Entrée dans le champ de prix ramène le focus à la recherche (clavier seul, sans souris)");

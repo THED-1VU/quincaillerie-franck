@@ -130,3 +130,82 @@ def test_creation_cumul_refuse_un_role_principal_hors_liste(client):
         },
     )
     assert reponse.status_code == 422, reponse.text
+
+
+# ---------------------------------------------------------------------------
+# D7 (validée le 2026-10-23) : l'union à l'écran — /moi porte la liste
+# complète, /articles sert les DEUX familles de colonnes à un cumul
+# stock + comptabilité, via le rôle PG de chaque famille.
+# ---------------------------------------------------------------------------
+
+def test_moi_renvoie_la_liste_complete_des_roles(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    _creer_agent_cumule(client, session, "cumul.stock", "agent_stock")
+
+    connexion = client.post(
+        "/auth/connexion",
+        json={"identifiant": "cumul.stock", "mot_de_passe": "CumulAgent123"},
+    )
+    jeton = connexion.json()["jeton"]
+
+    reponse = client.get("/moi", headers=entete_autorisation(jeton))
+    assert reponse.status_code == 200, reponse.text
+    profil = reponse.json()
+    assert profil["role"] == "agent_stock"
+    assert sorted(profil["roles"]) == ["agent_comptabilite", "agent_stock"]
+
+
+def test_moi_d_un_compte_simple_ne_porte_qu_un_role(client):
+    reponse = client.get(
+        "/moi",
+        headers=entete_autorisation(
+            se_connecter(client, "magasin.stock", "AgentStockTest123")["jeton"]
+        ),
+    )
+    assert reponse.status_code == 200, reponse.text
+    assert reponse.json()["roles"] == ["agent_stock"]
+
+
+def test_articles_cumul_porte_prix_et_quantites(client):
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    _creer_agent_cumule(client, session, "cumul.stock", "agent_stock")
+    jeton = client.post(
+        "/auth/connexion",
+        json={"identifiant": "cumul.stock", "mot_de_passe": "CumulAgent123"},
+    ).json()["jeton"]
+
+    reponse = client.get("/articles", headers=entete_autorisation(jeton))
+    assert reponse.status_code == 200, reponse.text
+    articles = reponse.json()["articles"]
+    assert articles, "le catalogue ne doit pas être vide"
+    ciment = next(a for a in articles if a["id"] == 1)
+    # Les deux familles de colonnes, sur la même ligne : le cumul vend ET
+    # compte, sans jamais voir le prix d'achat (réservé au responsable).
+    assert float(ciment["prix_vente"]) == 6500.0
+    assert ciment["site_id"] == 1
+    assert "quantite_stock" in ciment
+    assert "prix_achat" not in ciment
+
+
+def test_articles_roles_simples_inchanges(client):
+    # agent stock seul : quantités, aucun prix (comportement historique).
+    stock = client.get(
+        "/articles",
+        headers=entete_autorisation(
+            se_connecter(client, "magasin.stock", "AgentStockTest123")["jeton"]
+        ),
+    ).json()["articles"]
+    assert stock, "le catalogue ne doit pas être vide"
+    assert "quantite_stock" in stock[0]
+    assert "prix_vente" not in stock[0]
+
+    # agent comptabilité seul : prix, aucune quantité (comportement historique).
+    compta = client.get(
+        "/articles",
+        headers=entete_autorisation(
+            se_connecter(client, "magasin.compta", "AgentComptaTest123")["jeton"]
+        ),
+    ).json()["articles"]
+    assert compta, "le catalogue ne doit pas être vide"
+    assert "prix_vente" in compta[0]
+    assert "quantite_stock" not in compta[0]

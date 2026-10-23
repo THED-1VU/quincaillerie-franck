@@ -195,36 +195,54 @@ les deux sites visibles). Aucune route n'accepte de `site_id` client.
     réelle, imposition du drapeau par le responsable sur un jeton encore
     valide) + 6 contrôles Playwright (captures `force-01` à `force-04`).
 
-## 8. Cumul de rôles (addendum h, cycle 43)
+## 8. Cumul de rôles (addendum h, cycle 43 ; union effective — D7 validée, cycle 75)
 
-Un compte peut porter plusieurs rôles (`utilisateurs_roles`). L'API évalue
-**tous** les rôles du compte (test_cumul_roles.py, cycle 43) ; l'UI
-(`exigerSession`) ne regarde que le **rôle principal** (`/moi.role`) et
-redirige hors des écrans du rôle secondaire.
+Un compte peut porter plusieurs rôles (`utilisateurs_roles`). D7, validée
+par le propriétaire le 2026-10-23 et implémentée au cycle 75 : le compte
+voit l'**UNION** de ses écrans, côté API ET côté UI.
 
-> **Divergence documentée D2** : un compte stock+comptabilité atteint
-> `GET /ventes/parametres` en API (200 mesuré), mais `vente.html` le
-> renvoie vers `inventaire.html` (capture
-> `cumul-01-ui-refuse-perimetre-secondaire.png`). Divergence
-> volontairement documentée, non corrigée : décider si l'UI doit adopter
-> les rôles secondaires (options dans `DECISIONS_PROPRIETAIRE.md`).
+- **API** : `exiger_role(*roles)` retient le premier rôle autorisé de la
+  route parmi `session.roles` (liste complète portée par le jeton et
+  renvoyée par `/moi`, relue EN BASE via `roles_utilisateur()`,
+  migration 035) ; la connexion PostgreSQL part ensuite du rôle effectif
+  (`role_pg(session.role)`). Chaque famille de colonnes est donc lue par le
+  rôle PG qui la porte — `/articles` d'un cumulé stock+comptabilité ouvre
+  DEUX connexions (prix via `qf_agent_comptabilite`, quantités via
+  `qf_agent_stock`) fusionnées applicativement, sans jamais élever vers
+  `qf_responsable` (la RLS vérifierait alors les deux sites). Prouvé par
+  `test_cumul_roles.py` **9/9** : jeton porteur des deux rôles, accès aux
+  deux périmètres, 403 hors rôles, `/moi` liste complète, `/articles` du
+  cumulé porte prix ET quantités, rôles simples inchangés.
+- **UI** : `exigerSession` (api.js) teste la liste complète `profil.roles`
+  ; le bandeau liste tous les écrans de l'union (`ajusterNavigation`),
+  jamais un écran hors rôles. Prouvé par `verifier-roles.mjs` **35/35**
+  (captures `cumul-01-bandeau-union`, `cumul-02-vente-accessible-avec-prix`
+  : vente.html atteignable depuis le bandeau ET en deep-link, total TTC =
+  prix catalogue 6 500 livré par la fusion `/articles`).
+
+L'ancienne divergence « l'UI ne regarde que le rôle principal » (capture
+d'époque `cumul-01-ui-refuse-perimetre-secondaire.png`) est **corrigée au
+cycle 75**, pas contournée.
 
 ## 9. Divergences et anomalies relevées au cycle 65
 
-Statuées au cycle 69 (écart C8-01 clôturé) — re-vérifiées par exécution :
-pytest `test_cumul_roles.py` + `test_matrice_roles.py` **6/6** (API) et
-Playwright `verifier-cablage.mjs` **94/94** (UI, prix, gates).
+Statuées au cycle 69 (écart C8-01 clôturé) — re-vérifiées par exécution,
+puis mises à jour au cycle 75 (D7 implémentée, D8 confirmée) :
+pytest `test_cumul_roles.py` **9/9** + `test_matrice_roles.py` (API) et
+Playwright `verifier-roles.mjs` **35/35** + `verifier-cablage.mjs`
+**94/94** (UI, prix, gates).
 
 | # | Gravité | Description | Décision | Statut (cycle 69) |
 |---|---|---|---|---|
-| D1 | P3 | `inventaire.html` refuse le responsable alors que l'API l'autorise à compter | ergonomie revendiquée — D8 | **Acceptée en l'état** : gate volontaire `["agent_stock"]` (comptage = tâche d'agent, recommandation D8 option 1) ; redirigé, prouvé par `verifier-cablage.mjs` ; tranché définitivement par le propriétaire (D8) |
-| D2 | P3 | UI cumul de rôles = rôle principal seul, API = tous les rôles | décision ergonomique — D7 | **Acceptée en l'état** : UI volontairement à périmètre principal (recommandation D7 option 1) ; API honore tout le cumul, prouvé par `test_cumul_roles.py` ; tranché par le propriétaire (D7) |
+| D1 | P3 | `inventaire.html` refuse le responsable alors que l'API l'autorise à compter | ergonomie revendiquée — D8 | **Confirmée (cycle 75)** : D8 validée (2026-10-23) — l'agent stock effectue le comptage, le responsable supervise et valide ; la régularisation reste 403 pour l'agent (`test_agent_stock_ne_peut_pas_regulariser`), l'écran de comptage reste celui de l'agent |
+| D2 | P3 | UI cumul de rôles = rôle principal seul, API = tous les rôles | décision ergonomique — D7 | **RÉSOLUE (cycle 75)** : D7 validée (2026-10-23) et implémentée — l'UI applique l'union (gate `exigerSession` + bandeau), prouvée par `verifier-roles.mjs` **35/35** (cf. §8) |
 | D3 | P2 | Attribution `utilisateur_caisse_id` incohérente (`server/app/routes/ventes.py:220-227`) — toujours le premier responsable, même si un agent saisit | propriétaire — D9 | **Tracée** : écart C5-01 du registre (BLOQUE_PROPRIETAIRE, décision D9) ; code annoté, volontairement non corrigé en attendant D9 |
 | D4 | P2 | Visibilité des prix du caissier sur l'écran de vente — jamais tranchée | propriétaire (obligatoire avant GO) | **Tracée** : écart C3-01 du registre (BLOQUE_PROPRIETAIRE, décision D1) ; aucun `prix_achat` à l'écran/réseau/source prouvé par inspection + `verifier-cablage.mjs` |
 | D5 | P3 | Journal `loop-state.md` : sections des cycles 61-64 absentes | — | **Tracée** : écart C0-04 du registre (OUVERT, développement) |
 
 Aucun de ces points n'est un trou d'habilitation : les accès réels (API et
 SQL) sont exactement ceux du tableau, et chaque divergence est désormais soit
-acceptée volontairement en l'état (D1/D2, en attente de confirmation
-propriétaire D7/D8), soit tracée vers l'écart ou la décision qui la porte
-(D3→C5-01, D4→C3-01, D5→C0-04). Le recensement est soldé.
+**résolue** (D2 → union effective, cycle 75) soit **confirmée** par la
+décision propriétaire correspondante (D1 → D8 validée, cycle 75), soit
+tracée vers l'écart ou la décision qui la porte (D3→C5-01, D4→C3-01,
+D5→C0-04). Le recensement est soldé.
