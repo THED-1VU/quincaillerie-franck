@@ -152,8 +152,8 @@ en base).
 | PR | Branche | Contenu | Preuve |
 |---|---|---|---|
 | **#104** | `claude/c7-comptage-decimal-422` | C7 : comptage décimal sur article entier → 422 | test rouge → vert ; 19/19 sur les fichiers touchés |
-| **#105** | `claude/cool-heisenberg-gqxu24` | C10-02 : interblocage des ventes simultanées, saisies aberrantes → 4xx, interblocage → 409 | 403 pytest sur base isolée (394 + 9) ; contrôles indépendants |
-| (cette PR) | `claude/c9-c10-recette-et-audit` | rapport d'audit, contrôles indépendants et leur sortie, fiches de recette R1/R2/R5 mises à jour, `verifier-roles.mjs` respecte `PLAYWRIGHT_CHANNEL` | roles 35/35 sans Google Chrome installé |
+| **#105** | `claude/cool-heisenberg-gqxu24` | C10-02 : interblocage des ventes simultanées, saisies aberrantes → 4xx, interblocage → 409 | 403 pytest sur base isolée (394 + 9) ; 13/13 suites Playwright sur ce code ; contrôles indépendants |
+| **#106** (cette PR) | `claude/c9-c10-recette-et-audit` | rapport d'audit, contrôles indépendants et leur sortie, fiches de recette R1/R2/R5 mises à jour, `verifier-roles.mjs` respecte `PLAYWRIGHT_CHANNEL` | roles 35/35 sans Google Chrome installé |
 
 Aucune des trois ne touche un fichier de #103 (rapports `LOTB_*`,
 `restaurer.ps1`, `verifier_tout.sh`, `double_chiffrement.ps1`,
