@@ -7,6 +7,10 @@ les livrables exigés : tableau des écarts, correctifs, preuves
 d'exécution, fiches humaines, dépendances Codex, scores justifiés,
 décisions bloquantes.
 
+**Livraison** : PR **#103** (commit `0ad41b6`, branche `operation-100-lot-b`,
+base `2dae406`), **CI verte** run 39973236711 (pytest + playwright 13/13
+suites, mergeStateStatus CLEAN) — fusion par le propriétaire, après #100.
+
 **Contraintes respectées, traçables dans chaque document** : aucune
 production, aucune importation réelle, aucune exclusion antivirus ;
 `db/outils/sauvegarder.ps1` jamais exécuté ni restauré ni commité
@@ -112,7 +116,9 @@ au propriétaire. C'est la conclusion exigée par l'ordre
 ## 7. Décisions bloquantes pour le propriétaire
 
 1. **Fusionner la PR #100** (cycle 75, CI verte) — puis main devient le
-   SHA de référence commun ; fusionner ensuite la PR du Lot B.
+   SHA de référence commun ; fusionner ensuite la **PR #103**
+   (Lot B, commit `0ad41b6`, CI verte run 39973236711 :
+   pytest + playwright 13/13 suites, mergeStateStatus CLEAN).
 2. **Kaspersky** : exécuter la procédure S1–S6 (LOTB_C12_SAUVEGARDE.md
    §3) — restauration du script depuis le dépôt avec vérification
    d'empreinte, soumission à l'antivirus PUIS exclusion ciblée au seul
