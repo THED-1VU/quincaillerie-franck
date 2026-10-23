@@ -89,7 +89,16 @@ d'horloges** → **12/12** ; puis passe complète ci-dessus → **396/396** et
 obtenu avant la bascule d'horloge du poste ; le correctif rend le test
 indépendant de ce décalage.
 
-## 5. Analyse séparée des PR #92 et #60 (aucune décision)
+## 5. CI sur l'état combiné
+
+- Branche poussée : `operation-100-lot-b`, `54ffea5..835e0fb` (le commit
+  `835e0fb` a pour parent le merge d'alignement `76f3d5e`).
+- Run **40035602067** (« CI — pytest et Playwright ») sur **`835e0fb`** :
+  **succès** — job `pytest` **succès**, job `playwright` **succès**.
+- La PR #103 pointe sur `835e0fb` (plus l'ancien `54ffea5`) ; la fusion
+  reste à la main du propriétaire (Claude in Chrome), merge commit uniquement.
+
+## 6. Analyse séparée des PR #92 et #60 (aucune décision)
 
 **PR #92** (`cycle-74-arbitrage`, tête `c3dd4ae`, base `37b7b79`) :
 - Apporte **3 documents uniques** absents de `main` :
@@ -116,7 +125,7 @@ indépendant de ce décalage.
 - Options : fusionner telle quelle, ou fermer si la mise à jour est jugée
   obsolète. Aucune décision prise.
 
-## 6. Nommage C0–C14 et divergences signalées (non corrigées)
+## 7. Nommage C0–C14 et divergences signalées (non corrigées)
 
 Le nommage officiel est celui de `REGISTRE_ECARTS_100.md` :
 C0 Infrastructure et dépôt ; C1 Base de données et intégrité ;
@@ -141,10 +150,10 @@ Divergences relevées, **signalées sans correction** :
    documentaires du cycle 77 (#100/#101/#102 fusionnées, `main` =
    `d745ead`, chaîne « #92 → #100 » retirée).
 
-## 7. Ce qui reste à la main du propriétaire
+## 8. Ce qui reste à la main du propriétaire
 
-- **Fusion de la PR #103** (Claude in Chrome), après CI verte sur l'état
-  combiné (section CI ajoutée après le push).
+- **Fusion de la PR #103** (Claude in Chrome) : CI verte sur l'état
+  combiné (run 40035602067, section 5).
 - **Kaspersky** : procédure S1-S6 (restauration/exclusion de
   `sauvegarder.ps1`), décision propriétaire.
 - **Second PC** : épreuve physique P1-P9 (reprise, RTO ≤ 2 h).

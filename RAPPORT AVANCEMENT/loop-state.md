@@ -4784,8 +4784,8 @@ fusionnées** (fusion = propriétaire uniquement, dans l'ordre
   `SELECT current_date` sur la base (source de vérité). Aucune contrainte
   SQL touchée, aucun code applicatif modifié. Rejeu ciblé dans la fenêtre
   de divergence : 12/12, puis passe complète verte.
-- **CI** : SHA poussé, run et verdict consignés dans
-  `RAPPORT AVANCEMENT/CYCLE_77_REVALIDATION.md`.
+- **CI** : run **40035602067** sur **`835e0fb`** — jobs `pytest` et
+  `playwright` **succès** (détail dans `RAPPORT AVANCEMENT/CYCLE_77_REVALIDATION.md` §5).
 - **Docs** : `LOTB_RAPPORT_FINAL.md` et ce journal corrigés (#100/#101/#102
   fusionnées ; `main` = `d745ead` ; chaîne « #92 → #100 » retirée).
 - **Analyse #92/#60 (aucune décision)** : #92 = 3 docs cycle 74 uniques
