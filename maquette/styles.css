@@ -41,7 +41,7 @@ a { color: var(--c-primaire); }
 
 /* ---- Bandeau supérieur ---- */
 .bandeau {
-  display: flex; align-items: center; gap: var(--e-3);
+  display: flex; align-items: center; gap: var(--e-3); flex-wrap: wrap;
   padding: var(--e-3) var(--e-4);
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-bordure);
@@ -110,6 +110,40 @@ a { color: var(--c-primaire); }
 .champ__saisie:focus, .champ__select:focus { border-color: var(--c-primaire); }
 .champ__saisie--caisse { height: var(--champ-hauteur-caisse); font-size: var(--t-md); }
 .champ__aide { font-size: var(--t-xs); color: var(--c-texte-doux); margin-top: var(--e-2); }
+
+/* ---- Case à cocher tactile (cible ≥ 44 px, exigence mobile du contrôle
+   cablage : l'input lui-même est mesuré, pas son libellé) ---- */
+.case-tactile {
+  appearance: none; -webkit-appearance: none;
+  width: 44px; height: 44px; flex: 0 0 44px; margin: 0;
+  border: 2px solid var(--c-bordure); border-radius: var(--r-md);
+  background: var(--c-surface); cursor: pointer;
+  display: inline-grid; place-content: center;
+  transition: background var(--duree-rapide), border-color var(--duree-rapide);
+}
+.case-tactile::after {
+  content: ""; width: 20px; height: 10px; opacity: 0;
+  border-left: 3px solid var(--c-surface); border-bottom: 3px solid var(--c-surface);
+  transform: rotate(-45deg) translate(1px, -2px);
+}
+.case-tactile:checked { background: var(--c-primaire); border-color: var(--c-primaire); }
+.case-tactile:checked::after { opacity: 1; }
+.case-tactile:disabled { opacity: .5; cursor: not-allowed; }
+.case-tactile:focus-visible { outline: 2px solid var(--c-primaire); outline-offset: 2px; }
+
+/* ---- Bandeau d'alerte persistant (C12-02 : échec/absence de sauvegarde
+   visible en haut du tableau de bord, tant que l'état n'est pas « succes ») */
+.alerte-persistante {
+  display: flex; gap: var(--e-2); align-items: flex-start;
+  padding: var(--e-3) var(--e-4); margin-bottom: var(--e-4);
+  border: 1px solid var(--c-alerte); border-radius: var(--r-md);
+  background: var(--c-alerte-clair); color: var(--c-alerte);
+  font-weight: var(--poids-demi);
+}
+.alerte-persistante--attention {
+  border-color: var(--c-neutre-info); background: var(--c-neutre-info-clair);
+  color: var(--c-neutre-info);
+}
 
 /* ---- Message d'erreur au plus près du champ ---- */
 .erreur-champ {
@@ -350,8 +384,11 @@ a { color: var(--c-primaire); }
   .actions-rapides { grid-template-columns: 1fr; }
   .aide-clavier { display: none; } /* le clavier physique n'est pas le cas d'usage mobile */
 
-  /* Bandeau : on autorise le retour à la ligne pour éviter tout débordement */
-  .bandeau { flex-wrap: wrap; padding-left: var(--e-3); padding-right: var(--e-3); }
+  /* Bandeau : le retour à la ligne est désormais autorisé À TOUTE largeur
+     (règle de base .bandeau, cycle 75-H — l'union des rôles D7 remplit le
+     bandeau au-delà de ce que 1366 px peut contenir sur une seule ligne) ;
+     ici ne restent que les resserrages propres au mobile. */
+  .bandeau { padding-left: var(--e-3); padding-right: var(--e-3); }
   .bandeau__titre { font-size: var(--t-sm); flex-basis: 100%; order: 3; }
   .bandeau__role { white-space: normal; font-size: var(--t-xs); }
 }

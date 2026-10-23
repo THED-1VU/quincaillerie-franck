@@ -43,9 +43,10 @@ def test_parametres_du_seed_couverts_par_les_migrations(base_reinitialisee):
     # binaire correspondant, une valeur seed serait incohérente.
     assert "logo_boutique_extension" not in lignes
 
-    # État des deux clés corrigées au cycle 68 : sentinelles à décider,
-    # identiques aux migrations 022 et 037.
-    assert lignes["seuil_remise_validation_pct"]["valeur"] == "a_definir"
-    assert lignes["seuil_remise_validation_pct"]["a_decider"] is True
+    # État des clés corrigées : seuil_remise_validation_pct DÉCIDÉ à 10
+    # (migration 051, décision D4 du 2026-10-23) ; contact_support_technique
+    # reste une sentinelle à décider (identique à la migration 022).
+    assert lignes["seuil_remise_validation_pct"]["valeur"] == "10"
+    assert lignes["seuil_remise_validation_pct"]["a_decider"] is False
     assert lignes["contact_support_technique"]["valeur"] == "a_definir"
     assert lignes["contact_support_technique"]["a_decider"] is True

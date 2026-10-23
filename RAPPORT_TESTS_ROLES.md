@@ -96,15 +96,22 @@ reste une action propriétaire (décision déjà consignée).
 | D4 | P2 | Visibilité des prix du caissier : vérifiée en inspection (aucun `prix_achat` ni à l'écran ni dans les rapports), confirmation formelle requise | `DECISIONS_PROPRIETAIRE.md` D1 |
 | D5 | P3 | Journal `loop-state.md` : sections des cycles 61-64 absentes (branches et PR #78-#81 existent) | à reconstituer au cycle 66 si le propriétaire le demande |
 
-**Statuées au cycle 69 (écart C8-01 clôturé, preuves d'exécution : pytest
-6/6 sur `test_cumul_roles.py` + `test_matrice_roles.py`, Playwright
-`verifier-cablage.mjs` 94/94, inspection `ventes.py:220-227`)** : D1 et D2
-**acceptées en l'état** (gates UI volontaires, recommandations D8/D7 option 1 —
-confirmation réservée au propriétaire) ; D3 tracée vers l'écart C5-01
-(BLOQUE_PROPRIETAIRE, décision D9) ; D4 tracée vers C3-01 (BLOQUE_PROPRIETAIRE,
-décision D1) ; D5 tracée vers C0-04 (OUVERT, développement — journal des
-cycles 61-64). Détail : `MATRICE_ROLES_AKUMA.md` §9 ; `REGISTRE_ECARTS_100.md`
-C8-01.
+**Statuées au cycle 69 (écart C8-01 clôturé), puis soldées au cycle 75** :
+D2 **RÉSOLUE** — D7 validée par le propriétaire (2026-10-23) et implémentée :
+l'UI applique désormais l'union des rôles (gate `exigerSession` sur
+`/moi.roles`, bandeau ajusté par `ajusterNavigation`, `/moi` renvoie la
+liste complète relue en base, `/articles` du cumulé fusionne prix
+(comptabilité) et quantités (stock) via deux connexions PG par rôle) ;
+preuves cycle 75 : `test_cumul_roles.py` **9/9**, `verifier-roles.mjs`
+**35/35** (captures `cumul-01-bandeau-union`,
+`cumul-02-vente-accessible-avec-prix`), `verifier-cablage.mjs` **94/94**.
+D1 **confirmée** par la validation D8 (2026-10-23) : l'agent stock effectue
+le comptage, le responsable supervise et valide — la régularisation reste
+403 pour l'agent (`test_agent_stock_ne_peut_pas_regulariser`) et l'écran de
+comptage reste celui de l'agent. D3 tracée vers l'écart C5-01 (résolue au
+cycle 75-A, PR #93 : D9 livrée) ; D4 tracée vers C3-01 (résolue au cycle
+75-B, PR #94 : D4 livrée) ; D5 tracée vers C0-04 (clôturé au cycle 70).
+Détail : `MATRICE_ROLES_AKUMA.md` §9 ; `REGISTRE_ECARTS_100.md` C8-01.
 
 ## 6. Captures (22) — `maquette/captures/roles/`
 

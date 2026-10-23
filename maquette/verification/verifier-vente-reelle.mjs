@@ -20,6 +20,10 @@
       prix négocié, remise globale saisie et répercutée sur l'aperçu, remise
       atteignant le total refusée AVANT tout envoi, puis vente réelle avec
       les deux remises contrôlée en base et dans la réponse serveur.
+   7. Paiement mixte (D2, cycle 75) : case « mixte », second mode + montant
+      saisis à l'écran, décomposition affichée avant validation, vente
+      201 avec `paiements[]` dans la réponse, mode 'mixte' et composantes
+      en base (ventes_paiements, migration 052), UNE recette du TOTAL.
 
    Prérequis : serveur démarré sur SERVEUR_URL, servant /app (cycle 5).
    Réinitialise elle-même la base (jeu d'essai + mots de passe réels).
@@ -208,16 +212,17 @@ async function seConnecter(page, identifiant, motDePasse) {
   await page.fill("#numero-facturier", "MAG-REMISE01");
   await page.selectOption("#vendeur", "1");
 
-  // Remise GLOBALE : 1 000 FCFA -> lignes d'aperçu et total réduit, avant
-  // toute validation (même formule que le serveur, TVA extraite du total).
-  await page.fill("#remise-globale", "1000");
+  // Remise GLOBALE : 600 FCFA (9,7 % du total — sous le seuil D4 de 10 %,
+  // migration 051) -> lignes d'aperçu et total réduit, avant toute
+  // validation (même formule que le serveur, TVA extraite du total).
+  await page.fill("#remise-globale", "600");
   verifier(await page.isVisible("#ligne-remise-globale"), "remise globale : ligne « Remise sur la vente » visible");
   const texteRemiseGlobale = await page.textContent("#ligne-remise-globale");
-  verifier(/1\s000 FCFA/.test(texteRemiseGlobale), `remise globale : montant affiché ("${texteRemiseGlobale.trim()}")`);
+  verifier(/600 FCFA/.test(texteRemiseGlobale), `remise globale : montant affiché ("${texteRemiseGlobale.trim()}")`);
   verifier(await page.isVisible("#ligne-total-articles"), "remise globale : total articles TTC affiché avant remise");
   const apercuTotalRemise = await page.textContent("#total-ttc");
   const apercuTvaRemise = await page.textContent("#montant-tva");
-  verifier(apercuTotalRemise === fcfaAttendu(5200),
+  verifier(apercuTotalRemise === fcfaAttendu(5600),
     `remise globale : total réduit avant validation (${apercuTotalRemise})`);
 
   // Remise atteignant le total : refusée AVANT tout envoi — même règle que
@@ -236,12 +241,35 @@ async function seConnecter(page, identifiant, motDePasse) {
     `remise globale refusée : message explicite ("${messageRemiseRefusee}")`);
   verifier(envoisVentes === 0, "remise globale refusée : aucun POST /ventes envoyé");
 
-  // Remise valide : 1 000 FCFA -> double F9, vente réelle.
+  // D4 (cycle 75) : au-delà du seuil de 10 % (1 000 / 6 200 = 16,1 %), un
+  // agent est refusé PAR LE SERVEUR (403) — l'écran affiche le motif et
+  // aucune vente n'est créée (aucun garde-fou équivalent côté client :
+  // l'écran ne peut pas contourner la règle, elle est vérifiée en base).
   await page.fill("#remise-globale", "1000");
   await page.keyboard.press("F9");
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const [reponseRefusee] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/ventes") && r.request().method() === "POST", { timeout: 10000 }),
+    page.keyboard.press("F9"),
+  ]);
+  verifier(reponseRefusee.status() === 403,
+    `D4 : remise globale > 10 % par un agent -> 403 (${reponseRefusee.status()})`);
+  await page.waitForFunction(
+    () => /responsable/i.test(document.getElementById("zone-confirmation").textContent),
+    { timeout: 5000 }
+  );
+  const nbVentesRefusee = psqlValeur(
+    "SELECT count(*) FROM ventes WHERE numero_facturier = 'MAG-REMISE01'"
+  );
+  verifier(nbVentesRefusee === "0",
+    `D4 : au-delà du seuil, aucune vente enregistrée (count = ${nbVentesRefusee})`);
+
+  // Remise valide : 600 FCFA -> double F9, vente réelle.
+  await page.fill("#remise-globale", "600");
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
   const messageConfirmation = await page.textContent("#zone-confirmation");
-  verifier(/après remise de 1\s000 FCFA/.test(messageConfirmation),
+  verifier(/après remise de 600 FCFA/.test(messageConfirmation),
     `remise globale : confirmation avec le montant ("${messageConfirmation}")`);
   const [reponseRemise] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith("/ventes") && r.request().method() === "POST", { timeout: 10000 }),
@@ -249,8 +277,8 @@ async function seConnecter(page, identifiant, motDePasse) {
   ]);
   verifier(reponseRemise.ok(), "vente avec remises : POST /ventes -> 201");
   const corpsRemise = await reponseRemise.json();
-  verifier(corpsRemise.remise_totale === 1300,
-    `vente avec remises : remise totale serveur = 1 300 FCFA (300 ligne + 1 000 globale) (${corpsRemise.remise_totale})`);
+  verifier(corpsRemise.remise_totale === 900,
+    `vente avec remises : remise totale serveur = 900 FCFA (300 ligne + 600 globale) (${corpsRemise.remise_totale})`);
   verifier(
     apercuTotalRemise === fcfaAttendu(corpsRemise.total_ttc) && apercuTvaRemise === fcfaAttendu(corpsRemise.montant_tva),
     `vente avec remises : aperçu avant validation = confirmation serveur `
@@ -258,15 +286,15 @@ async function seConnecter(page, identifiant, motDePasse) {
   );
   await page.waitForFunction(() => !document.getElementById("zone-succes").hidden, { timeout: 10000 });
   const messageSuccesRemise = await page.textContent("#zone-succes");
-  verifier(/Remise totale : 1\s300 FCFA/.test(messageSuccesRemise),
+  verifier(/Remise totale : 900 FCFA/.test(messageSuccesRemise),
     `vente avec remises : message de succès avec la remise ("${messageSuccesRemise}")`);
 
   // Base réelle : les deux mécanismes sont bien distincts et persistés.
   const remiseGlobaleDb = psqlValeur(
     "SELECT remise_globale_montant FROM ventes WHERE numero_facturier = 'MAG-REMISE01'"
   );
-  verifier(parseFloat(remiseGlobaleDb) === 1000,
-    `base réelle : ventes.remise_globale_montant = 1 000 (${remiseGlobaleDb})`);
+  verifier(parseFloat(remiseGlobaleDb) === 600,
+    `base réelle : ventes.remise_globale_montant = 600 (${remiseGlobaleDb})`);
   const ligneDb = psqlValeur(
     "SELECT prix_catalogue || '|' || remise_montant || '|' || prix_unitaire "
     + "FROM ventes_lignes vl JOIN ventes v ON v.id = vl.vente_id "
@@ -274,6 +302,103 @@ async function seConnecter(page, identifiant, motDePasse) {
   );
   verifier(/^6500\.00\|300\.00\|6200\.00$/.test(ligneDb),
     `base réelle : ligne catalogue/remise/payé = 6500/300/6200 (${ligneDb})`);
+
+  await contexte.close();
+}
+
+// ============================================================================
+// 1 ter. Paiement MIXTE (D2, cycle 75) : espèces + Orange Money sur une
+// même vente, décomposition tracée, UNE recette de journal du TOTAL
+// ============================================================================
+{
+  const contexte = await navigateur.newContext({ viewport: { width: 1366, height: 900 } });
+  const page = await contexte.newPage();
+  await seConnecter(page, "magasin.compta", MDP_AGENT_COMPTA);
+
+  // Ciment (6 500 TTC au catalogue).
+  await page.fill("#recherche", "ciment");
+  await page.waitForFunction(() => !document.getElementById("suggestions").hidden, { timeout: 5000 });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.getElementById("panier").textContent.includes("Ciment"), { timeout: 5000 });
+
+  await page.fill("#numero-facturier", "MAG-D2MIX01");
+  await page.selectOption("#vendeur", "1");
+
+  // La case révèle le second mode : hors espèces (déjà le premier mode) et
+  // hors crédit (une vente à crédit n'encaisse rien du jour).
+  await page.check("#mixte-actif");
+  verifier(await page.isVisible("#mixte-detail"), "mixte : bloc second mode révélé par la case");
+  const optionsMixte = await page.locator("#mixte-mode option").allTextContents();
+  verifier(optionsMixte.length === 3,
+    `mixte : second mode propose 3 choix hors espèces et crédit (${optionsMixte.join(", ")})`);
+
+  // Montant >= total : refusé AVANT tout envoi (le premier mode doit
+  // encaisser le reste — le serveur, lui, refuse une composante nulle).
+  let envoisMixte = 0;
+  page.on("request", (r) => {
+    if (r.url().endsWith("/ventes") && r.method() === "POST") envoisMixte++;
+  });
+  await page.selectOption("#mixte-mode", "orange_money");
+  await page.fill("#mixte-montant", "6500");
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const messageMixteRefuse = await page.textContent("#zone-confirmation");
+  verifier(/strictement inférieur/i.test(messageMixteRefuse),
+    `mixte : montant atteignant le total refusé à l'écran ("${messageMixteRefuse}")`);
+  verifier(envoisMixte === 0, "mixte : aucun POST /ventes envoyé quand le montant atteint le total");
+
+  // 3 500 FCFA sur Orange Money, le reste (3 000) en espèces. Les montants
+  // attendus passent par fcfaAttendu() : même séparateur de milliers que le
+  // DOM (espace fine insécable), jamais une comparaison de texte naïve.
+  const lib3000 = fcfaAttendu(3000);
+  const lib3500 = fcfaAttendu(3500);
+  await page.fill("#mixte-montant", "3500");
+  const aideMixte = await page.textContent("#mixte-aide");
+  verifier(aideMixte.includes(lib3000) && aideMixte.includes(lib3500),
+    `mixte : décomposition affichée avant validation ("${aideMixte}")`);
+  await page.keyboard.press("F9");
+  await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
+  const messageConfirmationMixte = await page.textContent("#zone-confirmation");
+  verifier(messageConfirmationMixte.includes("Espèces " + lib3000 + " · Orange Money " + lib3500),
+    `mixte : confirmation avec la décomposition ("${messageConfirmationMixte}")`);
+  const [reponseMixte] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/ventes") && r.request().method() === "POST", { timeout: 10000 }),
+    page.keyboard.press("F9"),
+  ]);
+  verifier(reponseMixte.ok(), "mixte : POST /ventes -> 201");
+  const corpsMixte = await reponseMixte.json();
+  verifier(
+    Array.isArray(corpsMixte.paiements) && corpsMixte.paiements.length === 2
+    && corpsMixte.paiements.some((c) => c.mode_paiement === "especes" && c.montant === 3000)
+    && corpsMixte.paiements.some((c) => c.mode_paiement === "orange_money" && c.montant === 3500),
+    `mixte : réponse serveur décomposée par mode (${JSON.stringify(corpsMixte.paiements)})`
+  );
+  await page.waitForFunction(() => !document.getElementById("zone-succes").hidden, { timeout: 10000 });
+  const messageSuccesMixte = await page.textContent("#zone-succes");
+  verifier(
+    messageSuccesMixte.includes("Décomposition : Espèces " + lib3000 + " · Orange Money " + lib3500),
+    `mixte : message de succès avec la décomposition ("${messageSuccesMixte}")`
+  );
+
+  // Base réelle : mode 'mixte', composantes mode par mode, UNE recette.
+  const modeDb = psqlValeur(
+    "SELECT mode_paiement FROM ventes WHERE numero_facturier = 'MAG-D2MIX01'"
+  );
+  verifier(modeDb === "mixte", `base réelle : ventes.mode_paiement = mixte (${modeDb})`);
+  const composantesDb = psqlValeur(
+    "SELECT string_agg(vp.mode_paiement || '=' || vp.montant::text, ' + ' ORDER BY vp.mode_paiement) "
+    + "FROM ventes_paiements vp JOIN ventes v ON v.id = vp.vente_id "
+    + "WHERE v.numero_facturier = 'MAG-D2MIX01'"
+  );
+  verifier(/^especes=3000\.00 \+ orange_money=3500\.00$/.test(composantesDb),
+    `base réelle : composantes = espèces 3 000 + Orange Money 3 500 (${composantesDb})`);
+  const recettesDb = psqlValeur(
+    "SELECT string_agg(t.montant::text, ', ' ORDER BY t.id) FROM transactions t "
+    + "JOIN ventes v ON v.id = t.vente_id "
+    + "WHERE v.numero_facturier = 'MAG-D2MIX01' AND t.type = 'recette'"
+  );
+  verifier(/^6500\.00$/.test(recettesDb),
+    `base réelle : UNE recette de journal, du TOTAL (pas des composantes) (${recettesDb})`);
 
   await contexte.close();
 }

@@ -47,6 +47,36 @@ const PAGE_ACCUEIL_PAR_ROLE = {
   agent_stock: "inventaire.html",
 };
 
+// D7 (validée le 2026-10-23) : carte centralisée des écrans par rôle —
+// miroir exact des listes passées à exigerSession() par chaque page. Un
+// compte cumulant plusieurs rôles accède à l'UNION de ses écrans, et le
+// bandeau de chaque page liste TOUS les écrans autorisés (ajusterNavigation).
+const ROLES_PAR_PAGE = {
+  "tableau-bord.html":    ["responsable"],
+  "vente.html":           ["responsable", "agent_comptabilite"],
+  "clients.html":         ["responsable", "agent_comptabilite"],
+  "inventaire.html":      ["agent_stock"],
+  "stock.html":           ["responsable", "agent_stock"],
+  "rapports.html":        ["responsable", "agent_stock", "agent_comptabilite"],
+  "rh.html":              ["responsable"],
+  "comptes.html":         ["responsable"],
+  "cloture-caisse.html":  ["responsable"],
+  "declarations.html":    ["responsable"],
+};
+
+const LIBELLE_PAGE = {
+  "tableau-bord.html":    "Tableau de bord",
+  "vente.html":           "Vente",
+  "clients.html":         "Clients",
+  "inventaire.html":      "Inventaire",
+  "stock.html":           "Articles et stock",
+  "rapports.html":        "Rapports",
+  "rh.html":              "Ressources humaines",
+  "comptes.html":         "Comptes",
+  "cloture-caisse.html":  "Clôture de caisse",
+  "declarations.html":    "Déclarations",
+};
+
 const Session = {
   enregistrer(donnees) {
     sessionStorage.setItem(CLE_SESSION, JSON.stringify(donnees));
@@ -157,11 +187,59 @@ async function telechargerFichier(chemin, nomFichierParDefaut) {
 }
 
 /**
+ * Ajuste le bandeau de la page courante selon les rôles EFFECTIFS de la
+ * session (D7, validée le 2026-10-23) : retire les liens vers des écrans
+ * interdits, ajoute les liens manquants vers les écrans autorisés — un
+ * compte cumulant plusieurs rôles voit TOUTES ses fonctions, quel que soit
+ * l'écran d'où il part. Jamais d'innerHTML : les libellés sont des textes
+ * fixes de cette carte (creerLigneListe, même règle).
+ */
+function ajusterNavigation(session) {
+  const bandeau = document.querySelector(".bandeau");
+  if (!bandeau) return;
+  const rolesEffectifs = Array.isArray(session.roles) && session.roles.length
+    ? session.roles
+    : [session.role];
+  const pageCourante = window.location.pathname.split("/").pop();
+
+  bandeau.querySelectorAll("a[href]").forEach((lien) => {
+    const page = lien.getAttribute("href").split("/").pop();
+    const rolesPage = ROLES_PAR_PAGE[page];
+    if (rolesPage && !rolesPage.some((r) => rolesEffectifs.includes(r))) {
+      lien.remove();
+    }
+  });
+
+  const liensPresents = new Set(
+    [...bandeau.querySelectorAll("a[href]")].map((a) => a.getAttribute("href"))
+  );
+  const boutonDeconnexion = bandeau.querySelector("#bouton-deconnexion");
+  for (const [page, rolesPage] of Object.entries(ROLES_PAR_PAGE)) {
+    if (!rolesPage.some((r) => rolesEffectifs.includes(r))) continue;
+    if (liensPresents.has(page) || page === pageCourante) continue;
+    const lien = document.createElement("a");
+    lien.className = "btn btn--fantome";
+    lien.href = page;
+    lien.textContent = LIBELLE_PAGE[page];
+    if (boutonDeconnexion && boutonDeconnexion.parentNode) {
+      boutonDeconnexion.parentNode.insertBefore(lien, boutonDeconnexion);
+    } else {
+      bandeau.appendChild(lien);
+    }
+  }
+}
+
+/**
  * Vérifie, RÉELLEMENT auprès du serveur (GET /moi — pas seulement en lisant
  * le stockage local), qu'une session valide existe et que le rôle est
  * autorisé sur cet écran. Redirige sinon (session absente/expirée -> écran
  * de connexion ; rôle non autorisé -> écran d'accueil de ce rôle). À appeler
  * au chargement de chaque écran protégé, avant tout affichage de donnée.
+ *
+ * D7 (validée le 2026-10-23) : l'autorisation regarde la LISTE COMPLÈTE des
+ * rôles effectifs renvoyée par /moi (roles_utilisateur) — jamais le seul
+ * rôle principal. Un compte cumulant agent_stock et agent_comptabilite entre
+ * ainsi à la fois sur inventaire.html et vente.html.
  */
 async function exigerSession(rolesAutorises) {
   const session = Session.lire();
@@ -182,10 +260,14 @@ async function exigerSession(rolesAutorises) {
       window.location.href = "changer-mot-de-passe.html";
       return null;
     }
-    if (rolesAutorises && !rolesAutorises.includes(profil.role)) {
+    const rolesEffectifs = Array.isArray(profil.roles) && profil.roles.length
+      ? profil.roles
+      : [profil.role];
+    if (rolesAutorises && !rolesAutorises.some((r) => rolesEffectifs.includes(r))) {
       window.location.href = PAGE_ACCUEIL_PAR_ROLE[profil.role] || "connexion.html";
       return null;
     }
+    ajusterNavigation(fusion);
     return fusion;
   } catch {
     window.location.href = "connexion.html";
