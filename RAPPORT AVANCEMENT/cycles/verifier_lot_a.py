@@ -23,6 +23,7 @@ DB = "quincaillerie_codex_a_" + uuid.uuid4().hex[:10]
 NAVIGATEUR = "--navigateur" in sys.argv
 PORT = int(os.environ.get("QF_AUDIT_PGPORT", "5548" if NAVIGATEUR else "5547"))
 OUT = ROOT / ("_preuves_lot_a_browser" if NAVIGATEUR else
+              "_preuves_lot_a_temporaires" if "--temporaires" in sys.argv else
               "_preuves_lot_a_cible" if "--cible" in sys.argv else "_preuves_lot_a")
 OUT.mkdir(exist_ok=True)
 CONFIG = OUT / "config_test.ini"
@@ -150,9 +151,13 @@ try:
                    "server/tests/test_sessions_serveur.py", "server/tests/test_session_d6.py",
                    "server/tests/test_changement_mdp_force.py", "server/tests/test_cumul_roles.py"]
                   if "--cible" in sys.argv else ["server/tests"])
+        if "--temporaires" in sys.argv:
+            cibles = ["server/tests/test_exploitation_etat.py",
+                      "server/tests/test_securite.py::test_config_refuse_le_compte_superutilisateur",
+                      "server/tests/test_securite.py::test_config_refuse_la_cle_secrete_exemple"]
         run("pytest_complet", [sys.executable, "-B", "-m", "pytest", *cibles, "-q",
                             "--tb=short", "-p", "no:cacheprovider", "--basetemp",
-                            OUT / "pytest_tmp"], required=False)
+                            OUT / ("pytest_" + uuid.uuid4().hex[:8])], required=False)
         # Restauration logique directe : aucun outil de sauvegarde en quarantaine.
         run("dump_test", [BIN / "pg_dump.exe", "-Fc", "-f", OUT / "donnees_synthetiques.dump"])
         restored = DB + "_restauree"
@@ -173,6 +178,17 @@ try:
         for version in ("054_integrite_paiements", "053_sessions_serveur"):
             psql("retour_" + version, ROOT / "db/migrations" / (version + "_inverse.sql"))
         avant = sonder_paiements(restored)
+        with psycopg.connect(**{**ADMIN, "dbname": restored}) as connection:
+            connection.execute("DELETE FROM schema_migrations WHERE version='051'")
+        for label, command in (
+            ("refus_historique_incomplet_ps", ["powershell.exe", "-NoProfile", "-File", "db/outils/migrer.ps1", "appliquer"]),
+            ("refus_historique_incomplet_bash", ["C:/Program Files/Git/bin/bash.exe", "db/outils/migrer.sh", "appliquer"]),
+        ):
+            run(label, command, required=False)
+            assert RESULTS[label] != 0, "Un historique incomplet ne doit pas être accepté"
+            RESULTS[label] = 0  # refus attendu et vérifié ; journal brut conservé
+        with psycopg.connect(**{**ADMIN, "dbname": restored}) as connection:
+            connection.execute("INSERT INTO schema_migrations(version,nom) VALUES('051','seuil_remise_valide')")
         run("upgrade_depuis_052_powershell", ["powershell.exe", "-NoProfile", "-File", "db/outils/migrer.ps1", "appliquer"])
         run("reapplication_bash", ["C:/Program Files/Git/bin/bash.exe", "db/outils/migrer.sh", "appliquer"])
         apres = sonder_paiements(restored)

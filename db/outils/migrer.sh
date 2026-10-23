@@ -37,15 +37,25 @@ case "${1:-}" in
     # État figé avant la boucle : les deux fichiers historiques 040 doivent
     # tous deux tourner sur base vierge, sans rejouer les versions livrées.
     plancher=-1
+    versions_appliquees=''
     existe=$("$PSQL" -v ON_ERROR_STOP=1 -Atqc "SELECT to_regclass('public.schema_migrations') IS NOT NULL")
+    existe=${existe//$'\r'/}
     if [ "$existe" = t ]; then
         plancher=$("$PSQL" -v ON_ERROR_STOP=1 -Atqc "SELECT COALESCE(MAX(version::integer),-1) FROM schema_migrations")
+        versions_appliquees=$("$PSQL" -v ON_ERROR_STOP=1 -Atqc "SELECT version FROM schema_migrations")
+        plancher=${plancher//$'\r'/}
+        versions_appliquees=${versions_appliquees//$'\r'/}
     fi
     for f in "$MIGRATIONS"/[0-9][0-9][0-9]_*.sql; do
         case "$f" in *_inverse.sql) continue ;; esac
         nom=$(basename "$f")
         version=${nom:0:3}
-        if (( 10#$version <= plancher )); then continue; fi
+        if (( 10#$version <= plancher )); then
+            case $'\n'"$versions_appliquees"$'\n' in
+                *$'\n'"$version"$'\n'*) continue ;;
+                *) echo "Historique incomplet : version $version absente avant $plancher. Diagnostic requis." >&2; exit 1 ;;
+            esac
+        fi
         echo "-- $(basename "$f")"
         executer "$f"
     done

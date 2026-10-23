@@ -1,0 +1,83 @@
+== Préparation de la base (jeu d'essai + comptes de test) ==
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ecarts_stock_ventes"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "jetons_revoques"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "clotures_caisse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "rapprochements_articles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "regularisations_ecarts_comptage"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "utilisateurs_roles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_casse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_retour_client"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_article_offert"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "reglements_creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ventes_paiements"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "sessions_serveur"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "journal_securite"
+Base prête.
+
+RÉUSSIS (63) :
+  [ok] comptable : connexion -> vente.html
+  [ok] vente : présence du crédit client conforme au paramètre serveur (actif)
+  [ok] vente : jeu d'essai avec crédit client actif (attendu de la suite crédit cycle 56)
+  [ok] vente réelle : POST /ventes -> 201
+  [ok] vente sans remise : aucune remise en base, aucune ligne de remise affichée
+  [ok] aperçu avant validation = confirmation serveur (aperçu : 6 500 FCFA / 1 049 FCFA, serveur : 6 500 FCFA / 1 049 FCFA)
+  [ok] vente réelle : message avec numéro de vente ("Vente n°1 enregistrée — 6 500 FCFA (dont TVA 1 049 FCFA à 19.25 %).")
+  [ok] vente réelle : plus aucune mention SIMULATION
+  [ok] vente réelle : bouton « Imprimer le reçu » visible après la vente
+  [ok] reçu réel : PDF réellement téléchargé (en-tête « %PDF» )
+  [ok] remise par ligne : écart au catalogue affiché sous l'article ("Ciment CIM II 50 kgsacCatalogue 6 500 FCFA · remise 300 FCFA (4,6 %)×")
+  [ok] remise globale : ligne « Remise sur la vente » visible
+  [ok] remise globale : montant affiché ("Remise sur la vente600 FCFA")
+  [ok] remise globale : total articles TTC affiché avant remise
+  [ok] remise globale : total réduit avant validation (5 600 FCFA)
+  [ok] remise globale : avertissement immédiat quand elle atteint le total
+  [ok] remise globale refusée : message explicite ("La remise globale ne peut pas atteindre ni dépasser le total de la vente.")
+  [ok] remise globale refusée : aucun POST /ventes envoyé
+  [ok] D4 : remise globale > 10 % par un agent -> 403 (403)
+  [ok] D4 : au-delà du seuil, aucune vente enregistrée (count = 0)
+  [ok] remise globale : confirmation avec le montant ("Confirmer l'encaissement de 5 600 FCFA après remise de 600 FCFA (Espèces) ? Appuyez de nouveau sur F9 ou sur le bouton.")
+  [ok] vente avec remises : POST /ventes -> 201
+  [ok] vente avec remises : remise totale serveur = 900 FCFA (300 ligne + 600 globale) (900)
+  [ok] vente avec remises : aperçu avant validation = confirmation serveur (5 600 FCFA / 904 FCFA vs 5 600 FCFA / 904 FCFA)
+  [ok] vente avec remises : message de succès avec la remise ("Vente n°2 enregistrée — 5 600 FCFA (dont TVA 904 FCFA à 19.25 %). Remise totale : 900 FCFA.")
+  [ok] base réelle : ventes.remise_globale_montant = 600 (600.00)
+  [ok] base réelle : ligne catalogue/remise/payé = 6500/300/6200 (6500.00|300.00|6200.00)
+  [ok] mixte : bloc second mode révélé par la case
+  [ok] mixte : second mode propose 3 choix hors espèces et crédit (Orange Money, MTN Mobile Money, Autre)
+  [ok] mixte : montant atteignant le total refusé à l'écran ("Le montant du second mode doit rester strictement inférieur au total (6 500 FCFA) : le premier mode doit encaisser le reste.")
+  [ok] mixte : aucun POST /ventes envoyé quand le montant atteint le total
+  [ok] mixte : décomposition affichée avant validation ("Décomposition : 3 000 FCFA sur « Espèces » · 3 500 FCFA sur « Orange Money ».")
+  [ok] mixte : confirmation avec la décomposition ("Confirmer l'encaissement de 6 500 FCFA — Espèces 3 000 FCFA · Orange Money 3 500 FCFA ? Appuyez de nouveau sur F9 ou sur le bouton.")
+  [ok] mixte : POST /ventes -> 201
+  [ok] mixte : réponse serveur décomposée par mode ([{"mode_paiement":"especes","montant":3000},{"mode_paiement":"orange_money","montant":3500}])
+  [ok] mixte : message de succès avec la décomposition ("Vente n°3 enregistrée — 6 500 FCFA (dont TVA 1 049 FCFA à 19.25 %). Décomposition : Espèces 3 000 FCFA · Orange Money 3 500 FCFA.")
+  [ok] base réelle : ventes.mode_paiement = mixte (mixte)
+  [ok] base réelle : composantes = espèces 3 000 + Orange Money 3 500 (especes=3000.00 + orange_money=3500.00)
+  [ok] base réelle : UNE recette de journal, du TOTAL (pas des composantes) (6500.00)
+  [ok] vente à découvert : POST /ventes -> 201 (jamais un refus, point e)
+  [ok] vente à découvert : écart signalé à l'écran ("Vente n°4 enregistrée — 6 000 FCFA (dont TVA 969 FCFA à 19.25 %). Stock insuffisant sur 1 article(s) : la vente est quand même enregistrée, l'écart est remonté au responsable.")
+  [ok] responsable : sélecteur de site visible sur l'écran de vente
+  [ok] responsable sans site choisi : refus explicite ("Choisissez le site de cette vente avant de valider.")
+  [ok] crédit : client créé depuis clients.html et visible dans la liste
+  [ok] crédit : vente à crédit depuis l'écran -> POST /ventes 201
+  [ok] crédit : message de succès affiché après la vente à crédit
+  [ok] crédit : une créance a été créée pour la vente à crédit
+  [ok] crédit : client listé avec son encours
+  [ok] crédit : l'encours est affiché sur la ligne du client (Client Credit C13encours 6 500 FCFA / plafond 500 000 FCFAac…)
+  [ok] crédit : règlement partiel enregistré depuis l'écran
+  [ok] crédit : un règlement est enregistré en base
+  [ok] crédit : l'encours a diminué du règlement partiel (encours 3250, attendu 3250)
+  [ok] crédit : annulation après règlement refusée (statut 422)
+  [ok] crédit : seconde vente à crédit -> POST /ventes 201
+  [ok] crédit : annulation acceptée sur vente à crédit non réglée (statut 200)
+  [ok] crédit : la créance de la vente annulée est marquée annulée
+  [ok] crédit : retour marchandise déclaré sur la vente à crédit
+  [ok] crédit : le retour sur vente à crédit apparaît en attente
+  [ok] crédit : confirmation explicite demandée pour le remboursement espèces
+  [ok] crédit : validation du retour sur vente à crédit acceptée
+  [ok] crédit : le retour réduit la créance (encours 3250 -> 0)
+  [ok] crédit : la créance est réduite du restant dû, pas de la valeur totale (montant_retourne 3250)
+  [ok] crédit : le remboursement espèces vaut exactement l'acompte réellement payé (3250 FCFA, jamais les 6500 de la vente)
+
+Total : 63 contrôles, 0 échec(s).

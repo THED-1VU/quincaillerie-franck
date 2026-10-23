@@ -5,7 +5,7 @@ from threading import Barrier
 import psycopg
 import pytest
 
-from conftest import PG_ADMIN_DSN
+from conftest import PG_ADMIN_DSN, MOT_DE_PASSE_AGENT_STOCK, se_connecter, entete_autorisation
 
 
 def creer(connection, numero, mode="mixte", total=100,site=1):
@@ -101,3 +101,11 @@ def test_reecriture_document_interdite_aux_roles_metier(base_reinitialisee,role)
             connection.execute("SET LOCAL ROLE "+role)
             connection.execute("SELECT set_config('qf.site_id','1',TRUE)")
             connection.execute("UPDATE ventes SET total_ttc=200,sous_total_ht=200 WHERE id=%s",(ident,))
+
+
+def test_identite_session_prime_sur_utilisateur_et_site_fournis(client):
+    session=se_connecter(client,"magasin.stock",MOT_DE_PASSE_AGENT_STOCK)
+    response=client.get("/moi?utilisateur_id=1&site_id=2",headers=entete_autorisation(session["jeton"]))
+    assert response.status_code==200
+    assert response.json()["utilisateur_id"]==session["utilisateur_id"]
+    assert response.json()["site_id"]==1

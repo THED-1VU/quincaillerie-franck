@@ -1,0 +1,18 @@
+ 038     | limiteur_debit_partage                     | 2026-10-23 13:37:43.749698
+ 039     | article_offert                             | 2026-10-23 13:37:43.865802
+ 040     | plafond_vraisemblance_decide               | 2026-10-23 13:37:43.979991
+ 041     | inventaire_initial                         | 2026-10-23 13:37:44.122643
+ 042     | correction_reference_plafond_vraisemblance | 2026-10-23 13:37:44.191916
+ 044     | correctif_seuil_decimal_entree_stock       | 2026-10-23 13:37:44.25393
+ 045     | credit_client                              | 2026-10-23 13:37:44.316394
+ 046     | normalisation_noms_articles                | 2026-10-23 13:37:44.418313
+ 047     | retour_client_credit                       | 2026-10-23 13:37:44.504185
+ 048     | ecarts_prix_vendeurs                       | 2026-10-23 13:37:44.58652
+ 049     | desactivation_decimale_gardee              | 2026-10-23 13:37:44.660863
+ 050     | changement_mdp_requis                      | 2026-10-23 13:37:44.722647
+ 051     | seuil_remise_valide                        | 2026-10-23 13:37:44.782315
+ 052     | paiements_mixtes                           | 2026-10-23 13:37:44.845766
+ 053     | sessions_serveur                           | 2026-10-23 14:39:47.490901
+ 054     | integrite_paiements                        | 2026-10-23 14:39:47.627757
+(54 rows)
+

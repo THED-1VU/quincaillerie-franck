@@ -38,6 +38,8 @@ en contournant l'écriture atomique désormais obligatoire.
   enregistré, sans rejouer les versions existantes. Le niveau est figé avant
   la boucle, afin de ne pas omettre le second fichier historique 040 lors
   d'une installation vierge.
+  Un trou dans les versions antérieures provoque un refus explicite, pas
+  une reprise sur un socle incomplet.
 - Les quatre ventes payées des fixtures SQL et les amorçages des seules
   suites cablage/stock/rapports écrivent vente + paiement dans une transaction.
   Cette adaptation transversale a été annoncée dans le contrat publié et
@@ -76,6 +78,14 @@ stocks, ventes, paiements et transactions : **identiques**.
 Sur la copie restaurée, inverses 054 puis 053, upgrade PowerShell depuis 052,
 puis réapplication Bash : **codes 0**, versions 053 et 054 présentes.
 Les quatre sondes acceptées en 052 sont ensuite refusées en 054.
+
+La passe complète locale a donné 378 réussites et 10 erreurs de préparation
+`PermissionError: WinError 5` dans un ancien répertoire pytest, sans échec
+d'assertion métier. Les dix tests concernés ont ensuite été rejoués :
+**10/10 réussis** dans un répertoire neuf. Le pilote crée désormais un
+répertoire temporaire unique à chaque invocation. Ces deux passes ne sont
+pas présentées comme une passe complète unique ; la CI du HEAD de livraison
+reste requise pour l'attestation de régression complète.
 
 Commande navigateur : même pilote avec `--navigateur`. Résultats :
 comptes **26/26**, rôles **35/35**, câblage **101/101**, ventes **63/63**,

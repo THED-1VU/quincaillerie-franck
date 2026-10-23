@@ -1,0 +1,45 @@
+== Préparation de la base (jeu d'essai + comptes de test) ==
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ecarts_stock_ventes"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "jetons_revoques"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "clotures_caisse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "rapprochements_articles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "regularisations_ecarts_comptage"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "utilisateurs_roles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_casse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_retour_client"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_article_offert"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "reglements_creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ventes_paiements"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "sessions_serveur"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "journal_securite"
+Base prête.
+
+
+== 26/26 contrôles réussis ==
+  OK  magasin.stock : accès direct à comptes.html -> redirigé
+  OK  magasin.compta : accès direct à comptes.html -> redirigé
+  OK  comptes@360 : aucun débordement horizontal
+  OK  comptes@360 : cible tactile mini 48px ≥ 44px
+  OK  comptes@390 : aucun débordement horizontal
+  OK  comptes@390 : cible tactile mini 48px ≥ 44px
+  OK  comptes@768 : aucun débordement horizontal
+  OK  comptes@768 : cible tactile mini 48px ≥ 44px
+  OK  comptes@1366 : aucun débordement horizontal
+  OK  comptes@1366 : cible tactile mini 48px ≥ 44px
+  OK  comptes@1920 : aucun débordement horizontal
+  OK  comptes@1920 : cible tactile mini 48px ≥ 44px
+  OK  aucun hachage de mot de passe dans la page
+  OK  POST /admin/comptes réussi depuis l'écran
+  OK  la liste se recharge après la création
+  OK  le nouveau compte apparaît dans la liste
+  OK  POST /admin/comptes réussi pour un compte à rôles cumulés
+  OK  la liste affiche les deux rôles cumulés
+  OK  PATCH /admin/comptes/{id}/actif (désactivation) réussi
+  OK  la pastille passe à « Désactivé »
+  OK  connexion refusée pour un compte désactivé (« désactivé » affiché)
+  OK  PATCH /admin/comptes/{id}/actif (réactivation) réussi
+  OK  connexion de nouveau possible après réactivation
+  OK  PATCH /admin/comptes/{id}/mot-de-passe (réinitialisation) réussi
+  OK  l'ancien mot de passe est refusé après réinitialisation
+  OK  le nouveau mot de passe permet de se connecter

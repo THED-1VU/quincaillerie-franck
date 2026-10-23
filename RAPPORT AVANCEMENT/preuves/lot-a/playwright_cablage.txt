@@ -1,0 +1,121 @@
+== Préparation de la base (jeu d'essai + comptes de test) ==
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ecarts_stock_ventes"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "jetons_revoques"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "clotures_caisse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "rapprochements_articles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "regularisations_ecarts_comptage"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "utilisateurs_roles"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_casse"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_retour_client"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "declarations_article_offert"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "reglements_creances"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "ventes_paiements"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "sessions_serveur"
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/tests/00_jeu_essai.sql:39: NOTICE:  truncate cascades to table "journal_securite"
+Base prête.
+
+RÉUSSIS (101) :
+  [ok] connexion@360 : aucun débordement horizontal
+  [ok] connexion@360 : cible tactile mini 48px ≥ 44px
+  [ok] connexion@390 : aucun débordement horizontal
+  [ok] connexion@390 : cible tactile mini 48px ≥ 44px
+  [ok] connexion@768 : aucun débordement horizontal
+  [ok] connexion@768 : cible tactile mini 48px ≥ 44px
+  [ok] connexion@1366 : aucun débordement horizontal
+  [ok] connexion@1366 : cible tactile mini 48px ≥ 44px
+  [ok] connexion@1920 : aucun débordement horizontal
+  [ok] connexion@1920 : cible tactile mini 48px ≥ 44px
+  [ok] connexion : champs vides -> erreur explicite près du champ
+  [ok] connexion : mauvais mot de passe -> message exact du serveur, en français
+  [ok] connexion : serveur injoignable -> message français, pas une erreur brute ("Impossible de contacter le serveur. Vérifiez qu'il est démarré, puis réessayez.")
+  [ok] agent stock : connexion -> redirigé vers inventaire.html
+  [ok] agent stock : accès direct à vente.html -> reredirigé
+  [ok] agent stock : identité réelle affichée dans le bandeau
+  [ok] agent stock : /articles sans AUCUN champ de prix (trouvé : aucun)
+  [ok] agent stock : /articles renvoie au moins un article
+  [ok] agent stock : /articles limité au site 1 (Magasin de stock)
+  [ok] inventaire@1366 : aucun débordement horizontal
+  [ok] inventaire@1366 : cible tactile mini 48px ≥ 44px
+  [ok] inventaire@360 : aucun débordement horizontal
+  [ok] inventaire@360 : cible tactile mini 48px ≥ 44px
+  [ok] inventaire@390 : aucun débordement horizontal
+  [ok] inventaire@390 : cible tactile mini 48px ≥ 44px
+  [ok] inventaire@768 : aucun débordement horizontal
+  [ok] inventaire@768 : cible tactile mini 48px ≥ 44px
+  [ok] inventaire@1366 : aucun débordement horizontal
+  [ok] inventaire@1366 : cible tactile mini 48px ≥ 44px
+  [ok] inventaire@1920 : aucun débordement horizontal
+  [ok] inventaire@1920 : cible tactile mini 48px ≥ 44px
+  [ok] inventaire : aucune 'quantité attendue' dans le HTML rendu
+  [ok] inventaire : aucune 'quantité attendue' dans les 3 réponse(s) réseau observée(s)
+  [ok] inventaire : aucune 'quantité attendue' dans le code source de la page
+  [ok] agent comptabilité : connexion -> redirigé vers vente.html
+  [ok] agent comptabilité : identité réelle affichée dans le bandeau
+  [ok] agent comptabilité : /articles sans AUCUN champ de quantité (trouvé : aucun)
+  [ok] agent comptabilité : /articles contient bien le prix de vente
+  [ok] agent comptabilité : /articles sans site ni quantité (fiche commune, modèle multi-site)
+  [ok] agent comptabilité : recherche d'un article dont le stock est sur l'autre site -> résultat visible (catalogue commun)
+  [ok] agent comptabilité : recherche d'un article de son site -> trouvé
+  [ok] agent comptabilité : article réel ajouté au panier avec son vrai prix
+  [ok] vente : validation réelle, numéro de vente renvoyé par le serveur ("Vente n°3 enregistrée — 2 000 FCFA (dont TVA 323 FCFA à 19.25 %).")
+  [ok] vente : plus aucune confirmation inventée localement
+  [ok] vente@360 : aucun débordement horizontal
+  [ok] vente@360 : cible tactile mini 44px ≥ 44px
+  [ok] vente@390 : aucun débordement horizontal
+  [ok] vente@390 : cible tactile mini 44px ≥ 44px
+  [ok] vente@768 : aucun débordement horizontal
+  [ok] vente@768 : cible tactile mini 44px ≥ 44px
+  [ok] vente@1366 : aucun débordement horizontal
+  [ok] vente@1366 : cible tactile mini 44px ≥ 44px
+  [ok] vente@1920 : aucun débordement horizontal
+  [ok] vente@1920 : cible tactile mini 44px ≥ 44px
+  [ok] responsable : connexion -> redirigé vers tableau-bord.html
+  [ok] responsable : identité réelle affichée dans le bandeau
+  [ok] responsable : ventes du jour réelles -> site Magasin de stock présent
+  [ok] responsable : ventes du jour réelles -> site Comptoir présent (consolidé)
+  [ok] responsable : total consolidé correct (lu : "11 700 FCFA")
+  [ok] tableau de bord : plus aucune carte marquée « donnée simulée » (C8 câblé)
+  [ok] responsable : alerte de stock réelle -> « Article rare » présent
+  [ok] responsable : alerte de stock réelle -> ancienne donnée simulée absente
+  [ok] bascule vue : « Magasin de stock » -> Comptoir disparaît de la liste des ventes
+  [ok] bascule vue : total du site Magasin correct (lu : "8 500 FCFA")
+  [ok] bascule vue : alertes du site Magasin toujours présentes (Article rare y est)
+  [ok] bascule vue : « Comptoir » -> Magasin de stock disparaît de la liste des ventes
+  [ok] bascule vue : total du site Comptoir correct (lu : "3 200 FCFA")
+  [ok] bascule vue : alertes du site Magasin absentes en vue Comptoir (Article rare est au Magasin)
+  [ok] bascule vue : retour à « Les deux sites » -> total consolidé identique à avant le filtrage
+  [ok] responsable : saisie rapide d'une recette réellement enregistrée (POST /transactions)
+  [ok] responsable : inventaire.html réservé à l'agent stock -> redirigé
+  [ok] tableau-bord@360 : aucun débordement horizontal
+  [ok] tableau-bord@360 : cible tactile mini 48px ≥ 44px
+  [ok] tableau-bord@390 : aucun débordement horizontal
+  [ok] tableau-bord@390 : cible tactile mini 48px ≥ 44px
+  [ok] tableau-bord@768 : aucun débordement horizontal
+  [ok] tableau-bord@768 : cible tactile mini 48px ≥ 44px
+  [ok] tableau-bord@1366 : aucun débordement horizontal
+  [ok] tableau-bord@1366 : cible tactile mini 48px ≥ 44px
+  [ok] tableau-bord@1920 : aucun débordement horizontal
+  [ok] tableau-bord@1920 : cible tactile mini 48px ≥ 44px
+  [ok] sans session : vente.html -> redirigé vers connexion.html
+  [ok] sans session : tableau-bord.html -> redirigé vers connexion.html
+  [ok] sans session : inventaire.html -> redirigé vers connexion.html
+  [ok] déconnexion réelle : POST /auth/deconnexion -> 204
+  [ok] déconnexion réelle : redirigé vers connexion.html
+  [ok] déconnexion réelle : le jeton révoqué est refusé même en le rejouant (statut 401)
+  [ok] voyant sauvegarde : aucune sauvegarde -> pastille info (pas « neutre », réservée aux données simulées)
+  [ok] voyant sauvegarde : message explicite quand aucune sauvegarde n'a tourné
+  [ok] voyant sauvegarde : aucune sauvegarde -> bandeau persistant d'attention visible
+  [ok] voyant sauvegarde : bandeau « aucune sauvegarde » annoncé en role=alert
+  [ok] tableau de bord : lien « Clôture de caisse » visible dans le bandeau
+  [ok] voyant sauvegarde : SUCCES -> pastille ok
+  [ok] voyant sauvegarde : date de réussite affichée
+  [ok] voyant sauvegarde : SUCCES -> aucun bandeau d'alerte (jamais d'alerte sans motif)
+  [ok] voyant sauvegarde : ECHEC -> pastille alerte (jamais silencieux)
+  [ok] voyant sauvegarde : ÉCHEC visible avec sa date
+  [ok] voyant sauvegarde : ECHEC -> bandeau persistant nommant le motif du script
+  [ok] voyant sauvegarde : bandeau d'échec annoncé en role=alert
+  [ok] voyant sauvegarde : état illisible -> bandeau persistant (protection non confirmée)
+  [ok] voyant sauvegarde : état illisible -> pastille alerte (pas une pastille ok)
+
+Total : 101 contrôles, 0 échec(s).

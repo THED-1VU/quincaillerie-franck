@@ -1,0 +1,60 @@
+== Application des migrations sur quincaillerie_codex_a_865e2dbb7d_restauree (127.0.0.1:5549) ==
+== Terminé ==
+ version |                    nom                     |        applique_le         
+---------+--------------------------------------------+----------------------------
+ 000     | socle_migrations                           | 2026-10-23 15:04:18.409371
+ 001     | contraintes_domaine                        | 2026-10-23 15:04:18.502155
+ 002     | coherence_inter_tables                     | 2026-10-23 15:04:18.581687
+ 003     | ecart_inventaire_calcule                   | 2026-10-23 15:04:18.795723
+ 004     | audit_non_destructible                     | 2026-10-23 15:04:18.902608
+ 005     | journaux_audit                             | 2026-10-23 15:04:19.010598
+ 006     | parametres_applicatifs                     | 2026-10-23 15:04:19.101483
+ 007     | index_recherche                            | 2026-10-23 15:04:19.195469
+ 008     | roles_applicatifs                          | 2026-10-23 15:04:19.311771
+ 009     | authentification                           | 2026-10-23 15:04:19.417345
+ 010     | correction_usage_qf_app                    | 2026-10-23 15:04:19.502474
+ 011     | ventes_fiscalite_anti_survente             | 2026-10-23 15:04:19.662667
+ 012     | comptage_aveugle_colonnes                  | 2026-10-23 15:04:19.773647
+ 013     | fuseau_horaire_boutique                    | 2026-10-23 14:04:19.828576
+ 014     | articles_stock_transferts_retours          | 2026-10-23 14:04:19.887189
+ 015     | articles_autre_site                        | 2026-10-23 14:04:19.963462
+ 016     | retours_coherence_document_origine         | 2026-10-23 14:04:20.028301
+ 017     | annulation_vente_regularisation_ecart      | 2026-10-23 14:04:20.085056
+ 018     | revocation_jetons                          | 2026-10-23 14:04:20.173271
+ 019     | cloture_caisse                             | 2026-10-23 14:04:20.260815
+ 020     | facturier_vendeur                          | 2026-10-23 14:04:20.340254
+ 021     | logo_boutique                              | 2026-10-23 14:04:20.408258
+ 022     | contact_support                            | 2026-10-23 14:04:20.462815
+ 023     | premier_compte_responsable                 | 2026-10-23 14:04:20.521498
+ 024     | compte_est_actif                           | 2026-10-23 14:04:20.582485
+ 025     | rapprochements_articles                    | 2026-10-23 14:04:20.751048
+ 026     | stocks_sites                               | 2026-10-23 14:04:20.823981
+ 027     | finalise_schema_multi_site                 | 2026-10-23 14:04:20.895055
+ 028     | fonctions_stock_multi_site                 | 2026-10-23 14:04:20.993817
+ 029     | rls_grants_multi_site                      | 2026-10-23 14:04:21.064732
+ 030     | rapprochement_multi_site                   | 2026-10-23 14:04:21.170649
+ 031     | annulation_vente_multi_site                | 2026-10-23 14:04:21.377215
+ 032     | regularisation_ecart_comptage              | 2026-10-23 14:04:21.450614
+ 033     | session_reset_mot_de_passe                 | 2026-10-23 14:04:21.538927
+ 034     | quantites_decimales                        | 2026-10-23 14:04:21.621444
+ 035     | cumul_roles                                | 2026-10-23 14:04:21.902715
+ 036     | retours_enrichis                           | 2026-10-23 14:04:21.991606
+ 037     | remises                                    | 2026-10-23 14:04:22.110735
+ 038     | limiteur_debit_partage                     | 2026-10-23 14:04:22.196338
+ 039     | article_offert                             | 2026-10-23 14:04:22.277534
+ 040     | plafond_vraisemblance_decide               | 2026-10-23 14:04:22.366185
+ 041     | inventaire_initial                         | 2026-10-23 14:04:22.516072
+ 042     | correction_reference_plafond_vraisemblance | 2026-10-23 14:04:22.590667
+ 044     | correctif_seuil_decimal_entree_stock       | 2026-10-23 14:04:22.765775
+ 045     | credit_client                              | 2026-10-23 14:04:22.831096
+ 046     | normalisation_noms_articles                | 2026-10-23 14:04:22.926431
+ 047     | retour_client_credit                       | 2026-10-23 14:04:23.004391
+ 048     | ecarts_prix_vendeurs                       | 2026-10-23 14:04:23.076729
+ 049     | desactivation_decimale_gardee              | 2026-10-23 14:04:23.148538
+ 050     | changement_mdp_requis                      | 2026-10-23 14:04:23.212361
+ 051     | seuil_remise_valide                        | 2026-10-23 15:04:54.148547
+ 052     | paiements_mixtes                           | 2026-10-23 14:04:23.344793
+ 053     | sessions_serveur                           | 2026-10-23 15:04:54.803806
+ 054     | integrite_paiements                        | 2026-10-23 15:04:54.919574
+(54 rows)
+
