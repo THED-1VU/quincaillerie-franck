@@ -22,38 +22,42 @@ ouvertes (#78 → #82) + `main` à `c1784c6` (merge PR #77).
 
 ## Synthèse de pilotage
 
-40 écarts recensés, dont **13 clôturés par vérification ou livraison** (C4-01 et
+40 écarts recensés, dont **15 clôturés par vérification ou livraison** (C4-01 et
 C8-02 vérifiés au cycle 66 ; C4-02 livré au cycle 67 ; C1-04, C7-02 et C7-03
 livrés au cycle 68 ; C8-01 soldé au cycle 69 ; C0-04 reconstruit au cycle 70 ;
 C14-03 livré au cycle 72 ; **C0-01, C13-01, C13-02 et C14-01 acquittés au
-cycle 73 par l'intégration des PR #78→#89 (+ #90) dans `main`**).
-27 écarts ouverts :
+cycle 73 par l'intégration des PR #78→#89 (+ #90) dans `main`** ; **C5-01 et
+C5-02 résorbés au cycle 75 sur les décisions D9 et D4 du propriétaire**).
+25 écarts ouverts :
 
 | Gravité | Total | Détail | Actionnable par le développement |
 |---------|:-----:|--------|:--------------------------------:|
 | P0 | **0** | aucun écart d'intégrité, de comptabilité ou de sécurité | — |
-| P1 | **15** | 9 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
+| P1 | **13** | 7 BLOQUE_PROPRIETAIRE + 6 BLOQUE_TEST_HUMAIN | 0 |
 | P2 | **10** | 7 BLOQUE_PROPRIETAIRE / TEST HUMAIN | 2 |
 | P3 | **2** | 2 BLOQUE_PROPRIETAIRE (confirmations) | 0 |
-| **Total ouverts** | **27** | 16 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 4 EN_COURS/OUVERT | **2** |
+| **Total ouverts** | **25** | 14 BLOQUE_PROPRIETAIRE · 7 BLOQUE_TEST_HUMAIN · 4 EN_COURS/OUVERT | **2** |
 
-Lecture (mise à jour cycle 73) : **aucun écart d'intégrité** et **les douze
+Lecture (mise à jour cycle 75) : **aucun écart d'intégrité** et **les douze
 fusions Git sont faites** — le chemin vers 99–100 % ne passe plus que par
-deux catégories : (1) décisions du propriétaire déjà répertoriées dans
-`DECISIONS_PROPRIETAIRE.md` (D1–D12 ; D13 soldée, reste le sort de la PR #60,
-doc ancienne — « fusionner ou fermer ») ; (2) validations humaines (campagnes
+deux catégories : (1) décisions du propriétaire — D2, D4, D5, D6, D7, D8, D9,
+D10 et C12-02 validées le 2026-10-23 et en cours d'implémentation au cycle 75
+(C5-01 et C5-02 déjà résorbés) ; restent D1, D3, C6-02, C2-01, C7-01, le sort
+de la PR #60 et D11 (action propriétaire) ; (2) validations humaines (campagnes
 — fiches prêtes dans `RAPPORT AVANCEMENT/CYCLE_73_FICHES_RECETTE.md`,
 impression, 2ᵉ poste). Le développement garde **2 écarts actionnables**
 (C12-03, C11-02) — tous deux suspendus à l'installation réelle, donc
 reportables au jour J ;
 les correctifs codables mais suspendus à une décision
-(C1-01, C1-02, C2-02, C5-01, C5-02, C6-01, C6-02) démarreront dès que les
-décisions D2–D5, D9, D10 tombent.
+(C1-01, C1-02, C2-02, C6-01, C6-02) sont traités au cycle 75 pour les
+décisions validées (D2, D5, D10) et attendent D3 pour le reste.
 
 **Rattrapage d'en-têtes de score (cycle 71)** — les en-têtes de sections
 suivent désormais les scores prouvés par cycle : C4 77→**78** (cycle 67),
 C7 65→**67** (cycle 68), C8 85→**86** (cycle 69), C13 76→**77** (cycle 71,
-C13-02). Aucune de ces corrections n'est un score nouveau : ce sont des
+C13-02), C5 81→**88** (cycle 75, C5-01 et C5-02 résorbés sur décisions D9 et
+D4 — seul C5-03, test humain, reste ouvert). Aucune de ces corrections n'est un
+score nouveau : ce sont des
 reportages de preuves déjà établies.
 
 ---
@@ -281,7 +285,7 @@ reportages de preuves déjà établies.
 
 ---
 
-## C5 — Ventes et facturation (81 %)
+## C5 — Ventes et facturation (88 %)
 
 ### C5-01 — `utilisateur_caisse_id` toujours attribué au responsable
 - **Exigence source :** addendum h (caissier fusionné) + décision D9.
@@ -304,14 +308,14 @@ reportages de preuves déjà établies.
 
 ### C5-02 — Seuil de validation des remises non décidé
 - **Exigence source :** addendum f ; décision D4.
-- **État :** mécanisme livré au cycle 42, **inactif** par défaut (`a_definir`) ; en environnement de test le paramètre est même absent du seed (voir C1-04). Aucun blocage par design tant que non décidé.
-- **Preuve :** `server/app/routes/ventes.py:258-267` ; `DECISIONS_PROPRIETAIRE.md` D4 ; C1-04.
-- **Gravité / risque métier :** P1 — tant qu'il n'y a pas de seuil, une remise de 99 % reste possible sans alerte (toléré par décision, à confirmer avant GO).
-- **Correction :** décision D4 (pourcentage) → basculer le paramètre + activer le blocage/alerte décidé.
-- **Dépendances :** D4. **Responsable :** PROPRIÉTAIRE puis développement.
-- **Critère d'acceptation :** seuil en configuration, comportement (blocage ou alerte) conforme à la décision, tests.
-- **Tests requis :** pytest dédiés + Playwright remise > seuil.
-- **Statut :** BLOQUE_PROPRIETAIRE.
+- **État (avant correction) :** mécanisme livré au cycle 42, **inactif** par défaut (`a_definir`) ; en environnement de test le paramètre était même absent du seed (voir C1-04).
+- **Correction (cycle 75, décision D4 du propriétaire 2026-10-23) :** migration `051_seuil_remise_valide.sql` — paramètre `seuil_remise_validation_pct` fixé à **10**, `a_decider = FALSE` ; le blocage serveur 403 existant (ventes.py, par ligne et remise globale, condition strictement `> seuil`) devient actif sur toute la base ; seed `00_jeu_essai.sql` aligné sur l'état décidé.
+- **Preuve :** `server/tests/test_seuil_remise_d4.py` 7/7 verts (0 % agent OK ; 10 % exact agent OK, remise 650 ; 10,01 % agent **403** ; 10,01 % responsable OK, remise 650.65 ; remise globale 15 % agent 403 ; remise négative 422 ; prix > catalogue → remise 0, jamais négative) + `test_jeu_essai.py` verts + non-régression `test_ventes.py` **42/42** + Playwright `verifier-vente-reelle.mjs` **51/51** (nouveau contrôle écran : remise globale 16,1 % par un agent → **403 serveur**, motif affiché dans la zone de confirmation, **aucune vente en base**) ; migration 051 appliquée (valeur `10|f`), inverse fournie.
+- **Gravité / risque métier :** P1 — résorbée : au-delà de 10 %, seul un compte responsable peut enregistrer la vente, vérifié côté serveur (jamais un simple avertissement visuel).
+- **Dépendances :** D4 (validée 2026-10-23). **Responsable :** développement.
+- **Critère d'acceptation :** seuil en configuration, comportement conforme à la décision, tests — **atteint**.
+- **Tests requis :** pytest dédiés + Playwright remise > seuil — **livrés et verts**.
+- **Statut :** CLOS (cycle 75).
 
 ### C5-03 — Impression physique du ticket
 - **Exigence source :** parcours vente — impression à l'encaissement.
@@ -649,24 +653,26 @@ reportages de preuves déjà établies.
 | Décision | Écart(s) lié(s) | Statut |
 |----------|-----------------|--------|
 | D1 prix caissier | C3-01, C8-01 | BLOQUE_PROPRIETAIRE |
-| D2 paiements mixtes | C1-01 | BLOQUE_PROPRIETAIRE |
+| D2 paiements mixtes | C1-01 | **VALIDÉE (2026-10-23)** — implémentation cycle 75-C |
 | D3 fond caisse / seuil écart | C6-01, C5-01 (afférent) | BLOQUE_PROPRIETAIRE |
-| D4 seuil remises | C5-02 (+ C1-04 drift seed) | BLOQUE_PROPRIETAIRE |
-| D5 ventilation HT/TTC | C1-02 | BLOQUE_PROPRIETAIRE |
-| D6 durée session | — (décidée 480, confirmation rétrospective) | BLOQUE_PROPRIETAIRE |
-| D7 cumul rôles UI | C3-03 (livré cycle 43) | BLOQUE_PROPRIETAIRE (confirmation) |
-| D8 inventaire responsable | C3-02 | BLOQUE_PROPRIETAIRE |
-| D9 utilisateur_caisse_id | C5-01 | BLOQUE_PROPRIETAIRE |
-| D10 2FA | C2-02 | BLOQUE_PROPRIETAIRE |
+| D4 seuil remises | C5-02 (+ C1-04 drift seed) | **VALIDÉE (2026-10-23) — implémentée, C5-02 CLOS (cycle 75)** |
+| D5 ventilation HT/TTC | C1-02 | **VALIDÉE (2026-10-23)** — audit TTC cycle 75-G |
+| D6 durée session | — (décidée 480, confirmation rétrospective) | **VALIDÉE (2026-10-23)** — tests cycle 75-E |
+| D7 cumul rôles UI | C3-03 (livré cycle 43) | **VALIDÉE (2026-10-23)** — implémentation cycle 75-D |
+| D8 inventaire responsable | C3-02 | **VALIDÉE (2026-10-23) — comportement conforme, preuve par tests cycle 75-D** |
+| D9 utilisateur_caisse_id | C5-01 | **VALIDÉE (2026-10-23) — implémentée, C5-01 CLOS (cycle 75)** |
+| D10 2FA | C2-02 | **VALIDÉE (2026-10-23 — reportée après V1, mesures compensatoires)** — cycle 75-E |
 | D11 Kaspersky | C11-01 | BLOQUE_PROPRIETAIRE |
 | D12 tests physiques / GO | C9-01, C10-01, C12-01, C14-02 | BLOQUE_PROPRIETAIRE / TEST HUMAIN |
 | D13 fusions PR | C0-01, C13-01, C14-01 | **SOLDEE (cycle 73** — 12 fusions + #90 exécutées ; reste le sort de la PR #60, décision propriétaire**)** |
 
-**Confirmations de paramètres restantes (5 lignes `a_decider=TRUE`, base d'audit du
-2026-10-21) :** `boutique_numero_contribuable`, `boutique_telephone`,
-`seuil_alerte_plancher`, `seuil_ecart_caisse_tolere` (C6-01),
-`tentatives_max_connexion` (C2-01) — plus la confirmation écrite du
-`plafond_vraisemblance_comptage` (C7-01).
+**Confirmations de paramètres restantes (4 lignes `a_decider=TRUE`, base du
+2026-10-23 après migration 051) :** `boutique_numero_contribuable`,
+`boutique_telephone`, `seuil_alerte_plancher`, `seuil_ecart_caisse_tolere`
+(C6-01), `tentatives_max_connexion` (C2-01) — plus la confirmation écrite du
+`plafond_vraisemblance_comptage` (C7-01). *Le seuil de remises
+(`seuil_remise_validation_pct`) est sorti de cette liste au cycle 75 :
+décidé à 10 % (migration 051, décision D4).*
 
 ---
 
