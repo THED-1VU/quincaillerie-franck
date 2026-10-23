@@ -29,7 +29,6 @@ Prix du jeu d'essai (db/tests/00_jeu_essai.sql, site 1) :
 
 from __future__ import annotations
 
-from datetime import date
 from io import BytesIO
 
 import psycopg
@@ -45,7 +44,6 @@ from conftest import (
 
 _PRIX_CIMENT = 6500
 _PRIX_FER = 3500
-_JOUR = date.today().isoformat()
 
 
 def _id_utilisateur(identifiant: str) -> int:
@@ -93,6 +91,15 @@ def _mode_paiement(vente_id: int) -> str:
         return conn.execute(
             "SELECT mode_paiement FROM ventes WHERE id = %s", (vente_id,)
         ).fetchone()[0]
+
+
+def _jour_bd() -> str:
+    """Le jour tel que la BASE le voit, pas celui du poste : les transactions
+    sont datées par PostgreSQL (CURRENT_DATE). Un décalage de fuseau entre le
+    poste et la base rendait l'attendu de caisse nul sans défaut applicatif
+    (constaté le 2026-10-24 : poste déjà au 24, base Africa/Douala au 23)."""
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        return conn.execute("SELECT current_date::text").fetchone()[0]
 
 
 # ---------------------------------------------------------------------------
@@ -251,10 +258,11 @@ def test_journee_boutique_fcfa(client):
     #    especes : 13 000 (V1) + 3 000 (part mixte) + 5 850 (V4) = 21 850
     #    Orange Money : 3 500 (V3) ; V2 annulee en est sortie ; V5 credit
     #    n'y figure pas.
+    jour = _jour_bd()
     reponse = client.get(
         "/caisse/attendu",
         headers=entete_autorisation(session_resp["jeton"]),
-        params={"site_id": 1, "date_cloture": _JOUR},
+        params={"site_id": 1, "date_cloture": jour},
     )
     assert reponse.status_code == 200, reponse.text
     attendu = reponse.json()
@@ -268,7 +276,7 @@ def test_journee_boutique_fcfa(client):
     reponse = client.post(
         "/caisse",
         headers=entete_autorisation(session_resp["jeton"]),
-        json={"site_id": 1, "date_cloture": _JOUR, "espece_comptee": 21850},
+        json={"site_id": 1, "date_cloture": jour, "espece_comptee": 21850},
     )
     assert reponse.status_code == 201, reponse.text
     cloture = reponse.json()

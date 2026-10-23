@@ -12,8 +12,6 @@ sortie de l'attendu).
 
 from __future__ import annotations
 
-from datetime import date
-
 import psycopg
 from psycopg import errors as erreurs_pg
 
@@ -59,6 +57,14 @@ def _recette_journal(vente_id: int) -> list[str]:
                 (vente_id,),
             )
             return [r[0] for r in cur.fetchall()]
+
+
+def _jour_bd() -> str:
+    """Le jour tel que la BASE le voit : les transactions sont datées par
+    PostgreSQL (CURRENT_DATE). Le poste peut être sur un autre fuseau et
+    faire interroger la clôture du mauvais jour (constaté le 2026-10-24)."""
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        return conn.execute("SELECT current_date::text").fetchone()[0]
 
 
 def test_vente_mixte_composantes_separees_recette_unique(client):
@@ -198,7 +204,7 @@ def test_vente_mixte_alimente_l_attendu_caisse_par_mode(client):
     mode : calculer_attendu_caisse somme les COMPOSANTES (migration 052)."""
     session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     entete = entete_autorisation(session_resp["jeton"])
-    jour = date.today().isoformat()
+    jour = _jour_bd()
 
     def attendu():
         reponse = client.get(
@@ -235,7 +241,7 @@ def test_annulation_vente_mixte_tracee(client):
     mode) et fait sortir la vente de l'attendu (statut annulee)."""
     session_resp = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     entete = entete_autorisation(session_resp["jeton"])
-    jour = date.today().isoformat()
+    jour = _jour_bd()
 
     session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
     reponse = client.post(

@@ -7,9 +7,11 @@ les livrables exigés : tableau des écarts, correctifs, preuves
 d'exécution, fiches humaines, dépendances Codex, scores justifiés,
 décisions bloquantes.
 
-**Livraison** : PR **#103** (commit `0ad41b6`, branche `operation-100-lot-b`,
-base `2dae406`), **CI verte** run 39973236711 (pytest + playwright 13/13
-suites, mergeStateStatus CLEAN) — fusion par le propriétaire, après #100.
+**Livraison** : PR **#103** (branche `operation-100-lot-b`), validée sur la
+base `2dae406` (CI verte run 39973236711), puis **alignée sur `main`
+`d745ead` au cycle 77** (fusion `76f3d5e` ; #100/#101/#102 intégrés) et
+revalidée sur l'état combiné — voir `CYCLE_77_REVALIDATION.md` ; fusion par
+le propriétaire.
 
 **Contraintes respectées, traçables dans chaque document** : aucune
 production, aucune importation réelle, aucune exclusion antivirus ;
@@ -27,7 +29,7 @@ tests automatisés jamais confondus avec validation humaine.
 
 | Chantier | Écart | État initial (registre) | État après Lot B | Preuve |
 |---|---|---|---|---|
-| C5 | Paiements mixtes D2 | 86–88 % (écart ouvert) | CLOS (cycle 75, PR #100 en attente de fusion) | 8 tests `test_paiements_mixtes_d2.py` + campagne N3 |
+| C5 | Paiements mixtes D2 | 86–88 % (écart ouvert) | CLOS (cycle 75, fusionné via #100 → 335eb91) | 8 tests `test_paiements_mixtes_d2.py` + campagne N3 |
 | C5 | Seuil remise D4 | ouvert | CLOS (cycle 75) | `test_seuil_remise_d4.py` + campagne N4/L1/L2/L3 |
 | C5 | Encaissement attribué D9 | ouvert | CLOS (cycle 75) | `test_encaissement_d9.py` + campagne L9 |
 | C5 | Parcours complet FCFA | jamais rejoué en un seul tenant | **PROUVÉ** : journée N1–N11 + limites L1–L11 par exécution | `test_campagne_fcfa_c5.py` 2/2, LOTB_CAMPAGNE_C5_FCFA.md §5 |
@@ -88,9 +90,11 @@ Aucune migration SQL, aucun invariant, aucun fichier C1/C2/C3 modifié.
 ## 5. Dépendances avec Codex
 
 Document de coordination complet : `COORDINATION_LOT_B_CODEX.md`
-(SHA de référence `2dae406` = sommet testé, PR #100 en attente de
-fusion par le propriétaire ; migration 053+ réservée Codex ; règle
-d'isolement ; pièges partagés). Points saillants :
+(état au cycle 76 ; **actualisé au cycle 77** : `main` = `d745ead` après
+fusion de #100 → 335eb91, #101 → 75aaae0, #102 → d745ead ; migrations
+053 et 054 intégrées ; prochain numéro libre **055**, à réserver dans
+`loop-state.md` avant usage ; règle d'isolement ; pièges partagés).
+Points saillants :
 
 1. le correctif d'isolation du `verifier_tout.sh` (branche Lot B) est
    **obligatoire pour toute exécution parallèle** — sans lui, pytest et
@@ -115,10 +119,10 @@ au propriétaire. C'est la conclusion exigée par l'ordre
 
 ## 7. Décisions bloquantes pour le propriétaire
 
-1. **Fusionner la PR #100** (cycle 75, CI verte) — puis main devient le
-   SHA de référence commun ; fusionner ensuite la **PR #103**
-   (Lot B, commit `0ad41b6`, CI verte run 39973236711 :
-   pytest + playwright 13/13 suites, mergeStateStatus CLEAN).
+1. **Fusionner la PR #103** (Lot B) — #100, #101 et #102 sont déjà
+   fusionnées (`main` = `d745ead`) ; #103 a été alignée sur `main` au
+   cycle 77 et revalidée sur l'état combiné (voir
+   `CYCLE_77_REVALIDATION.md`).
 2. **Kaspersky** : exécuter la procédure S1–S6 (LOTB_C12_SAUVEGARDE.md
    §3) — restauration du script depuis le dépôt avec vérification
    d'empreinte, soumission à l'antivirus PUIS exclusion ciblée au seul
