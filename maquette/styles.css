@@ -41,7 +41,7 @@ a { color: var(--c-primaire); }
 
 /* ---- Bandeau supérieur ---- */
 .bandeau {
-  display: flex; align-items: center; gap: var(--e-3);
+  display: flex; align-items: center; gap: var(--e-3); flex-wrap: wrap;
   padding: var(--e-3) var(--e-4);
   background: var(--c-surface);
   border-bottom: 1px solid var(--c-bordure);
@@ -384,8 +384,11 @@ a { color: var(--c-primaire); }
   .actions-rapides { grid-template-columns: 1fr; }
   .aide-clavier { display: none; } /* le clavier physique n'est pas le cas d'usage mobile */
 
-  /* Bandeau : on autorise le retour à la ligne pour éviter tout débordement */
-  .bandeau { flex-wrap: wrap; padding-left: var(--e-3); padding-right: var(--e-3); }
+  /* Bandeau : le retour à la ligne est désormais autorisé À TOUTE largeur
+     (règle de base .bandeau, cycle 75-H — l'union des rôles D7 remplit le
+     bandeau au-delà de ce que 1366 px peut contenir sur une seule ligne) ;
+     ici ne restent que les resserrages propres au mobile. */
+  .bandeau { padding-left: var(--e-3); padding-right: var(--e-3); }
   .bandeau__titre { font-size: var(--t-sm); flex-basis: 100%; order: 3; }
   .bandeau__role { white-space: normal; font-size: var(--t-xs); }
 }
