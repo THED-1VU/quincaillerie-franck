@@ -487,6 +487,18 @@ for (const largeur of LARGEURS) {
       /jamais tourné|n'a encore tourné/i.test(await pastille.textContent()),
       "voyant sauvegarde : message explicite quand aucune sauvegarde n'a tourné"
     );
+    // C12-02 (cycle 75) : l'absence de sauvegarde n'est pas silencieuse —
+    // le bandeau persistant d'attention est affiché en haut du tableau.
+    const bandeauAbsent = page.locator("#bandeau-sauvegarde");
+    await bandeauAbsent.waitFor({ state: "visible", timeout: 10000 });
+    verifier(
+      (await bandeauAbsent.getAttribute("class")).includes("alerte-persistante--attention"),
+      "voyant sauvegarde : aucune sauvegarde -> bandeau persistant d'attention visible"
+    );
+    verifier(
+      await bandeauAbsent.evaluate((el) => el.getAttribute("role") === "alert"),
+      "voyant sauvegarde : bandeau « aucune sauvegarde » annoncé en role=alert"
+    );
 
     verifier(
       await page.locator('a[href="cloture-caisse.html"]').isVisible(),
@@ -519,6 +531,11 @@ for (const largeur of LARGEURS) {
       "voyant sauvegarde : SUCCES -> pastille ok"
     );
     verifier(/Réussie le/.test(await pastille.textContent()), "voyant sauvegarde : date de réussite affichée");
+    // C12-02 : seul un SUCCES DATÉ par le fichier du script masque le bandeau.
+    verifier(
+      await page.locator("#bandeau-sauvegarde").isHidden(),
+      "voyant sauvegarde : SUCCES -> aucun bandeau d'alerte (jamais d'alerte sans motif)"
+    );
     await contexte.close();
   }
 
@@ -526,6 +543,7 @@ for (const largeur of LARGEURS) {
     horodatage: new Date().toISOString(),
     resultat: "ECHEC",
     base: DB_PISTE,
+    messages: ["pg_dump a échoué : code 2"],
   }), "utf-8");
   {
     const { contexte, page } = await nouvellePage();
@@ -537,6 +555,39 @@ for (const largeur of LARGEURS) {
       "voyant sauvegarde : ECHEC -> pastille alerte (jamais silencieux)"
     );
     verifier(/ÉCHEC le/.test(await pastille.textContent()), "voyant sauvegarde : ÉCHEC visible avec sa date");
+    // C12-02 : le cœur de la décision — un échec de sauvegarde est une
+    // ALERTE VISIBLE, persistante (role=alert), reprise à chaque ouverture
+    // du tableau de bord tant que le fichier d'état dit ECHEC.
+    const bandeauEchec = page.locator("#bandeau-sauvegarde");
+    await bandeauEchec.waitFor({ state: "visible", timeout: 10000 });
+    const texteEchec = await bandeauEchec.textContent();
+    verifier(
+      /ÉCHOUÉ/.test(texteEchec) && /pg_dump a échoué/.test(texteEchec),
+      "voyant sauvegarde : ECHEC -> bandeau persistant nommant le motif du script"
+    );
+    verifier(
+      await bandeauEchec.evaluate((el) => el.getAttribute("role") === "alert"),
+      "voyant sauvegarde : bandeau d'échec annoncé en role=alert"
+    );
+    await contexte.close();
+  }
+
+  // Cas 4 (C12-02) : fichier d'état ILLISIBLE — même prudence qu'un échec
+  // avéré : jamais un succès sans preuve, jamais un silence.
+  writeFileSync(cheminParDefaut, "{pas du json", "utf-8");
+  {
+    const { contexte, page } = await nouvellePage();
+    await seConnecter(page, "resp", MDP_RESPONSABLE);
+    const bandeauInconnu = page.locator("#bandeau-sauvegarde");
+    await bandeauInconnu.waitFor({ state: "visible", timeout: 10000 });
+    verifier(
+      /ILLISIBLE/.test(await bandeauInconnu.textContent()),
+      "voyant sauvegarde : état illisible -> bandeau persistant (protection non confirmée)"
+    );
+    verifier(
+      (await page.locator("#voyant-sauvegarde .pastille").getAttribute("class")).includes("pastille--alerte"),
+      "voyant sauvegarde : état illisible -> pastille alerte (pas une pastille ok)"
+    );
     await contexte.close();
   }
 

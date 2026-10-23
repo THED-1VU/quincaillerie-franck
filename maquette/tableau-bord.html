@@ -71,6 +71,8 @@
 
     <div id="zone-erreur-ventes" class="erreur-champ" hidden></div>
 
+    <div id="bandeau-sauvegarde" class="alerte-persistante" hidden></div>
+
     <div class="tb-grille">
 
       <section class="carte">
@@ -543,17 +545,36 @@
     }
   });
 
-  // --- Dernière sauvegarde : RÉEL, via GET /exploitation/derniere-sauvegarde ---
-  // (chantier C12, cycle 26 ; expose le fichier d'état écrit par
-  // db/outils/sauvegarder.ps1 à CHAQUE tentative, succès ou échec — le
-  // point exigé explicitement : une sauvegarde qui échoue en silence est
-  // pire que pas de sauvegarde du tout.)
+  // --- Dernière sauvegarde : RÉEL, via GET /exploitation/etat-sauvegarde ---
+  // (C12-02, décision validée le 2026-10-23 : l'alerte doit être visible ET
+  // testée. L'endpoint interprété distingue succes / echec / absent /
+  // inconnu ; seul un SUCCES DATÉ par le fichier écrit par
+  // db/outils/sauvegarder.ps1 masque le bandeau — jamais un succès sans
+  // preuve. Le bandeau reste affiché tant que l'état n'est pas « succes ».)
   try {
-    const etat = await appelApi("/exploitation/derniere-sauvegarde");
+    const etat = await appelApi("/exploitation/etat-sauvegarde");
     const voyant = $("voyant-sauvegarde");
+    const bandeau = $("bandeau-sauvegarde");
     voyant.innerHTML = "";
     const pastille = document.createElement("span");
-    if (!etat.configure) {
+    bandeau.hidden = true;
+    bandeau.classList.remove("alerte-persistante--attention");
+    bandeau.removeAttribute("role");
+    const formaterDate = (valeur) => new Date(valeur).toLocaleString("fr-FR", {
+      dateStyle: "long", timeStyle: "short",
+    });
+    if (etat.etat === "succes") {
+      pastille.className = "pastille pastille--ok";
+      pastille.textContent = "Réussie le " + formaterDate(etat.horodatage);
+    } else if (etat.etat === "echec") {
+      const date = etat.horodatage ? "le " + formaterDate(etat.horodatage) : "à une date inconnue";
+      pastille.className = "pastille pastille--alerte";
+      pastille.textContent = "ÉCHEC " + date + " — voir le journal de sauvegarde sur le poste serveur.";
+      bandeau.textContent = "La dernière sauvegarde de la base a ÉCHOUÉ " + date
+        + " (motif : " + etat.motif + "). La protection des données n'est plus assurée — voyez le journal de sauvegarde sur le poste serveur.";
+      bandeau.hidden = false;
+      bandeau.setAttribute("role", "alert");
+    } else if (etat.etat === "absent") {
       // Pas "pastille--neutre" : cette classe marque historiquement les
       // cartes de DONNÉE SIMULÉE (avant le câblage réel du chantier C8) et
       // reste surveillée comme telle par verifier-cablage.mjs — cet état-ci
@@ -561,23 +582,21 @@
       // simulation.
       pastille.className = "pastille pastille--info";
       pastille.textContent = "Aucune sauvegarde n'a encore tourné sur ce poste.";
-    } else if (etat.resultat === "SUCCES") {
-      pastille.className = "pastille pastille--ok";
-      const date = new Date(etat.horodatage).toLocaleString("fr-FR", {
-        dateStyle: "long", timeStyle: "short",
-      });
-      pastille.textContent = "Réussie le " + date;
-    } else if (etat.resultat === "ECHEC") {
-      pastille.className = "pastille pastille--alerte";
-      const date = etat.horodatage
-        ? new Date(etat.horodatage).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
-        : "date inconnue";
-      pastille.textContent = "ÉCHEC le " + date + " — voir le journal de sauvegarde sur le poste serveur.";
+      bandeau.textContent = "Aucune sauvegarde n'a encore tourné sur ce poste : la base n'est pas encore protégée. Lancez db/outils/sauvegarder.ps1, puis revenez sur cet écran.";
+      bandeau.classList.add("alerte-persistante--attention");
+      bandeau.hidden = false;
+      bandeau.setAttribute("role", "alert");
     } else {
-      // Fichier d'état présent mais illisible : on ne peut pas confirmer
-      // que la protection existe, même prudence que pour un échec avéré.
+      // Fichier d'état illisible ou contenu non reconnu : on ne peut pas
+      // confirmer que la protection existe, même prudence que pour un
+      // échec avéré.
       pastille.className = "pastille pastille--alerte";
       pastille.textContent = etat.detail || "État de sauvegarde illisible.";
+      bandeau.textContent = "L'état de sauvegarde est ILLISIBLE ("
+        + (etat.detail || "fichier d'état absent ou corrompu")
+        + ") : impossible de confirmer que la base est protégée. Faites vérifier le fichier dernier_etat_sauvegarde.json sur le poste serveur.";
+      bandeau.hidden = false;
+      bandeau.setAttribute("role", "alert");
     }
     voyant.appendChild(pastille);
   } catch (erreur) {
