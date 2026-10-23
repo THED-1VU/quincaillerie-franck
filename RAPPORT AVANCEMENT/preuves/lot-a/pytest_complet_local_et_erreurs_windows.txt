@@ -1,0 +1,38 @@
+........................................................................ [ 18%]
+......................................EEEEEEEE.......................... [ 37%]
+........................................................................ [ 55%]
+...............................................EE....................... [ 74%]
+........................................................................ [ 92%]
+............................                                             [100%]
+=================================== ERRORS ====================================
+______ ERROR at setup of test_absence_de_fichier_etat_est_un_etat_nomme _______
+C:\Users\USER\AppData\Local\Programs\Python\Python313\Lib\shutil.py:631: in _rmtree_unsafe
+    os.rmdir(path)
+E   PermissionError: [WinError 5] Accès refusé: '\\\\?\\C:\\Users\\USER\\Documents\\MES DOCUMENTS\\PROFESSEIONNELS\\THED CONNECT\\QuincaillerieFranck_Test\\_worktrees\\codex-akuma-c1-c2-c3-100\\_preuves_lot_a\\pytest_tmp'
+
+During handling of the above exception, another exception occurred:
+C:\Users\USER\AppData\Local\Programs\Python\Python313\Lib\shutil.py:790: in rmtree
+    return _rmtree_unsafe(path, onexc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\USER\AppData\Local\Programs\Python\Python313\Lib\shutil.py:635: in _rmtree_unsafe
+    onexc(os.rmdir, path, err)
+E   PermissionError: [WinError 5] Accès refusé: '\\\\?\\C:\\Users\\USER\\Documents\\MES DOCUMENTS\\PROFESSEIONNELS\\THED CONNECT\\QuincaillerieFranck_Test\\_worktrees\\codex-akuma-c1-c2-c3-100\\_preuves_lot_a\\pytest_tmp'
+______ ERROR at setup of test_succes_donne_par_le_fichier_du_script_seul ______
+C:\Users\USER\AppData\Local\Programs\Python\Python313\Lib\shutil.py:631: in _rmtree_unsafe
+    os.rmdir(path)
+E   PermissionError: [WinError 5] Accès refusé: '\\\\?\\C:\\Users\\USER\\Documents\\MES DOCUMENTS\\PROFESSEIONNELS\\THED CONNECT\\QuincaillerieFranck_Test\\_worktrees\\codex-akuma-c1-c2-c3-100\\_preuves_lot_a\\pytest_tmp'
+...
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+ERROR server/tests/test_exploitation_etat.py::test_absence_de_fichier_etat_est_un_etat_nomme
+ERROR server/tests/test_exploitation_etat.py::test_succes_donne_par_le_fichier_du_script_seul
+ERROR server/tests/test_exploitation_etat.py::test_jamais_de_succes_sans_preuve_datee
+ERROR server/tests/test_exploitation_etat.py::test_echec_reprend_le_motif_consigne_par_le_script
+ERROR server/tests/test_exploitation_etat.py::test_echec_sans_message_reste_nomme
+ERROR server/tests/test_exploitation_etat.py::test_json_corrompu_est_inconnu_pas_un_succes
+ERROR server/tests/test_exploitation_etat.py::test_resultat_non_prevu_est_inconnu
+ERROR server/tests/test_exploitation_etat.py::test_l_etat_interprete_est_refuse_aux_agents
+ERROR server/tests/test_securite.py::test_config_refuse_le_compte_superutilisateur
+ERROR server/tests/test_securite.py::test_config_refuse_la_cle_secrete_exemple
+378 passed, 81 warnings, 10 errors in 940.88s (0:15:40)

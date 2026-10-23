@@ -1,0 +1,2 @@
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/_preuves_lot_a_migrations/052_initiale.sql:77: ERROR:  new row for relation "ventes_paiements" violates check constraint "ventes_paiements_montant_check"
+DETAIL:  Failing row contains (1, 1, especes, 0.00).

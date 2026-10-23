@@ -1,0 +1,17 @@
+    46 | [ok]    | qf_responsable        | créer un rôle                                                               | refusé : permission denied to create role
+    47 | [ok]    | qf_responsable        | n'est pas superutilisateur                                                  | non superutilisateur
+    48 | [ok]    | qf_agent_stock        | n'est pas superutilisateur                                                  | non superutilisateur
+    49 | [ok]    | qf_agent_comptabilite | n'est pas superutilisateur                                                  | non superutilisateur
+    50 | [ok]    | qf_app                | n'est pas superutilisateur                                                  | non superutilisateur
+    51 | [ok]    | qf_responsable        | ne peut pas créer de base ni de rôle                                        | createdb=f createrole=f
+    52 | [ok]    | qf_agent_stock        | ne peut pas créer de base ni de rôle                                        | createdb=f createrole=f
+    53 | [ok]    | qf_agent_comptabilite | ne peut pas créer de base ni de rôle                                        | createdb=f createrole=f
+    54 | [ok]    | qf_app                | ne peut pas créer de base ni de rôle                                        | createdb=f createrole=f
+    55 | [ok]    | qf_app                | NOINHERIT (doit basculer par SET ROLE)                                      | n'hérite pas
+(55 rows)
+
+
+ reussis | echecs | total
+---------+--------+-------
+      55 |      0 |    55
+(1 row)

@@ -1,0 +1,18 @@
+         0.000 |              1.000
+(1 row)
+
+COMMIT
+
+===================== BILAN =====================
+stock final                  : 0.000
+mouvements de sortie ajoutés : 1
+écarts consignés             : 1 (soit 1.000 unité(s))
+
+[ok]    les DEUX ventes réussissent (plus de blocage, addendum point e) (= oui)
+[ok]    le stock n'est jamais négatif, il tombe à 0 (= 0.000)
+[ok]    une seule marchandise réelle n'est sortie qu'une fois (1 mouvement) (= 1)
+[ok]    un seul écart consigné, pour la vente arrivée après coup (= 1)
+[ok]    l'écart consigné vaut exactement 1 unité (rien d'inventé) (= 1.000)
+[ok]    aucun message de refus : la saisie n'est jamais bloquée (= absent)
+
+Concurrence : 6/6 — aucune survente possible, aucun blocage (point e).

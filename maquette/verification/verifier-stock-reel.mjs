@@ -92,8 +92,9 @@ psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('
 
 // Une vente réelle du Magasin (site 1) portant sur « Ciment CIM II 50 kg »
 // (article 1), pour tester la déclaration de retour client contre une vente.
-psql(`INSERT INTO ventes (id, site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc, utilisateur_caisse_id, mode_paiement, date_encaissement)
-       VALUES (900, 1, 4, 'payee', 6500, 0, 0, 6500, 1, 'especes', NOW());`);
+psql(`WITH v AS (INSERT INTO ventes (id, site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc, utilisateur_caisse_id, mode_paiement, date_encaissement)
+       VALUES (900, 1, 4, 'payee', 6500, 0, 0, 6500, 1, 'especes', NOW()) RETURNING id,total_ttc)
+       INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) SELECT id,'especes',total_ttc FROM v;`);
 psql(`INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id) VALUES (900, 1, 2, 6500, 1);`);
 const VENTE_ID = "900";
 

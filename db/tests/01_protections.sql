@@ -210,9 +210,12 @@ SELECT t_succes('004 · désactivation d''article tracée (auteur + date)',
 -- ============================================================================
 -- 4. Cohérence entre tables (migration 002)
 -- ============================================================================
+BEGIN;
 INSERT INTO ventes (id, site_id, utilisateur_id, statut, sous_total_ht, taux_tva, montant_tva, total_ttc,
                     utilisateur_caisse_id, mode_paiement, date_encaissement)
 VALUES (900, 1, 4, 'payee', 6500, 0, 0, 6500, 1, 'especes', NOW());
+INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) VALUES (900,'especes',6500);
+COMMIT;
 
 SELECT t_refus('002 · vente du Magasin contenant un article du Comptoir',
   $$INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id)
@@ -897,10 +900,13 @@ SELECT t_refus('045 · annulation refusée si la créance a déjà reçu un règ
 -- pas 900 : la vente 900 a déjà été annulée directement (section 5
 -- ci-dessus, pour tester le déclencheur de changement de statut), passer
 -- par annuler_vente() dessus échouerait ("déjà annulée").
+BEGIN;
 INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
                      utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
                      total_ttc, date_encaissement, numero_facturier, vendeur_id)
 VALUES (903, 1, 4, 'payee', 'especes', 1, 6500, 0, 0, 6500, NOW(), 'MAG-9003', 1);
+INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) VALUES (903,'especes',6500);
+COMMIT;
 INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, vente_id)
 VALUES (1, 4, 'recette', 6500, 'Vente 903', 903);
 
@@ -1069,10 +1075,13 @@ SELECT t_valeur('047 · tout part réellement en espèces (l''argent avait vraim
 -- (server/app/routes/ventes.py) — exemplaire positif pour l'invariant
 -- « toute vente payée non-crédit porte exactement une recette » : sans lui,
 -- aucune fixture ne serait dans ce cas (900 et 903 sont annulées).
+BEGIN;
 INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
                      utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
                      total_ttc, date_encaissement, numero_facturier, vendeur_id)
 VALUES (904, 1, 4, 'payee', 'especes', 1, 2000, 0, 0, 2000, NOW(), 'MAG-9004', 1);
+INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) VALUES (904,'especes',2000);
+COMMIT;
 INSERT INTO transactions (site_id, utilisateur_id, type, montant, description, vente_id)
 VALUES (1, 4, 'recette', 2000, 'Vente 904', 904);
 
@@ -1208,10 +1217,13 @@ SELECT t_valeur('INV · une vente ne fait jamais sortir plus d''espèces qu''ell
 --   ligne B : 6 500 -> 5 980  (8 %)                    → non signalée
 --   ligne C : 6 500 -> 7 020  (upsell, toléré par 037) → écart négatif
 --   ligne D : sans prix_catalogue (legacy, tolérance 037) → hors rapport
+BEGIN;
 INSERT INTO ventes (id, site_id, utilisateur_id, statut, mode_paiement,
                      utilisateur_caisse_id, sous_total_ht, taux_tva, montant_tva,
                      total_ttc, date_encaissement, numero_facturier, vendeur_id)
 VALUES (905, 1, 4, 'payee', 'especes', 1, 18720, 0, 0, 18720, NOW(), 'MAG-9005', 1);
+INSERT INTO ventes_paiements(vente_id,mode_paiement,montant) VALUES (905,'especes',18720);
+COMMIT;
 INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)
 VALUES (905, 1, 1, 5720, 1, 6500, 780);
 INSERT INTO ventes_lignes (vente_id, article_id, quantite, prix_unitaire, site_id, prix_catalogue, remise_montant)

@@ -41,6 +41,9 @@ package-lock.json
 # Logo factice généré par verifier-exploitation-reel.mjs à chaque exécution.
 maquette/verification/_logo_test_c13.png
 
+# Instances PostgreSQL et preuves brutes locales du lot A (jamais livrées).
+/_preuves_lot_a*/
+
 # --- Serveur PostgreSQL portable de développement (binaires + données) ---
 # Installé par db/outils/demarrer_pg.ps1 au premier lancement. Ne se
 # télécharge et ne se recrée qu'en local : ~1 Go, aucune donnée à versionner.

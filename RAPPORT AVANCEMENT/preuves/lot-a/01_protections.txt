@@ -1,0 +1,17 @@
+   193 | [ok]    | 049 · stock réellement décimal (2,5 kg)                                                                             | accepté
+   194 | [ok]    | 049 · désactivation refusée avec un stock décimal                                                                   | refusé : Désactivation refusée : l'article 990 a déjà un stock ou un seuil décimal. Corrigez ces valeurs en entiers ava
+   195 | [ok]    | 049 · l'article est resté décimal après le refus                                                                    | true
+   196 | [ok]    | 049 · stock corrigé en entier (2 kg)                                                                                | accepté
+   197 | [ok]    | 049 · seuil décimal posé (1,5)                                                                                      | accepté
+   198 | [ok]    | 049 · désactivation encore refusée pour un seuil décimal                                                            | refusé : Désactivation refusée : l'article 990 a déjà un stock ou un seuil décimal. Corrigez ces valeurs en entiers ava
+   199 | [ok]    | 049 · seuil corrigé en entier (1)                                                                                   | accepté
+   200 | [ok]    | 049 · désactivation acceptée quand tout est entier                                                                  | accepté
+   201 | [ok]    | 049 · la fiche est bien repassée en quantités entières                                                              | false
+   202 | [ok]    | 049 · réactivation toujours possible                                                                                | accepté
+(202 rows)
+
+
+ reussis | echecs | total
+---------+--------+-------
+     202 |      0 |   202
+(1 row)

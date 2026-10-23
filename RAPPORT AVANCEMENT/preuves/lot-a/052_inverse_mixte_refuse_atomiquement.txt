@@ -1,0 +1,1 @@
+psql:C:/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_worktrees/codex-akuma-c1-c2-c3-100/db/migrations/052_paiements_mixtes_inverse.sql:18: ERROR:  check constraint "ventes_mode_paiement_check" of relation "ventes" is violated by some row

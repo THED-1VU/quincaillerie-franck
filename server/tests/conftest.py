@@ -56,7 +56,7 @@ if str(RACINE_SERVEUR) not in sys.path:
 # toucher quincaillerie_test et doit pouvoir rejouer cette suite sur
 # quincaillerie_ux. Défaut identique pour toute autre invocation.
 PG_HOST = "127.0.0.1"
-PG_PORT = 5433
+PG_PORT = int(os.environ.get("QF_TEST_PGPORT", "5433"))
 PG_TEST_DBNAME = os.environ.get("QF_TEST_DBNAME", "quincaillerie_test")
 PG_ADMIN_DSN = f"host={PG_HOST} port={PG_PORT} dbname={PG_TEST_DBNAME} user=postgres password=qf_dev_local"
 

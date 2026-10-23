@@ -1,0 +1,14 @@
+{
+  "052": {
+    "sans_composante": "ACCEPTE",
+    "mixte_un_seul_mode": "ACCEPTE",
+    "credit_avec_composante": "ACCEPTE",
+    "total_parent_seul": "ACCEPTE"
+  },
+  "054": {
+    "sans_composante": "REFUSE",
+    "mixte_un_seul_mode": "REFUSE",
+    "credit_avec_composante": "REFUSE",
+    "total_parent_seul": "REFUSE"
+  }
+}
