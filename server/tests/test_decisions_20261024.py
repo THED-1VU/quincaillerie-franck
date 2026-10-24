@@ -148,6 +148,16 @@ def test_n5_preuve_anterieure_contradictoire_ne_rajeunît_pas_un_succes_perime(m
     assert r['etat']=='perime' and r['age_secondes']==7200 and r['alerte'] is True
 
 
+def test_n5_etat_http_ne_peut_pas_etre_mis_en_cache(client,monkeypatch):
+    from app.routes import exploitation as e
+    monkeypatch.setattr(e,'_lire_etat_brut',lambda:{'configure':True,'resultat':'SUCCES',
+        'complete':True,'verifiee':True,'horodatage':datetime.now(timezone.utc).isoformat()})
+    session=se_connecter(client,'resp',MOT_DE_PASSE_RESPONSABLE)
+    r=client.get('/exploitation/etat-sauvegarde',headers=entete_autorisation(session['jeton']))
+    assert r.status_code==200 and r.json()['etat']=='succes'
+    assert r.headers['cache-control']=='no-store'
+
+
 def test_c2_cinq_echecs_et_verrou_non_prolonge_puis_expiration(client):
     for i in range(5):
         r=client.post('/auth/connexion',json={'identifiant':'magasin.stock','mot_de_passe':'faux'})

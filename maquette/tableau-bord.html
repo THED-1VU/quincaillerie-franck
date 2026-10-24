@@ -71,7 +71,7 @@
 
     <div id="zone-erreur-ventes" class="erreur-champ" hidden></div>
 
-    <div id="bandeau-sauvegarde" class="alerte-persistante" hidden></div>
+    <div id="bandeau-sauvegarde" class="alerte-persistante" role="alert">Vérification de la dernière sauvegarde : protection des données non confirmée.</div>
 
     <div class="tb-grille">
 
@@ -549,11 +549,12 @@
   let minuteurSauvegarde;
   let minuteurAgeSauvegarde;
   let generationSauvegarde = 0;
+  let limiteSauvegarde = null;
+  const messageSauvegardePerimee = "La dernière sauvegarde complète et vérifiée atteint 60 minutes : les données récentes ne sont plus protégées.";
   async function rafraichirEtatSauvegarde() {
     const generation = ++generationSauvegarde;
     const debut = performance.now();
     clearTimeout(minuteurSauvegarde);
-    clearTimeout(minuteurAgeSauvegarde);
     const bandeau = $("bandeau-sauvegarde");
     const voyant = $("voyant-sauvegarde");
     const pastille = document.createElement("span");
@@ -567,9 +568,12 @@
       pastille.textContent = message;
       pastille.className = "pastille pastille--alerte";
     };
+    if (limiteSauvegarde !== null && performance.now() >= limiteSauvegarde) alerter(messageSauvegardePerimee);
     try {
-      const etat = await appelApi("/exploitation/etat-sauvegarde");
+      const etat = await appelApi("/exploitation/etat-sauvegarde", { cache: "no-store" });
       if (generation !== generationSauvegarde) return;
+      // Une lecture en attente ne doit jamais annuler l'échéance connue.
+      clearTimeout(minuteurAgeSauvegarde);
       bandeau.hidden = false;
       bandeau.setAttribute("role", "alert");
       if (etat.etat === "succes" && etat.alerte === false) {
@@ -577,12 +581,14 @@
         bandeau.removeAttribute("role");
         pastille.className = "pastille pastille--ok";
         pastille.textContent = "Réussie le " + new Date(etat.horodatage).toLocaleString("fr-FR");
+        const delai = Math.max(0, etat.delai_alerte_secondes * 1000 - (performance.now() - debut));
+        limiteSauvegarde = performance.now() + delai;
         minuteurAgeSauvegarde = setTimeout(() => {
-          alerter("La dernière sauvegarde complète et vérifiée atteint 60 minutes : les données récentes ne sont plus protégées.");
+          alerter(messageSauvegardePerimee);
           rafraichirEtatSauvegarde();
-        }, Math.max(0, etat.delai_alerte_secondes * 1000 - (performance.now() - debut)));
+        }, delai);
       } else if (etat.etat === "perime") {
-        alerter("La dernière sauvegarde complète et vérifiée atteint 60 minutes : les données récentes ne sont plus protégées.");
+        alerter(messageSauvegardePerimee);
       } else if (etat.etat === "echec") {
         alerter("La dernière sauvegarde a ÉCHOUÉ : " + etat.motif + ". Le délai depuis la dernière sauvegarde vérifiée continue.");
         const date = etat.horodatage_tentative ? "le " + new Date(etat.horodatage_tentative).toLocaleString("fr-FR") : "à une date inconnue";
