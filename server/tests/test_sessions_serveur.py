@@ -119,6 +119,16 @@ def test_journal_roles_trace_et_non_modifiable_par_responsable(client):
                 connection.execute(statement)
 
 
+def test_jeton_refuse_si_sa_session_absente_de_la_base(client):
+    """R3 : invalidation des sessions restaurees (restaurer.ps1, etape 4)."""
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    entetes = entete_autorisation(session["jeton"])
+    assert client.get("/moi", headers=entetes).status_code == 200
+    with psycopg.connect(PG_ADMIN_DSN) as connection:
+        connection.execute("TRUNCATE TABLE sessions_serveur")
+    assert client.get("/moi", headers=entetes).status_code == 401
+
+
 def test_refus_limiteur_est_journalise(app,client):
     from app.securite import LimiteurDebit
     app.state.limiteur_connexion=LimiteurDebit(1,60)

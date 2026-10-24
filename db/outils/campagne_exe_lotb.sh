@@ -46,6 +46,21 @@ fi
 
 titre() { echo; echo "############################################################"; echo "# $*"; echo "############################################################"; }
 ETAPES_KO=0
+CONFIG_TEMP=""
+DB_CREEE=0
+
+# Installe AVANT toute creation : une sortie anticipee (preparation en echec,
+# EXE muet) doit laisser le poste propre — base jetable supprimee, config
+# temporaire effacee, Akuma arrete.
+nettoyer() {
+    taskkill //F //IM Akuma.exe >/dev/null 2>&1
+    rm -f "$CONFIG_TEMP"
+    if [ "$DB_CREEE" -eq 1 ]; then
+        "$PSQL" -d postgres -c "DROP DATABASE IF EXISTS ${BASE_EXE};" >/dev/null 2>&1
+    fi
+}
+trap nettoyer EXIT
+
 verdict() {
     if [ "$1" -eq 0 ]; then
         echo ">>> $2 : OK"
@@ -55,23 +70,38 @@ verdict() {
     fi
 }
 
+# La preparation est un prealable : poursuivre apres son premier echec
+# produirait des suites jouees sur une base incomplete, donc un verdict sans
+# valeur. On s'arrete et on rend un code non nul (revue #103, R1).
+verdict_preparation() {
+    if [ "$1" -eq 0 ]; then
+        echo ">>> $2 : OK"
+        return 0
+    fi
+    echo ">>> $2 : ÉCHEC (code $1)"
+    echo ">>> Campagne interrompue : la préparation a échoué ; aucun résultat de suite ne serait fiable."
+    ETAPES_KO=$((ETAPES_KO + 1))
+    exit 1
+}
+
 titre "1. Base jetable ${BASE_EXE} (schéma d'origine + migrations + jeu d'essai)"
 "$PSQL" -d postgres -c "DROP DATABASE IF EXISTS ${BASE_EXE};" >/dev/null 2>&1
 "$PSQL" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${BASE_EXE};"
-verdict $? "création base"
+verdict_preparation $? "création base"
+DB_CREEE=1
 "$PSQL" -d "$BASE_EXE" -v ON_ERROR_STOP=1 -q \
     -f "$RACINE/QuincaillerieFranck_Test/creation_base_donnees.sql"
-verdict $? "schéma d'origine"
+verdict_preparation $? "schéma d'origine"
 ( cd "$RACINE" && PSQL="$PSQL" PGDATABASE="$BASE_EXE" bash db/outils/migrer.sh appliquer >/dev/null )
-verdict $? "migrations"
+verdict_preparation $? "migrations"
 "$PSQL" -d "$BASE_EXE" -v ON_ERROR_STOP=1 -q -f "$RACINE/db/tests/00_jeu_essai.sql"
-verdict $? "jeu d'essai"
+verdict_preparation $? "jeu d'essai"
 "$PSQL" -d "$BASE_EXE" -v ON_ERROR_STOP=1 -q \
     -v mdp="'qf_app_dev_local'" -f "$RACINE/db/outils/definir_mot_de_passe_app.sql"
-verdict $? "mot de passe qf_app"
+verdict_preparation $? "mot de passe qf_app"
 
 titre "2. Lancement de Akuma.exe --sans-navigateur sur le port ${PORT_EXE}"
-CONFIG_TEMP="$(mktemp)"
+CONFIG_TEMP="$(mktemp)" || { echo "ERREUR : création du fichier de configuration temporaire impossible."; exit 1; }
 cat > "$CONFIG_TEMP" <<EOF
 [database]
 host = 127.0.0.1
@@ -99,39 +129,30 @@ done
 if [ "$PRET" -ne 0 ]; then
     echo ">>> Akuma.exe n'a jamais répondu sur http://127.0.0.1:${PORT_EXE}/sante"
     echo "--- journal de l'exe ---"; cat "$JOURNAL_EXE"
-    rm -f "$CONFIG_TEMP"; taskkill //F //IM Akuma.exe >/dev/null 2>&1
     exit 1
 fi
 echo ">>> Akuma.exe répond sur :${PORT_EXE}/sante"
 
-nettoyer() {
-    taskkill //F //IM Akuma.exe >/dev/null 2>&1
-    rm -f "$CONFIG_TEMP"
-    "$PSQL" -d postgres -c "DROP DATABASE IF EXISTS ${BASE_EXE};" >/dev/null 2>&1
-}
-trap nettoyer EXIT
-
 titre "3. Les 13 suites Playwright contre l'exe"
 export PGDATABASE_PISTE="$BASE_EXE"
 SERVEUR_URL="http://127.0.0.1:${PORT_EXE}"
-CODE_PW=0
 for suite in routes cablage vente stock rapports inventaire ux comptes caisse rh exploitation echappement roles; do
     ( cd "$RACINE/maquette/verification" && \
       SERVEUR_URL="$SERVEUR_URL" timeout "$DELAI_SUITE_S" npm run "$suite" )
     CODE_SUITE=$?
     if [ "$CODE_SUITE" -eq 124 ]; then
         echo ">>> suite $suite : ÉCHEC (délai de ${DELAI_SUITE_S}s dépassé)"
-        ETAPES_KO=$((ETAPES_KO + 1)); CODE_PW=1; continue
+        ETAPES_KO=$((ETAPES_KO + 1)); continue
     fi
     verdict "$CODE_SUITE" "  suite $suite"
-    [ "$CODE_SUITE" -ne 0 ] && CODE_PW=1
 done
 
 titre "BILAN"
+echo "Journal de l'exe : $JOURNAL_EXE"
 if [ "$ETAPES_KO" -eq 0 ]; then
     echo "Toutes les étapes sont passées (base ${BASE_EXE}, exe ${PORT_EXE})."
+    exit 0
 else
     echo "${ETAPES_KO} étape(s) en échec — voir le détail ci-dessus."
+    exit 1
 fi
-echo "Journal de l'exe : $JOURNAL_EXE"
-exit "$CODE_PW"

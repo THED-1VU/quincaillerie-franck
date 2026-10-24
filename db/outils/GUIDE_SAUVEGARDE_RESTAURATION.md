@@ -187,6 +187,16 @@ powershell -File db\outils\restaurer.ps1 -FichierBase "D:\Sauvegardes\quincaille
 #    (renommer/reconfigurer, jamais un simple "restaurer par-dessus")
 ```
 
+**Sessions après restauration (sécurité)** : `restaurer.ps1` supprime
+toutes les sessions présentes dans la sauvegarde (`sessions_serveur`) avant
+de déclarer la restauration réussie, et vérifie que la table est vide
+ensuite. Toute session ouverte avant le dump est donc refusée après
+restauration : les utilisateurs doivent se reconnecter. Sans cette
+invalidation, une révocation effectuée APRÈS le dump serait perdue (le dump
+contient l'état des sessions et des jetons révoqués à son instant). Le
+message « Sessions de la sauvegarde invalidees (N) : reconnexion
+obligatoire. » le confirme dans la sortie du script.
+
 **Limite honnête de ce cycle** : la preuve de restauration de ce document
 (section 6 du rapport de cycle) a été faite sur le **même serveur
 PostgreSQL** que la base source (une seconde base, `quincaillerie_..._

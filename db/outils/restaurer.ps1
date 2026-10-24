@@ -15,7 +15,10 @@
          silencieux ; -Forcer la supprime d'abord si explicitement demande).
       2. Cree NomBaseCible.
       3. Restaure le contenu (pg_restore, depuis FichierBase).
-      4. Si -FichierRoles est fourni : rejoue les CREATE ROLE (psql). Sur
+      4. Invalide TOUTES les sessions presentes dans la sauvegarde
+         (sessions_serveur) : une session revoquee apres le dump ne doit
+         jamais redevenir valide. Reconnexion obligatoire.
+      5. Si -FichierRoles est fourni : rejoue les CREATE ROLE (psql). Sur
          le MEME serveur que celui sauvegarde, les roles existent deja --
          les erreurs "already exists" qui en resultent sont attendues et
          sans consequence (le but de ce fichier est de recreer les roles
@@ -328,6 +331,46 @@ if ($null -eq $NbTablesBrut) {
 }
 $NbTablesEntier = 0
 [void][int]::TryParse($NbTables, [ref]$NbTablesEntier)
+
+# ----------------------------------------------------------------------------
+# Securite (revue #103, R3) : la sauvegarde contient sessions_serveur et
+# jetons_revoques figes a l'instant du dump. Restauree telle quelle avec la
+# meme cle de signature, une session revoquee APRES le dump redevient valide.
+# On impose donc une reconnexion generale : toutes les sessions presentes
+# dans la sauvegarde sont supprimees AVANT que la base ne soit declaree
+# restauree. Aucune migration nouvelle : sessions_serveur existe depuis 053
+# et le refus d'une session non enregistree est deja applique par
+# l'application (server/app/deps.py, contexte_session.enregistree).
+# ----------------------------------------------------------------------------
+function Lire-ValeurSql([string]$Base, [string]$Requete) {
+    $Brut = & $Psql -h $PgHost -p $PgPort -U $Utilisateur -d $Base -tAc $Requete
+    if ($null -eq $Brut) { return '' }
+    return ([string]$Brut).Trim()
+}
+
+$SessionsPresentes = Lire-ValeurSql $NomBaseCible "SELECT to_regclass('public.sessions_serveur') IS NOT NULL"
+if ($SessionsPresentes -eq 't') {
+    $NbSessionsAvant = Lire-ValeurSql $NomBaseCible "SELECT count(*) FROM sessions_serveur"
+    & $Psql -h $PgHost -p $PgPort -U $Utilisateur -d $NomBaseCible -q -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE sessions_serveur;"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Echec : impossible d'invalider les sessions restaurees (code $LASTEXITCODE)." -ForegroundColor Red
+        Nettoyer-FichiersClairs
+        exit 1
+    }
+    $NbSessionsApres = Lire-ValeurSql $NomBaseCible "SELECT count(*) FROM sessions_serveur"
+    if ($NbSessionsApres -ne '0') {
+        Write-Host "Echec : sessions encore presentes apres invalidation ($NbSessionsApres)." -ForegroundColor Red
+        Nettoyer-FichiersClairs
+        exit 1
+    }
+    Write-Host "Sessions de la sauvegarde invalidees ($NbSessionsAvant) : reconnexion obligatoire." -ForegroundColor Yellow
+} elseif ($SessionsPresentes -eq 'f') {
+    Write-Host "Aucune table sessions_serveur dans cette sauvegarde (anterieure a 053) : rien a invalider." -ForegroundColor Yellow
+} else {
+    Write-Host "Echec : impossible de verifier les sessions restaurees ($SessionsPresentes)." -ForegroundColor Red
+    Nettoyer-FichiersClairs
+    exit 1
+}
 
 # Logo de la boutique (cycle 28) : restaure APRES la base, independamment
 # de son resultat -- un logo perdu a la restauration serait une regression,

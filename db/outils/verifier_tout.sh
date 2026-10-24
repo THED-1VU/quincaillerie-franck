@@ -30,6 +30,10 @@
 #   PYTHON=... PORT_SERVEUR=8010 \
 #   bash db/outils/verifier_tout.sh
 #
+# Vérification de cible seule (aucune suite lancée, aucun fichier créé) :
+#   PGHOST=... PGPORT=... BASE_TEST=quincaillerie_... \
+#   bash db/outils/verifier_tout.sh --verifier-cible
+#
 # Sort en erreur (code 1) dès qu'une étape échoue ; le serveur temporaire et
 # le jeu d'essai sont malgré tout nettoyés (piège trap).
 # ============================================================================
@@ -70,8 +74,76 @@ export PGCLIENTENCODING="${PGCLIENTENCODING:-UTF8}"
 PYTHON="${PYTHON:-$RACINE/server/.venv/Scripts/python.exe}"
 PORT_SERVEUR="${PORT_SERVEUR:-8010}"
 SERVEUR_URL="http://127.0.0.1:${PORT_SERVEUR}"
+REPERTOIRE_TEMPORAIRE="${TEMP:-${TMPDIR:-/tmp}}"
 BASE_TEST="${BASE_TEST:-quincaillerie_test}"
 SCHEMA_ORIGINE="$RACINE/QuincaillerieFranck_Test/creation_base_donnees.sql"
+
+# ---------------------------------------------------------------------------
+# Garde-fous de cible (revue #103, R2).
+#
+# Cette suite est DESTRUCTIVE : elle recrée BASE_TEST, recharge le jeu d'essai
+# et l'étape 7 de la suite SQL supprime/recrée des rôles GLOBAUX au serveur.
+# Elle doit donc refuser toute cible qui n'est pas une base de test locale :
+#   - nom « quincaillerie_<suffixe> » (la production documentée est
+#     « quincaillerie », sans suffixe) ;
+#   - hôte loopback uniquement ;
+#   - hôte, port ET nom réellement atteints vérifiés par le serveur lui-même,
+#     pas seulement supposés depuis l'environnement.
+# ---------------------------------------------------------------------------
+valider_nom_base_test() {
+    if [[ ! "$BASE_TEST" =~ ^quincaillerie_[a-z0-9][a-z0-9_]*$ ]]; then
+        echo "ERREUR : '$BASE_TEST' n'est pas une base de test attendue" >&2
+        echo "         (nom requis : quincaillerie_<suffixe> ; la base de production 'quincaillerie' est refusée)." >&2
+        exit 1
+    fi
+}
+
+verifier_identite_cible() {
+    if [[ ! "$PGPORT" =~ ^[0-9]+$ ]] || (( PGPORT < 1 || PGPORT > 65535 )); then
+        echo "ERREUR : port PostgreSQL invalide : '$PGPORT'." >&2
+        exit 1
+    fi
+    case "$PGHOST" in
+        127.0.0.1|localhost|::1) : ;;
+        *)
+            echo "ERREUR : hôte PostgreSQL '$PGHOST' refusé : les tests destructifs" >&2
+            echo "         ne s'exécutent que sur une instance locale (loopback)." >&2
+            exit 1
+            ;;
+    esac
+
+    local identite
+    if ! identite="$("$PSQL" -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$BASE_TEST" -tAc \
+        "SELECT current_database() || '|' || COALESCE(host(inet_server_addr()), 'local') || '|' || inet_server_port();" 2>&1)"; then
+        echo "ERREUR : cible de test injoignable ($PGHOST:$PGPORT/$BASE_TEST) :" >&2
+        echo "$identite" >&2
+        exit 1
+    fi
+
+    local base_effective hote_effectif port_effectif
+    IFS='|' read -r base_effective hote_effectif port_effectif <<< "$identite"
+    if [ "$base_effective" != "$BASE_TEST" ] || [ "$port_effectif" != "$PGPORT" ]; then
+        echo "ERREUR : identité de la cible incohérente." >&2
+        echo "         demandé : $BASE_TEST sur $PGHOST:$PGPORT" >&2
+        echo "         atteint : $base_effective sur $hote_effectif:$port_effectif" >&2
+        exit 1
+    fi
+    case "$hote_effectif" in
+        127.0.0.1|::1|local) : ;;
+        *)
+            echo "ERREUR : l'instance joignable ($hote_effectif) n'est pas locale." >&2
+            exit 1
+            ;;
+    esac
+    echo ">>> cible de test vérifiée : $base_effective sur $hote_effectif:$port_effectif"
+}
+
+if [ "${1:-}" = "--verifier-cible" ]; then
+    valider_nom_base_test
+    verifier_identite_cible
+    exit 0
+fi
+valider_nom_base_test
 
 ETAPES_KO=0
 PID_SERVEUR=""
@@ -120,12 +192,19 @@ recreer_base_test() {
 
 # ---------------------------------------------------------------------------
 titre "1. Suite SQL complète (db/tests/executer_tests.sh)"
-PSQL="$PSQL" PG_DUMP="$PG_DUMP" bash "$RACINE/db/tests/executer_tests.sh"
+# BASE_TEST : executer_tests.sh retombe sinon sur son défaut quincaillerie_test
+# et recréerait une AUTRE base que celle vérifiée ici (trou d'isolation de la
+# revue #103, R2).
+BASE_TEST="$BASE_TEST" PSQL="$PSQL" PG_DUMP="$PG_DUMP" bash "$RACINE/db/tests/executer_tests.sh"
 verdict $? "suite SQL"
 
 titre "2. Reconstruction de $BASE_TEST (supprimée par l'étape 7 de la suite SQL)"
 recreer_base_test
 verdict $? "base reconstruite"
+# La base vient d'être recréée : on vérifie MAINTENANT que l'hôte, le port et
+# le nom effectivement atteints sont ceux annoncés, avant que pytest et les
+# suites Playwright ne la modifient.
+verifier_identite_cible
 
 # ---------------------------------------------------------------------------
 # Configuration éphémère commune aux étapes 3 (pytest) et 4 (uvicorn) :
@@ -163,7 +242,7 @@ CONFIG_TEMP="$(mktemp)"
 # vivent que le temps de ce process de vérification.
 cat > "$CONFIG_TEMP" <<EOF
 [database]
-host = 127.0.0.1
+host = ${PGHOST}
 port = ${PGPORT}
 dbname = ${BASE_TEST}
 user = qf_app
@@ -188,7 +267,13 @@ titre "3. Suite pytest du serveur"
 # travaillant en parallèle s'écraseraient mutuellement leurs données de
 # test (trou d'isolation trouvé par exécution le 2026-10-23, opération
 # 100 % Lot B).
-( cd "$RACINE/server" && QF_TEST_DBNAME="$BASE_TEST" QF_CONFIG="$CONFIG_TEMP" "$PYTHON" -m pytest -q --basetemp "$TEMP/verifier_tout_pytest" )
+# QF_TEST_PGPORT/QF_TEST_PGHOST (revue #103, R2) : conftest.py lit SON port
+# dans QF_TEST_PGPORT (défaut 5433), indépendamment de PGPORT. Sans ces
+# exports, un PGPORT=5558 configuré ici faisait viser 5433 aux
+# réinitialisations pytest, alors que le serveur applicatif visait 5558.
+( cd "$RACINE/server" && QF_TEST_DBNAME="$BASE_TEST" QF_TEST_PGHOST="$PGHOST" \
+    QF_TEST_PGPORT="$PGPORT" QF_CONFIG="$CONFIG_TEMP" \
+    "$PYTHON" -m pytest -q --basetemp "$REPERTOIRE_TEMPORAIRE/verifier_tout_pytest" )
 verdict $? "pytest"
 
 titre "4. Suites Playwright (serveur réel, 13 suites — SUITES_CHANTIERS.md)"
