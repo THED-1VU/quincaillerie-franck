@@ -136,6 +136,18 @@ def test_n5_date_invalide_future_ou_sans_fuseau_refusee(monkeypatch,date):
     assert e.etat_sauvegarde(session=object())['etat']!='succes'
 
 
+def test_n5_preuve_anterieure_contradictoire_ne_rajeunît_pas_un_succes_perime(monkeypatch):
+    from app.routes import exploitation as e
+    now=datetime(2026,10,24,12,tzinfo=timezone.utc)
+    monkeypatch.setattr(e,'_maintenant',lambda:now)
+    monkeypatch.setattr(e,'_lire_etat_brut',lambda:{'configure':True,'resultat':'SUCCES',
+        'complete':True,'verifiee':True,'horodatage':(now-timedelta(hours=2)).isoformat(),
+        'derniere_sauvegarde_verifiee':{'resultat':'ECHEC','complete':True,'verifiee':True,
+                                     'horodatage':now.isoformat()}})
+    r=e.etat_sauvegarde(session=object())
+    assert r['etat']=='perime' and r['age_secondes']==7200 and r['alerte'] is True
+
+
 def test_c2_cinq_echecs_et_verrou_non_prolonge_puis_expiration(client):
     for i in range(5):
         r=client.post('/auth/connexion',json={'identifiant':'magasin.stock','mot_de_passe':'faux'})
