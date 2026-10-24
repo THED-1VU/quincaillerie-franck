@@ -261,21 +261,7 @@ def enregistrer_vente(
                     f"L'employé {demande.vendeur_id} n'appartient pas au site {site_cible}.",
                 )
 
-            # Remises (addendum, point f, décision 2026-09-22) : seuil de
-            # validation responsable — 'a_definir' tant que le propriétaire
-            # n'a pas fixé de chiffre, AUCUN blocage dans ce cas (même
-            # principe que duree_session_minutes, seuil_ecart_caisse_tolere,
-            # plafond_vraisemblance_comptage).
-            cur.execute(
-                "SELECT valeur FROM parametres WHERE cle = %s", ("seuil_remise_validation_pct",)
-            )
-            ligne_seuil = cur.fetchone()
-            seuil_remise_pct = (
-                Decimal(ligne_seuil["valeur"])
-                if ligne_seuil and ligne_seuil["valeur"] != "a_definir"
-                else None
-            )
-
+            # D-N1, 24/10/2026 : seuil de 10 % sur la remise totale effective.
             # Résout prix_unitaire/prix_catalogue/remise_montant PAR LIGNE,
             # AVANT toute écriture — le prix catalogue est lu ici, jamais
             # fourni par le client (qui pourrait en inventer un pour
@@ -322,19 +308,6 @@ def enregistrer_vente(
                         % ligne.article_id,
                     )
 
-                if (
-                    seuil_remise_pct is not None
-                    and session.role != "responsable"
-                    and prix_catalogue > 0
-                    and (remise_montant / prix_catalogue) * 100 > seuil_remise_pct
-                ):
-                    raise HTTPException(
-                        status.HTTP_403_FORBIDDEN,
-                        f"Remise supérieure à {seuil_remise_pct} % sur l'article "
-                        f"{ligne.article_id} : seul un compte responsable peut "
-                        "enregistrer cette vente.",
-                    )
-
                 lignes_resolues.append({
                     "article_id": ligne.article_id, "quantite": ligne.quantite,
                     "prix_unitaire": prix_unitaire, "prix_catalogue": prix_catalogue,
@@ -370,22 +343,22 @@ def enregistrer_vente(
                     status.HTTP_422_UNPROCESSABLE_ENTITY,
                     "La remise globale ne peut pas atteindre ni dépasser le total de la vente.",
                 )
-            remise_globale_pct_reelle = (
-                (remise_globale / total_ttc_brut) * 100 if total_ttc_brut > 0 else Decimal("0")
-            )
-            if (
-                seuil_remise_pct is not None
-                and session.role != "responsable"
-                and remise_globale_pct_reelle > seuil_remise_pct
-            ):
-                raise HTTPException(
-                    status.HTTP_403_FORBIDDEN,
-                    f"Remise globale supérieure à {seuil_remise_pct} % : seul un compte "
-                    "responsable peut enregistrer cette vente.",
-                )
-
             total_ttc = total_ttc_brut - remise_globale
             remise_totale = remise_totale_lignes + remise_globale
+            # D-N1, 24/10 : toutes les remises, rapportées au catalogue
+            # pondéré par quantités. Aucune majoration ne masque une remise.
+            total_catalogue = sum((lr["prix_catalogue"] * lr["quantite"]
+                                   for lr in lignes_resolues), start=Decimal("0"))
+            if total_catalogue <= 0 and remise_totale > 0:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                    "Une remise nécessite un total catalogue positif pour contrôler son plafond.")
+            approbation_requise = remise_totale > total_catalogue * Decimal("0.10")
+            if approbation_requise and session.role != "responsable":
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "Remise effective totale supérieure à 10 % : seul un compte "
+                    "responsable peut approuver et enregistrer cette vente.",
+                )
 
             if taux_tva > 0:
                 montant_tva = (total_ttc * taux_tva / (Decimal("100") + taux_tva)).quantize(
@@ -542,6 +515,11 @@ def enregistrer_vente(
                             quantite_manquante=manquants[index],
                         )
                     )
+
+            if approbation_requise:
+                # Fonction SQL : auteur authentifié et montants relus en base.
+                # La trace et la vente font partie de la même transaction.
+                cur.execute("SELECT tracer_approbation_remise(%s)", (vente_id,))
 
             # Une recette par vente (cahier des charges §3.3) — SAUF une
             # vente à crédit (addendum point b, décidé le 2026-09-25) : elle

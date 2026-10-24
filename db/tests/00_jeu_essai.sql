@@ -83,8 +83,8 @@ INSERT INTO parametres (cle, valeur, type_valeur, description, modifiable, a_dec
  'en attente de confirmation du propriétaire.', TRUE, FALSE,
  'Défaut équipe de développement (2026-09-25), à confirmer par le propriétaire'),
 ('tentatives_max_connexion', '5', 'entier',
- 'Nombre d''échecs consécutifs avant verrouillage du compte. Valeur proposée, '
- 'à confirmer.', TRUE, TRUE, 'à confirmer par le propriétaire'),
+ 'Cinq échecs consécutifs : verrouillage temporaire de quinze minutes.',
+ TRUE, FALSE, 'C2-01 propriétaire 2026-10-24'),
 ('duree_session_minutes', '480', 'entier',
  'Durée d''inactivité au bout de laquelle la session se ferme. Décidée le '
  '2026-09-22 : 8 heures.', TRUE, FALSE, 'décision propriétaire 2026-09-22 (8 heures)'),

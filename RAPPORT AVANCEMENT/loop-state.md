@@ -5122,3 +5122,25 @@ du comptable Q1-Q6**.
     **Bloqué tant que le candidat 13 n'est pas livré** (importer dans
     l'ancien modèle doublerait le travail). (Anciennement candidat 13 du
     cycle 29.)
+
+## Décisions propriétaire du 24/10/2026 — exécution Codex
+
+Référence : instruction explicite du propriétaire du 24/10/2026. Portée et contrat : CONTRAT_DECISIONS_20261024.md. Responsable métier : propriétaire ; responsable technique : Codex, coordination Qoder pour ventes/interface/supervision.
+
+- D-N1 : plafond 10 % effectifs sur toute la vente, toutes remises confondues ; au-delà, approbation serveur du responsable et trace. VALIDÉE ; correction/tests EN_COURS.
+- D-N5 : alerte à 60 minutes depuis la dernière sauvegarde complète et vérifiée ; un essai échoué/incomplet/non vérifié ne remet pas le délai à zéro. VALIDÉE ; correction/tests EN_COURS.
+- D1 : caissier autorisé aux prix de vente TTC et montants ; achats, coûts et marges interdits, y compris indirect/API/export. Droits comptable non tranchés. VALIDÉE ; audit/tests EN_COURS.
+- C2-01 : cinq échecs consécutifs, verrouillage temporaire 15 minutes ; concurrence/comptage/contournement/DoS à vérifier. VALIDÉE ; correction/tests EN_COURS. Remplace l'ancien déverrouillage exclusivement manuel.
+- Les scores restent inchangés ; décision ≠ preuve de correction. Q1–Q6 restent au comptable.
+Réservation préalable : migration 055 réservée à Codex le 24/10/2026, branche codex/decisions-proprietaire-20261024 (verrou temporaire et audit approbations). Aucun fichier 055 créé à ce stade.
+
+
+## Livraison Codex des décisions du 24/10/2026 — PR #110
+
+- Socle d'intégration : origin/main 546fa957571b7d1c105440889376efacd442752b (#104/#105/#106 inclus). Le brouillon #107 est remplacé par #110, branches conservées ; aucune fusion GitHub.
+- D-N1, D-N5, D1 et C2-01 : VALIDÉES métier le 24/10 ; corrections techniques en revue dans #110, preuves détaillées dans RAPPORT_DECISIONS_20261024_CODEX.md et les commentaires de la PR. Aucune clôture globale ni score relevé par la décision seule.
+- Contrôles locaux : 41 pytest ciblés ; SQL protections 202/202, habilitations 55/55, concurrence 6/6 et 055 ; migration 054→055/inverse/réapplication, inverse refusée avec audit intact ; charge 20 refus concurrents et un compte distinct accepté ; responsable secondaire HTTP 201, auteur correctement tracé.
+- Dernière CI complète avant les ultimes contrôles réseau/cache : 6d0ebe4, pytest/13 suites verts. La CI du commit complet est à vérifier sur #110 ; aucun succès de ce nouveau commit n'est anticipé dans ce journal.
+- 055 demeure réservée à cette livraison, utilisée une seule fois ; aucun fichier 000–054 réécrit. Pas de nouvelle réservation ni migration concurrente.
+- D-N5 : producteur en quarantaine non exécuté et non qualifié ; alerte prudente sur son ancien format non vérifié. Droits comptable et Q1–Q6 toujours réservés. Scores de référence inchangés : C1 96 %, C2 90 %, C3 88 %.
+- Fiches historiques publiées dans #109 (CI verte), D1/C2-01 actualisées. Rejeu des trois défauts post-#103 AVANT effectué sur 546fa95 ; APRÈS et verdict en attente de la PR qoder/correctifs-post-103. Aucune branche tierce modifiée. verif-integration conservé.

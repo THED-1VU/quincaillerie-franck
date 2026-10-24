@@ -521,6 +521,8 @@ for (const largeur of LARGEURS) {
   writeFileSync(cheminParDefaut, JSON.stringify({
     horodatage: new Date().toISOString(),
     resultat: "SUCCES",
+    complete: true,
+    verifiee: true,
     base: DB_PISTE,
   }), "utf-8");
   {
