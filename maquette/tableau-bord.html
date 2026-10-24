@@ -155,7 +155,7 @@
         <h2>Dernière sauvegarde</h2>
         <div id="zone-erreur-sauvegarde" class="erreur-champ" hidden></div>
         <div id="voyant-sauvegarde">Chargement…</div>
-        <p class="champ__aide">État écrit par <code>db/outils/sauvegarder.ps1</code> à chaque tentative (succès ou échec) — chantier C12.</p>
+        <p class="champ__aide">Alerte dès 60 minutes depuis la dernière sauvegarde complète et vérifiée.</p>
       </section>
 
       <section class="carte">
@@ -545,63 +545,57 @@
     }
   });
 
-  // --- Dernière sauvegarde : RÉEL, via GET /exploitation/etat-sauvegarde ---
-  // (C12-02, décision validée le 2026-10-23 : l'alerte doit être visible ET
-  // testée. L'endpoint interprété distingue succes / echec / absent /
-  // inconnu ; seul un SUCCES DATÉ par le fichier écrit par
-  // db/outils/sauvegarder.ps1 masque le bandeau — jamais un succès sans
-  // preuve. Le bandeau reste affiché tant que l'état n'est pas « succes ».)
-  try {
-    const etat = await appelApi("/exploitation/etat-sauvegarde");
-    const voyant = $("voyant-sauvegarde");
+  // D-N5 : fraîcheur décidée par le serveur ; surveillance continue du bandeau.
+  let minuteurSauvegarde;
+  let minuteurAgeSauvegarde;
+  let generationSauvegarde = 0;
+  async function rafraichirEtatSauvegarde() {
+    const generation = ++generationSauvegarde;
+    const debut = performance.now();
+    clearTimeout(minuteurSauvegarde);
+    clearTimeout(minuteurAgeSauvegarde);
     const bandeau = $("bandeau-sauvegarde");
-    voyant.innerHTML = "";
-    const pastille = document.createElement("span");
-    bandeau.hidden = true;
-    bandeau.classList.remove("alerte-persistante--attention");
-    bandeau.removeAttribute("role");
-    const formaterDate = (valeur) => new Date(valeur).toLocaleString("fr-FR", {
-      dateStyle: "long", timeStyle: "short",
-    });
-    if (etat.etat === "succes") {
-      pastille.className = "pastille pastille--ok";
-      pastille.textContent = "Réussie le " + formaterDate(etat.horodatage);
-    } else if (etat.etat === "echec") {
-      const date = etat.horodatage ? "le " + formaterDate(etat.horodatage) : "à une date inconnue";
-      pastille.className = "pastille pastille--alerte";
-      pastille.textContent = "ÉCHEC " + date + " — voir le journal de sauvegarde sur le poste serveur.";
-      bandeau.textContent = "La dernière sauvegarde de la base a ÉCHOUÉ " + date
-        + " (motif : " + etat.motif + "). La protection des données n'est plus assurée — voyez le journal de sauvegarde sur le poste serveur.";
+    const voyant = $("voyant-sauvegarde");
+    const alerter = (message) => {
+      bandeau.textContent = message;
       bandeau.hidden = false;
       bandeau.setAttribute("role", "alert");
-    } else if (etat.etat === "absent") {
-      // Pas "pastille--neutre" : cette classe marque historiquement les
-      // cartes de DONNÉE SIMULÉE (avant le câblage réel du chantier C8) et
-      // reste surveillée comme telle par verifier-cablage.mjs — cet état-ci
-      // est réel (aucune sauvegarde n'a simplement encore eu lieu), pas une
-      // simulation.
-      pastille.className = "pastille pastille--info";
-      pastille.textContent = "Aucune sauvegarde n'a encore tourné sur ce poste.";
-      bandeau.textContent = "Aucune sauvegarde n'a encore tourné sur ce poste : la base n'est pas encore protégée. Lancez db/outils/sauvegarder.ps1, puis revenez sur cet écran.";
-      bandeau.classList.add("alerte-persistante--attention");
+      voyant.textContent = message;
+    };
+    try {
+      const etat = await appelApi("/exploitation/etat-sauvegarde");
+      if (generation !== generationSauvegarde) return;
       bandeau.hidden = false;
       bandeau.setAttribute("role", "alert");
-    } else {
-      // Fichier d'état illisible ou contenu non reconnu : on ne peut pas
-      // confirmer que la protection existe, même prudence que pour un
-      // échec avéré.
-      pastille.className = "pastille pastille--alerte";
-      pastille.textContent = etat.detail || "État de sauvegarde illisible.";
-      bandeau.textContent = "L'état de sauvegarde est ILLISIBLE ("
-        + (etat.detail || "fichier d'état absent ou corrompu")
-        + ") : impossible de confirmer que la base est protégée. Faites vérifier le fichier dernier_etat_sauvegarde.json sur le poste serveur.";
-      bandeau.hidden = false;
-      bandeau.setAttribute("role", "alert");
+      if (etat.etat === "succes" && etat.alerte === false) {
+        bandeau.hidden = true;
+        bandeau.removeAttribute("role");
+        voyant.textContent = "Réussie le " + new Date(etat.horodatage).toLocaleString("fr-FR");
+        minuteurAgeSauvegarde = setTimeout(() => {
+          alerter("La dernière sauvegarde complète et vérifiée atteint 60 minutes : les données récentes ne sont plus protégées.");
+          rafraichirEtatSauvegarde();
+        }, Math.max(0, etat.delai_alerte_secondes * 1000 - (performance.now() - debut)));
+      } else if (etat.etat === "perime") {
+        alerter("La dernière sauvegarde complète et vérifiée atteint 60 minutes : les données récentes ne sont plus protégées.");
+      } else if (etat.etat === "echec") {
+        alerter("La dernière sauvegarde a ÉCHOUÉ : " + etat.motif + ". Le délai depuis la dernière sauvegarde vérifiée continue.");
+      } else if (etat.etat === "absent") {
+        alerter("Aucune sauvegarde n'a encore tourné sur ce poste. Faites vérifier la protection des données.");
+      } else {
+        alerter("L'état de sauvegarde est ILLISIBLE ou non vérifié : " + (etat.detail || "preuve absente"));
+      }
+    } catch (erreur) {
+      if (generation !== generationSauvegarde) return;
+      alerter("Impossible de vérifier la sauvegarde : la protection des données n'est pas confirmée.");
+      afficherErreurServeur("zone-erreur-sauvegarde", erreur);
+    } finally {
+      if (generation === generationSauvegarde) minuteurSauvegarde = setTimeout(rafraichirEtatSauvegarde, 30000);
     }
-    voyant.appendChild(pastille);
-  } catch (erreur) {
-    afficherErreurServeur("zone-erreur-sauvegarde", erreur);
   }
+  await rafraichirEtatSauvegarde();
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) rafraichirEtatSauvegarde();
+  });
 
   // --- Logo de la boutique : RÉEL, via POST/GET/DELETE /configuration/logo
   // (cycle 28) — distinct du logo Akuma (marque de l'éditeur, fichier
