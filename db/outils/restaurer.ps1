@@ -237,24 +237,40 @@ $env:PGPASSWORD = $env:PGPASSWORD  # transmis tel quel si deja positionne par l'
 
 # Dechiffrement AVANT tout usage -- les variables sont reaffectees au
 # chemin CLAIR (ou inchangees si le fichier n'etait pas chiffre, voir
-# Dechiffrer-Fichier). Fichiers clairs temporaires supprimes en fin de
-# script (voir la fin du fichier) : jamais laisses sur le disque au-dela
-# de cette restauration.
+# Dechiffrer-Fichier). Fichiers clairs temporaires supprimes sur TOUT
+# chemin de sortie -- fin de script, echec de restauration, mais AUSSI
+# chaque refus ou echec de dechiffrement (trou trouve par execution le
+# 2026-10-23, operation 100 % Lot B : le refus "base cible existe deja
+# sans -Forcer" survenait APRES le dechiffrement et laissait le dump
+# CLAIR derriere lui, contredisant l'invariant ci-dessous).
 $FichiersClairsTemporaires = @()
 
-$AvantBase = $FichierBase
-$FichierBase = Dechiffrer-Fichier $FichierBase $PhraseChiffrement
-if ($FichierBase -ne $AvantBase) { $FichiersClairsTemporaires += $FichierBase }
-
-if ($FichierRoles) {
-    $AvantRoles = $FichierRoles
-    $FichierRoles = Dechiffrer-Fichier $FichierRoles $PhraseChiffrement
-    if ($FichierRoles -ne $AvantRoles) { $FichiersClairsTemporaires += $FichierRoles }
+function Nettoyer-FichiersClairs {
+    foreach ($f in $FichiersClairsTemporaires) {
+        Remove-Item -Path $f -Force -ErrorAction SilentlyContinue
+    }
 }
-if ($FichierLogo) {
-    $AvantLogo = $FichierLogo
-    $FichierLogo = Dechiffrer-Fichier $FichierLogo $PhraseChiffrement
-    if ($FichierLogo -ne $AvantLogo) { $FichiersClairsTemporaires += $FichierLogo }
+
+try {
+    $AvantBase = $FichierBase
+    $FichierBase = Dechiffrer-Fichier $FichierBase $PhraseChiffrement
+    if ($FichierBase -ne $AvantBase) { $FichiersClairsTemporaires += $FichierBase }
+
+    if ($FichierRoles) {
+        $AvantRoles = $FichierRoles
+        $FichierRoles = Dechiffrer-Fichier $FichierRoles $PhraseChiffrement
+        if ($FichierRoles -ne $AvantRoles) { $FichiersClairsTemporaires += $FichierRoles }
+    }
+    if ($FichierLogo) {
+        $AvantLogo = $FichierLogo
+        $FichierLogo = Dechiffrer-Fichier $FichierLogo $PhraseChiffrement
+        if ($FichierLogo -ne $AvantLogo) { $FichiersClairsTemporaires += $FichierLogo }
+    }
+} catch {
+    # Un echec de dechiffrement (phrase incorrecte, empreinte corrompue,
+    # troncature) ne doit laisser AUCUN clair deja produit derriere lui.
+    Nettoyer-FichiersClairs
+    throw
 }
 
 $BaseExisteBrut = & $Psql -h $PgHost -p $PgPort -U $Utilisateur -d postgres -tAc `
@@ -271,6 +287,7 @@ if ($null -eq $BaseExisteBrut) {
 }
 if ($BaseExisteTexte -eq '1') {
     if (-not $Forcer) {
+        Nettoyer-FichiersClairs
         throw "La base '$NomBaseCible' existe deja. Relancez avec -Forcer pour la remplacer, ou choisissez un autre nom -- ce script ne restaure JAMAIS par-dessus une base existante sans confirmation explicite."
     }
     Write-Host "La base '$NomBaseCible' existe deja -- suppression (Forcer demande) ..." -ForegroundColor Yellow
@@ -281,18 +298,11 @@ if ($BaseExisteTexte -eq '1') {
 
 if ($FichierRoles) {
     if (-not (Test-Path $FichierRoles)) {
+        Nettoyer-FichiersClairs
         throw "Fichier de roles introuvable : $FichierRoles"
     }
     Write-Host "Rejeu des roles applicatifs (les erreurs 'already exists' sont attendues sur le serveur d'origine) ..."
     & $Psql -h $PgHost -p $PgPort -U $Utilisateur -d postgres -f $FichierRoles
-}
-
-# Fichiers clairs temporaires (issus du dechiffrement) : jamais laisses sur
-# le disque au-dela de cette restauration, quelle que soit l'issue.
-function Nettoyer-FichiersClairs {
-    foreach ($f in $FichiersClairsTemporaires) {
-        Remove-Item -Path $f -Force -ErrorAction SilentlyContinue
-    }
 }
 
 Write-Host "Creation de la base '$NomBaseCible' ..."

@@ -87,6 +87,7 @@ nettoyer() {
         kill "$PID_SERVEUR" 2>/dev/null
         wait "$PID_SERVEUR" 2>/dev/null
     fi
+    [ -n "${CONFIG_TEMP:-}" ] && rm -f "$CONFIG_TEMP"
 }
 trap nettoyer EXIT
 
@@ -105,7 +106,14 @@ recreer_base_test() {
     # échouent en cascade juste après (authentification refusée), pour une
     # raison invisible dans leurs propres messages d'erreur. Le mot de
     # passe est relu dans config.ini plutôt que dupliqué en dur ici.
-    MOT_DE_PASSE_QF_APP="$(sed -n 's/^password *= *//p' "$RACINE/server/config.ini" | head -1)"
+    # config.ini est gitignoré : s'il est absent du checkout (worktree
+    # propre), repli sur la valeur de développement par défaut (celle des
+    # tests conftest/CI) plutôt qu'un mot de passe VIDE (trou trouvé le
+    # 2026-10-23, opération 100 % Lot B).
+    MOT_DE_PASSE_QF_APP="$(sed -n 's/^password *= *//p' "$RACINE/server/config.ini" 2>/dev/null | head -1)"
+    if [ -z "$MOT_DE_PASSE_QF_APP" ]; then
+        MOT_DE_PASSE_QF_APP="qf_app_dev_local"
+    fi
     "$PSQL" -d postgres -q -c "ALTER ROLE qf_app WITH PASSWORD '${MOT_DE_PASSE_QF_APP}';" >/dev/null
     "$PSQL" -d "$BASE_TEST" -q -v ON_ERROR_STOP=1 -f "$RACINE/db/tests/00_jeu_essai.sql" >/dev/null
 }
@@ -119,6 +127,54 @@ titre "2. Reconstruction de $BASE_TEST (supprimée par l'étape 7 de la suite SQ
 recreer_base_test
 verdict $? "base reconstruite"
 
+# ---------------------------------------------------------------------------
+# Configuration éphémère commune aux étapes 3 (pytest) et 4 (uvicorn) :
+# UNIQUEMENT pour ce process de vérification — jamais le vrai config.ini,
+# jamais commitée.
+#
+# config.ini de dev limite à 10 connexions/minute (protection anti-force
+# brute, voir securite.py) — bien trop bas pour enchaîner 13 suites qui se
+# reconnectent chacune plusieurs fois en quelques minutes (trouvé en
+# écrivant ce script : les suites 2 et suivantes échouaient toutes avec
+# une session nulle, silencieusement rejetées par le serveur). La limite
+# est relevée au même niveau que les tests pytest (conftest.py : 1000/min).
+#
+# dbname : le serveur doit viser BASE_TEST, pas la base écrite en dur
+# dans config.ini — même trou d'isolation que QF_TEST_DBNAME ci-dessous
+# (2026-10-23, opération 100 % Lot B). Le vrai config.ini peut même être
+# absent du checkout (gitignoré) : le modèle est reconstruit depuis les
+# valeurs par défaut du script, pas copié.
+#
+# QF_CONFIG sert AUSSI à pytest : importer app.main exécute
+# `app = creer_application()` AU NIVEAU DU MODULE (app/main.py, gestion du
+# point d'entrée uvicorn), qui appelle charger_config() — dans un worktree
+# propre sans config.ini (gitignoré), l'import échoue et TOUT test utilisant
+# la fixture `app` sort en ERROR. Trouvé par exécution le 2026-10-23
+# (opération 100 % Lot B) : 55 passed / 314 errors, dont 313 ne sont que la
+# cascade interne de pytest (AssertionError dans fixtures.py) après la
+# première ErreurConfiguration — le mur d'erreurs n'a qu'une seule cause.
+MOT_DE_PASSE_QF_APP="${MOT_DE_PASSE_QF_APP:-qf_app_dev_local}"
+if [ -f "$RACINE/server/config.ini" ]; then
+    MOT_DE_PASSE_QF_APP="$(sed -n 's/^password *= *//p' "$RACINE/server/config.ini" | head -1)"
+fi
+CONFIG_TEMP="$(mktemp)"
+# secret_key factice de test, celle-là même que la CI écrit dans son
+# config.ini éphémère (voir .github/workflows/ci.yml) — les jetons ne
+# vivent que le temps de ce process de vérification.
+cat > "$CONFIG_TEMP" <<EOF
+[database]
+host = 127.0.0.1
+port = ${PGPORT}
+dbname = ${BASE_TEST}
+user = qf_app
+password = ${MOT_DE_PASSE_QF_APP}
+
+[api]
+secret_key = ${SECRET_KEY_TEST:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+duree_session_minutes = 480
+tentatives_max_par_minute = 1000
+EOF
+
 titre "3. Suite pytest du serveur"
 # --basetemp : le dossier par défaut %TEMP%\pytest-of-USER\pytest-current
 # contient un symlink résiduel inaccessibles sans élévation (constat du
@@ -126,22 +182,19 @@ titre "3. Suite pytest du serveur"
 # nettoyage de fin de session avec PermissionError et rend un code 1 alors
 # que les tests passent. Le basetemp dédié contourne ce défaut d'environnement,
 # comme chaque cycle le fait depuis le cycle 57.
-( cd "$RACINE/server" && "$PYTHON" -m pytest -q --basetemp "$TEMP/verifier_tout_pytest" )
+# QF_TEST_DBNAME : conftest.py lit cette variable pour choisir SA base
+# (défaut quincaillerie_test) — sans cet export, l'étape pytest viserait
+# la base par défaut même quand BASE_TEST est surchargé, et deux agents
+# travaillant en parallèle s'écraseraient mutuellement leurs données de
+# test (trou d'isolation trouvé par exécution le 2026-10-23, opération
+# 100 % Lot B).
+( cd "$RACINE/server" && QF_TEST_DBNAME="$BASE_TEST" QF_CONFIG="$CONFIG_TEMP" "$PYTHON" -m pytest -q --basetemp "$TEMP/verifier_tout_pytest" )
 verdict $? "pytest"
 
 titre "4. Suites Playwright (serveur réel, 13 suites — SUITES_CHANTIERS.md)"
-# config.ini de dev limite à 10 connexions/minute (protection anti-force
-# brute, voir securite.py) — bien trop bas pour enchaîner 13 suites qui se
-# reconnectent chacune plusieurs fois en quelques minutes (trouvé en
-# écrivant ce script : les suites 2 et suivantes échouaient toutes avec
-# une session nulle, silencieusement rejetées par le serveur). Une copie
-# temporaire de config.ini, UNIQUEMENT pour ce process de vérification
-# (jamais le vrai config.ini, jamais commitée), relève cette limite au
-# même niveau que les tests pytest (conftest.py : 1000/min).
-CONFIG_TEMP="$(mktemp)"
-sed 's/^tentatives_max_par_minute *=.*/tentatives_max_par_minute = 1000/' \
-    "$RACINE/server/config.ini" > "$CONFIG_TEMP"
-
+titre "4. Suites Playwright (serveur réel, 13 suites — SUITES_CHANTIERS.md)"
+# Le serveur temporaire reçoit la configuration éphémère commune créée
+# avant l'étape 3 (base BASE_TEST, limite de débit relevée à 1000/min).
 ( cd "$RACINE/server" && QF_CONFIG="$CONFIG_TEMP" "$PYTHON" -m uvicorn app.main:app --app-dir . --port "$PORT_SERVEUR" \
     > "$RACINE/db/outils/.verifier_tout_uvicorn.log" 2>&1 ) &
 PID_SERVEUR=$!
