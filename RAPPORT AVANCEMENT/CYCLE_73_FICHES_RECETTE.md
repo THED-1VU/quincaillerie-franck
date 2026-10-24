@@ -6,10 +6,14 @@ utilisable** : scénario, résultats attendus, cases de validation, preuves à
 collecter, critères GO/NO-GO. Aucune campagne n'est lancée par le
 développement : chaque fiche attend le feu vert du propriétaire.
 
-**Version à recetter :** `main` = `d0fa264` (cycles 61-72 fusionnés) — la
-première version candidate complète. **Avant chaque campagne :** rejouer
-`bash db/outils/verifier_tout.sh` (13/13 suites, EXIT=0) — preuve fraîche
-produite au cycle 73.
+**Version à recetter :** `main` = `d745ead` (mise à jour du 2026-10-23 par le
+contre-audit indépendant : cycle 75 et lots Codex C1/C2/C3 fusionnés, donc
+décisions D2, D4, D6, D7, D9 et C12-02 incluses — la version `d0fa264`
+citée à l'origine de cette fiche ne les contenait pas). **Avant chaque
+campagne :** rejouer la régression automatisée (`bash db/outils/verifier_tout.sh`
+ou, séparément, `pytest server/tests` puis les 13 suites Playwright) — dernière
+preuve : contre-audit du 2026-10-23 sur `d745ead`, 394 pytest et 13/13
+suites, voir `AUDIT_INDEPENDANT_d745ead.md`.
 
 **Comptes du jeu d'essai** (`db/tests/00_jeu_essai.sql`) : `resp`
 (responsable), `magasin.stock` / `comptoir.stock` (agent_stock, sites 1/2),
@@ -47,6 +51,15 @@ retours, captures d'écran possibles.
 | 10 | Rapports : export ventes du jour | montants = ventes saisies en 2-3 | ☐ | |
 | 11 | RH : déclaration d'un employé | déclaration enregistrée, visible dans la liste | ☐ | |
 | 12 | Essayer d'accéder à un écran hors rôle (agent → comptes) | accès refusé avec message clair, pas d'écran d'erreur brut | ☐ | |
+| 13 | Vente mixte (D2) — comptoir.compta : 1 article à 6 500 FCFA réglé 4 000 espèces + 2 500 Mobile Money | vente acceptée ; reçu PDF « Mode de paiement : mixte » avec la décomposition ; UNE seule recette de 6 500 ; une décomposition qui ne totalise pas 6 500 est refusée | ☐ | |
+| 14 | Clôture de caisse du jour après la vente 13 | attendu espèces +4 000 et attendu Mobile Money +2 500 (ventilation par mode) | ☐ | |
+| 15 | Remise (D4) — comptoir.compta : une ligne à −10 % puis une ligne à −11 % | −10 % accepté ; −11 % refusé avec le message « seul un compte responsable peut enregistrer cette vente » ; `resp` peut enregistrer −11 % | ☐ | |
+| 16 | Remises CUMULÉES (D4) — comptoir.compta : remise de ligne −10 % ET remise globale −10 % sur la même vente | **à consigner tel quel et à faire trancher** : au 2026-10-23 la vente est acceptée (≈ −19 % cumulés sans validation du responsable) — voir « Défauts nouveaux » dans `AUDIT_INDEPENDANT_d745ead.md` ; le propriétaire dit si le seuil de 10 % s'applique au cumul | ☐ | |
+| 17 | Session (D6) — se connecter, noter l'heure, se déconnecter, tenter de rouvrir une page protégée | retour à l'écran de connexion ; l'ancienne session ne revit pas. L'expiration à 480 minutes n'est PAS rejouable en séance : elle est prouvée par des contrôles automatiques (jeton à 481 min refusé, session échue refusée) | ☐ | |
+| 18 | Compte cumulé (D7) — compte stock+comptabilité créé par `resp` | le bandeau de chaque page liste TOUS les écrans des deux rôles (vente, clients, inventaire, stock, rapports) ; comptes, RH, clôture et tableau de bord restent refusés | ☐ | |
+| 19 | Alerte de sauvegarde (C12-02) — tableau de bord de `resp`, aucune sauvegarde encore tournée sur le poste | bandeau d'alerte visible « Aucune sauvegarde n'a encore tourné… » ; jamais un voyant vert sans sauvegarde datée | ☐ | |
+| 20 | Deux postes en même temps (C10-02, volet applicatif) — deux navigateurs ouvrent chacun une vente du MÊME article au même instant | les deux ventes sont enregistrées, aucun message d'erreur, le stock baisse de 2. (Épreuve à DEUX postes physiques : fiche R4/R3, hors de cette fiche.) | ☐ | |
+| 21 | Encaisseur (D9) | **non vérifiable à l'écran** : aucun écran ni rapport n'affiche aujourd'hui qui a encaissé. La preuve est faite par requête de lecture sur `ventes.utilisateur_caisse_id` (développeur) — à noter au PV ; si le propriétaire veut le voir à l'écran, c'est une demande d'évolution, non un défaut | ☐ | |
 
 **Preuves à collecter :** ce tableau rempli + captures des anomalies + réponses
 écrites aux 5 questions « VOS RETOURS » + date/version testée.
@@ -80,7 +93,7 @@ pour le PV humain.
 | 6 | Écran rapports | exports | ✔ (stock + écarts + ventes + caisse) | ✖ refusé | ✔ (ventes, sans prix d'achat) |
 | 7 | Prix d'achat visible | confidentialité | ✔ | jamais | jamais (écran comme réseau) |
 | 8 | API directe (requête hors écran, si testeur technique) | garde côté serveur | — | 403 hors périmètre | 403 hors périmètre |
-| 9 | Compte cumulé stock+comptabilité (créé par resp) | UI = rôle principal, API = tous rôles (comportement D7 option 1) | — | — | — |
+| 9 | Compte cumulé stock+comptabilité (créé par resp) | UI = UNION des rôles, API = tous rôles (D7 option 2, validée le 2026-10-23 : le bandeau liste tous les écrans autorisés par l'ensemble des rôles ; comptes, RH, clôture et tableau de bord restent refusés) | — | ✔ union | ✔ union |
 
 **Preuves à collecter :** captures par rôle (comparables à
 `maquette/captures/roles/`), tableau ci-dessus rempli et daté, version testée.
@@ -175,13 +188,13 @@ GO/NO-GO — la dernière pièce du dossier de mise en production.
 
 **Pré-requis (tout doit être VERT avant d'ouvrir cette fiche) :**
 
-- [ ] Régression automatisée fraîche : `verifier_tout.sh` 13/13, EXIT=0 (fait au cycle 73 sur `main` = `d0fa264`)
+- [ ] Régression automatisée fraîche sur la version testée : pytest + 13 suites Playwright (dernière preuve : contre-audit du 2026-10-23 sur `main` = `d745ead`, 394 pytest, 13/13 suites)
 - [ ] Fiche R1 (campagne UX n°2) : GO
 - [ ] Fiche R2 (3 rôles) : GO
 - [ ] Fiche R3 (restauration 2ᵉ PC) : GO
 - [ ] Fiche R4 (installation) : GO
-- [ ] Décisions **bloquantes GO** tranchées : D1 (prix caissier), D2 (paiements mixtes), D4 (seuil remises), D5 (HT/TTC), D11 (Kaspersky) — D3, D9 suivent le même calendrier si le propriétaire les juge bloquantes
-- [ ] Confirmations paramètres (C2-01 : 5 lignes `a_decider`) faites
+- [ ] Décisions **bloquantes GO** : D2 (paiements mixtes, option 2), D4 (remises ≤ 10 % / validation du responsable au-delà), D5 (TTC conservé), D6, D7, D8, D9, D10 sont **validées le 2026-10-23** (voir `DECISIONS_PROPRIETAIRE.md`) ; restent à trancher : D1 (prix caissier), D3 (fond de caisse / seuil d'écart), D11 (Kaspersky) — et, pour D5, les réponses du comptable Q1-Q6 avant tout import réel ; pour D4, la question du cumul remise de ligne + remise globale (fiche R1 ligne 16)
+- [ ] Confirmations paramètres faites : les 6 lignes `a_decider` (`boutique_numero_contribuable`, `boutique_telephone`, `contact_support_technique`, `seuil_alerte_plancher`, `seuil_ecart_caisse_tolere`, `tentatives_max_connexion`) + la confirmation écrite du `plafond_vraisemblance_comptage` (C7-01)
 - [ ] Décision sur la PR #60 consignée (« fusionner ou fermer »)
 
 **Contenu du PV (à remplir pendant la séance de validation) :**
@@ -190,8 +203,11 @@ GO/NO-GO — la dernière pièce du dossier de mise en production.
 2. Résultats des fiches R1-R4 (tableaux signés, anomalies relevées et leur sort :
    corrigé / accepté / reporté avec cycle dédié).
 3. Risques résiduels acceptés par le propriétaire (liste écrite — ex. :
-   alerte échec de sauvegarde limitée au journal local C12-02, 2FA reportée
-   D10, paiements mixtes reportés D2 si option 1).
+   2FA reportée après la V1 avec mesures compensatoires D10, `sauvegarder.ps1`
+   toujours dépendant de l'exclusion antivirus D11, alerte de sauvegarde C12-02
+   limitée à l'écran du responsable — elle prévient d'un échec ou d'une absence
+   de sauvegarde, pas d'une sauvegarde qui ne tourne plus : voir « Défauts
+   nouveaux » dans `AUDIT_INDEPENDANT_d745ead.md`).
 4. Plan de retour arrière (restauration de la dernière sauvegarde + qui la
    déclenche + où est la phrase secrète).
 5. Checklists J-1 (sauvegarde complète, poste figé, pas de fusion en cours)
