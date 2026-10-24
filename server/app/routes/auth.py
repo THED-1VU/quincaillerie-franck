@@ -35,7 +35,7 @@ _MESSAGES_PUBLICS = {
     "compte_desactive": "Ce compte est désactivé. Voyez le responsable.",
     "compte_verrouille": (
         "Compte verrouillé après plusieurs échecs. "
-        "Voyez le responsable pour le débloquer."
+        "Réessayez après le verrouillage temporaire de 15 minutes, ou voyez le responsable."
     ),
 }
 

@@ -159,6 +159,20 @@ def exporter_articles(
             cur.execute(requete)
             lignes = cur.fetchall()
 
+    # D1 : union des droits pour un caissier également agent stock.
+    # Chaque projection est exécutée sous son rôle autorisé ; aucun prix
+    # d'achat ni coût ne traverse ces deux listes blanches SQL.
+    if session.role == "agent_stock" and "agent_comptabilite" in session.roles:
+        with bd.connexion_pour(
+            role_pg("agent_comptabilite"), site_id=session.site_id,
+            utilisateur_id=session.utilisateur_id,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, prix_vente FROM articles WHERE actif=TRUE")
+                prix = {r["id"]: r["prix_vente"] for r in cur.fetchall()}
+        lignes = [dict(r) | {"prix_vente": prix.get(r["id"])} for r in lignes]
+        colonnes.append("prix_vente")
+
     if format_ == "xlsx":
         contenu = _classeur_xlsx(colonnes, lignes)
     else:
