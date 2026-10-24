@@ -143,6 +143,29 @@ async function seConnecter(page, identifiant, motDePasse) {
   }
 }
 
+// La page interroge /caisse/attendu sur change de site ET de date. Deux
+// aperçus concurrents peuvent se croiser et le plus LENT écrase l'affichage
+// du plus récent (constaté en CI : l'aperçu du navigateur, daté de la veille
+// aux abords de minuit, arrivait après celui du jour et laissait « 0 » à
+// l'écran alors que la vente du jour valait 6500). On pose donc site ET date
+// d'un seul geste, suivis d'UN seul change : une seule requête, celle du
+// site et du jour lus en base, dont on attend l'URL exacte.
+async function chargerAttenduExact(page, siteId, jour) {
+  const urlAttendue = `/caisse/attendu?site_id=${siteId}&date_cloture=${jour}`;
+  const [reponse] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "GET" && r.url().endsWith(urlAttendue),
+      { timeout: 10000 }
+    ),
+    page.evaluate(([s, j]) => {
+      document.getElementById("f-site").value = String(s);
+      document.getElementById("f-date").value = j;
+      document.getElementById("f-date").dispatchEvent(new Event("change"));
+    }, [siteId, jour]),
+  ]);
+  return reponse;
+}
+
 // ============================================================================
 // 1. Accès réservé au responsable
 // ============================================================================
@@ -186,20 +209,28 @@ for (const largeur of [360, 390, 768, 1366, 1920]) {
   verifier(page.url().endsWith("cloture-caisse.html"), "responsable : accès à cloture-caisse.html");
 
   // --- Site Magasin, clôture EXACTE (compté = attendu) ---
-  await page.selectOption("#f-site", "1");
-  const [reponseAttendu] = await Promise.all([
-    page.waitForResponse((r) => r.url().includes("/caisse/attendu") && r.request().method() === "GET", { timeout: 10000 }),
-    page.fill("#f-date", jourMagasin),
-  ]);
+  const reponseAttendu = await chargerAttenduExact(page, 1, jourMagasin);
   const corpsAttendu = await reponseAttendu.json();
   verifier(reponseAttendu.ok(), "attendu réel : GET /caisse/attendu -> 200");
   verifier(corpsAttendu.attendu_especes === venteMagasin.total_ttc,
     `attendu réel : espèces attendues = ${corpsAttendu.attendu_especes} (vente réelle = ${venteMagasin.total_ttc})`);
-  await page.waitForFunction(() => document.getElementById("bloc-attendu").hidden === false, { timeout: 10000 });
-  const texteAttendu = (await page.locator("#liste-attendu").textContent()) || "";
   // fcfa() insère un séparateur de milliers (espace) — on compare les
   // chiffres seuls pour ne pas dépendre du caractère exact utilisé.
   const chiffresAttendus = String(Math.round(venteMagasin.total_ttc));
+  // Deux aperçus peuvent se croiser (site puis date) : on attend que l'écran
+  // affiche le montant du jour voulu, pas seulement que le bloc soit visible —
+  // sinon une réponse périmée peut rester affichée au moment de la lecture.
+  await page.waitForFunction(
+    (attendu) => {
+      const bloc = document.getElementById("bloc-attendu");
+      const texte = (document.getElementById("liste-attendu").textContent || "")
+        .replace(/[\s  ]/g, "");
+      return bloc.hidden === false && texte.includes(attendu);
+    },
+    chiffresAttendus,
+    { timeout: 10000 }
+  );
+  const texteAttendu = (await page.locator("#liste-attendu").textContent()) || "";
   verifier(
     texteAttendu.replace(/\s| /g, "").includes(chiffresAttendus),
     "attendu réel : le montant attendu s'affiche à l'écran AVANT toute saisie du comptage"
@@ -217,9 +248,7 @@ for (const largeur of [360, 390, 768, 1366, 1920]) {
   verifier(true, "clôture exacte réelle : message de succès affiché");
 
   // --- Site Comptoir, écart SANS commentaire -> refusé, message affiché ---
-  await page.selectOption("#f-site", "2");
-  await page.fill("#f-date", jourComptoir);
-  await page.waitForResponse((r) => r.url().includes("/caisse/attendu"), { timeout: 10000 });
+  await chargerAttenduExact(page, 2, jourComptoir);
   await page.fill("#f-especes", String(venteComptoir.total_ttc - 200));
   const [reponseRefusee] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith("/caisse") && r.request().method() === "POST", { timeout: 10000 }),
