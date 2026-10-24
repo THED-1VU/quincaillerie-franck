@@ -1,5 +1,7 @@
 # D1 — Prix visibles par le caissier
 
+> Fiche historique. **D1 a été validée le 24/10/2026** ; voir `../ACTUALISATION_FICHES_20261024.md`. Le statut ci-dessous décrit la préparation antérieure, pas une décision encore attendue.
+
 **État : décision propriétaire ouverte.** Source : DECISIONS_PROPRIETAIRE.md D1 ; REGISTRE_ECARTS_100.md C3-01. Le caissier est déjà fusionné avec agent_comptabilite ; cette fusion n'est pas remise en question.
 
 | Option | Conséquence | Effort indicatif après décision |

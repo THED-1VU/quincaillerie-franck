@@ -1,5 +1,7 @@
 # C2-01 — Seuil de verrouillage
 
+> Fiche historique. **C2-01 a été validée le 24/10/2026 : 5 échecs consécutifs, verrou temporaire de 15 minutes.** Voir `../ACTUALISATION_FICHES_20261024.md`. Le maintien du verrou exclusivement manuel proposé ci-dessous n'a pas été retenu.
+
 **État : décision propriétaire ouverte.** Source : registre C2-01. Valeur actuelle : 5 tentatives, `a_decider=TRUE`. La session maximale de 480 minutes est déjà décidée et ne fait pas l'objet de cette fiche.
 
 | Option | Conséquence | Effort indicatif après décision |
