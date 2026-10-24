@@ -395,12 +395,13 @@ def test_remise_globale_depassant_le_total_refusee(client):
 
 
 def test_recu_vente_avec_remise_affiche_catalogue_remise_et_remise_globale(client):
-    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    # D-N1 : 500+200 sur 6500 >10 %, le responsable approuve la vente.
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
     entetes = entete_autorisation(session["jeton"])
     reponse_vente = client.post(
         "/ventes",
         headers=entetes,
-        json={"mode_paiement": "especes", "numero_facturier": "MAG-TESTREM10", "vendeur_id": 1,
+        json={"site_id": 1, "mode_paiement": "especes", "numero_facturier": "MAG-TESTREM10", "vendeur_id": 1,
               "lignes": [{"article_id": 1, "quantite": 1, "remise_montant": 500}],
               "remise_globale_montant": 200},
     )
