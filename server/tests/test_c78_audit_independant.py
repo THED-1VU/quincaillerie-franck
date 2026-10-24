@@ -287,6 +287,40 @@ def test_dn1_pas_dapprobation_a_dix_pct_exact(client):
         ).fetchone()[0] == 0
 
 
+def test_dn1_cumul_responsable_secondaire_peut_approuver(client):
+    """C3 (cumul de rôles) : un compte dont le rôle PRINCIPAL est agent
+    comptabilité mais qui détient AUSSI le rôle responsable est autorisé par
+    ``exiger_role`` comme responsable — l'approbation D-N1 doit suivre la
+    même union, sinon la vente échoue dans la même transaction alors qu'elle
+    est présentée à un compte habilité responsable."""
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        conn.execute(
+            """
+            INSERT INTO utilisateurs_roles (utilisateur_id, role)
+            SELECT id, 'responsable' FROM utilisateurs
+             WHERE identifiant = 'magasin.compta'
+            ON CONFLICT DO NOTHING
+            """
+        )
+    session = se_connecter(client, "magasin.compta", MOT_DE_PASSE_AGENT_COMPTA)
+    reponse = client.post(
+        "/ventes",
+        headers=entete_autorisation(session["jeton"]),
+        json=_vente(
+            "MAG-AN10008",
+            [{"article_id": 1, "quantite": 1, "remise_pct": 10}],
+            remise_globale_pct=10,
+        ),
+    )
+    assert reponse.status_code == 201, reponse.text
+    with psycopg.connect(PG_ADMIN_DSN) as conn:
+        ligne = conn.execute(
+            "SELECT responsable_id FROM approbations_remises WHERE vente_id = %s",
+            (reponse.json()["vente_id"],),
+        ).fetchone()
+    assert ligne == (session["utilisateur_id"],)
+
+
 # ===========================================================================
 # D-N5 — fraîcheur : alerte à 60 minutes sur la dernière preuve complète
 #        ET vérifiée ; un échec / une tentative non vérifiée ne rajeunit pas

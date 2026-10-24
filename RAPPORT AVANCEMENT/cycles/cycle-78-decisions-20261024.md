@@ -34,13 +34,13 @@ python -m pytest -q -rA --tb=line \
   --basetemp=... -p no:cacheprovider
 ```
 
-Le harnais est **gardé** par `QF_AUDIT_C78=1` : sans la variable, les 37 tests
-sont ignorés (vérifié : `37 skipped`), donc la suite ordinaire et la CI ne
+Le harnais est **gardé** par `QF_AUDIT_C78=1` : sans la variable, les 38 tests
+sont ignorés (vérifié : `38 skipped`), donc la suite ordinaire et la CI ne
 sont pas modifiées.
 
-**Résultat sur `7bebded` : 10 réussis, 27 échoués en 86,90 s.**
+**Résultat sur `7bebded` : 10 réussis, 28 échoués en 81,44 s.**
 Journal brut conservé hors dépôt :
-`C:/Users/USER/AppData/Local/Temp/qf_c78_preuves/audit_7bebded.txt`.
+`C:/Users/USER/AppData/Local/Temp/qf_c78_preuves/audit_7bebded_38.txt`.
 
 ## 3. Résultats par décision
 
@@ -59,6 +59,12 @@ Le contrôle actuel (`server/app/routes/ventes.py`, lignes ~313-373) vérifie
 séparément la remise par ligne et la remise globale : chaque mécanisme reste
 sous 10 %, leur **cumul** ne l'est pas. Il bloque aussi une remise de 20 % sur
 une petite part d'une vente dont la remise effective totale est de 3,13 %.
+
+Un huitième test couvre le **cumul de rôles** : un compte dont le rôle
+principal est `agent_comptabilite` mais qui détient aussi `responsable`
+(`utilisateurs_roles`, migration 035) doit pouvoir approuver. Il est rouge sur
+`7bebded` (mécanisme absent) et reste rouge sur l'état de travail de Codex
+pour une cause distincte, documentée en §6.2.
 
 ### 3.2 D-N5 — fraîcheur des sauvegardes : écart reproduit
 
@@ -124,10 +130,10 @@ temporaire de 15 minutes ».
 
 | Décision | Code concerné | Tests | Preuves | PR | Statut de clôture |
 |---|---|---|---|---|---|
-| D-N1 | `server/app/routes/ventes.py` (contrôles 313-373) ; à venir : `approbations_remises` + trace (migration 055, Codex) | 7 tests D-N1 (cumul, bornes 10 %/10,01 %, pondération, fausse approbation, trace, immuabilité) | 6 rouges / 1 vert sur `7bebded` ; 201 à 17,19 % et 19 % ; `UndefinedTable` sur la trace | PR #107 (Codex, DRAFT) pour la correction ; PR d'audit Qoder à ouvrir | OUVERT — correction portée par #107, vérification indépendante à refaire sur son commit |
-| D-N5 | `server/app/routes/exploitation.py` ; `maquette/tableau-bord.html` ; producteur `db/outils/sauvegarder.ps1` (exclu/quarantaine) | 17 tests D-N5 (fraîcheur, bornes 3599/3600/3601 s, complétude/vérification, preuve antérieure, absence/corruption, dates invalides, accès) | 16 rouges / 1 vert ; aucune alerte ni âge sur la route actuelle | PR #107 (Codex) ; producteur hors périmètre contractuel | OUVERT — consommateur en cours ; producteur non vérifiable sans exécution (interdite) |
-| D1 | `demonstration.py`, `rapports.py`, `tableau_bord.py`, `inventaire.py`, GRANT 008/029/034 | 5 tests D1 (API, xlsx, PDF, JSON, 403, SQL direct, cumul) | 5/5 verts sur `7bebded` | Aucune correction nécessaire sur le périmètre audité ; PR d'audit Qoder | OUVERT — UI non rejouée, droits comptable non arbitrés, preuve humaine requise |
-| C2-01 | `db/migrations/053_sessions_serveur.sql` (`verifier_connexion`), `server/app/routes/auth.py` ; 055 (Codex) | 8 tests C2-01 (5 échecs, non-prolongation, expiration, série, seuil, identifiant inconnu, concurrence ×2) | 5 rouges / 3 verts ; colonne `verrouille_jusqua` absente ; `(5, True)` au lieu de `(5, False)` | PR #107 (Codex) ; PR d'audit Qoder | OUVERT — correction portée par #107, vérification indépendante à refaire |
+| D-N1 | `server/app/routes/ventes.py` (contrôles 313-373) ; à venir : `approbations_remises` + trace (migration 055, Codex) | 8 tests D-N1 (cumul, bornes 10 %/10,01 %, pondération, fausse approbation, trace, immuabilité, cumul de rôles) | `7bebded` : 7 rouges / 1 vert ; 201 à 17,19 % et 19 % ; `UndefinedTable` sur la trace. Snapshot WIP Codex : 7 verts / 1 rouge (cumul de rôles → 403, aucun contournement) | #107 (Codex, DRAFT) ; #108 (audit Qoder, DRAFT) | OUVERT — 3 corrections à porter dans #107 (§6) |
+| D-N5 | `server/app/routes/exploitation.py` ; `maquette/tableau-bord.html` ; producteur `db/outils/sauvegarder.ps1` (exclu/quarantaine) | 17 tests D-N5 (fraîcheur, bornes 3599/3600/3601 s, complétude/vérification, preuve antérieure, absence/corruption, dates invalides, accès) | `7bebded` : 16 rouges / 1 vert, aucune alerte ni âge. Snapshot WIP Codex : 17/17 verts sur la route ; producteur réel non qualifié (fail-safe) | #107 (Codex) ; #108 (audit Qoder) | OUVERT — consommateur vérifié sur snapshot ; producteur hors périmètre contractuel |
+| D1 | `demonstration.py`, `rapports.py`, `tableau_bord.py`, `inventaire.py`, GRANT 008/029/034 | 5 tests D1 (API, xlsx, PDF, JSON, 403, SQL direct, cumul) | `7bebded` : 5/5 verts. Snapshot WIP Codex : 5/5 verts ; le test d'export cumulé de Codex est rouge pour une attente contraire à la précédence C3 (§6.3), sans fuite constatée | Aucune correction nécessaire sur le périmètre audité | OUVERT — UI non rejouée, droits comptable non arbitrés, preuve humaine requise |
+| C2-01 | `db/migrations/053_sessions_serveur.sql` (`verifier_connexion`), `server/app/routes/auth.py` ; 055 (Codex) | 8 tests C2-01 (5 échecs, non-prolongation, expiration, série, seuil, identifiant inconnu, concurrence ×2) | `7bebded` : 5 rouges / 3 verts ; colonne absente ; `(5, True)`. Snapshot WIP Codex : 7 verts / 1 rouge — dérive du seed `00_jeu_essai.sql` (§6.1), migration 055 vérifiée directement en psql (`5|f`) | #107 (Codex) ; #108 (audit Qoder) | OUVERT — corriger le seed puis rejouer |
 
 ## 5. Coordination et précautions respectées
 
@@ -145,41 +151,118 @@ temporaire de 15 minutes ».
 - **PR #105** (ventes simultanées) : non fusionnée, non remplacée ; sa
   compatibilité avec D-N1/C2-01 reste à revalider avant toute fusion.
 
-## 6. Points à vérifier sur la branche de correction (constats d'audit)
+## 6. Vérification indépendante de l'état de travail de Codex (snapshot non commité)
 
-1. **Immuabilité de l'approbation** : le déclencheur
-   `interdire_suppression_journal()` lève `restrict_violation` (classe psycopg
-   `RestrictViolation`), pas `RaiseException`. Le test de la branche #107 qui
-   attend `RaiseException` échouera ; le test d'audit Qoder attend la bonne
-   classe.
-2. **Rôles cumulés et approbation** : `tracer_approbation_remise` contrôle
-   `utilisateurs.role = 'responsable'` (rôle principal), alors que
-   `exiger_role` retient l'union des rôles. Un compte dont le rôle principal
-   est `agent_comptabilite` mais qui détient `responsable` en cumul peut être
-   reconnu responsable par la route puis refusé par la fonction de trace
-   (500). À arbitrer et couvrir.
-3. **Seuil codé en dur** : la fonction 055 fixe `seuil := 5` au lieu de lire
-   `parametres.tentatives_max_connexion`, pourtant mis à jour. Cohérent
-   aujourd'hui, mais deux sources de vérité à surveiller.
-4. **Producteur D-N5** : sans `complete`/`verifiee` et avec un horodatage
-   sans fuseau, l'état réel restera `inconnu`/alerte. C'est conforme au
-   contrat (fail-safe), mais l'exploitation verra une alerte permanente tant
-   que le producteur n'est pas enrichi — décision/chantier séparé.
-5. **Interface D-N5** : l'actualisation du bandeau sans rechargement et le
-   passage à l'alerte à 60 min restent à prouver par Playwright sur la branche
-   #107.
+Codex n'avait pas encore poussé son code au moment de l'audit (`#107` DRAFT,
+tip `46616ae` = documentation de réservation seulement). Pour ne pas attendre,
+Qoder a créé un worktree **séparé** (`_worktrees/qoder-verif-codex-20261024`,
+détaché sur `46616ae`), y a appliqué une **copie en lecture seule** du diff non
+commité de Codex (`auth.py`, `ventes.py`, `exploitation.py`,
+`tableau-bord.html`) et de ses fichiers 055 / inverse / test, sans jamais
+toucher à son worktree actif. Base dédiée `quincaillerie_c78_verif` clonée de
+`quincaillerie_c78`, migration 055 appliquée directement — vérifié en psql :
+`schema_migrations` max = `055`, colonne `verrouille_jusqua` présente,
+paramètre `tentatives_max_connexion = 5`, `a_decider = false`.
 
-## 7. Conclusion du cycle
+Commandes (depuis `.../qoder-verif-codex-20261024/server`) :
+
+```bash
+QF_AUDIT_C78=1 QF_TEST_DBNAME=quincaillerie_c78_verif python -m pytest -q -rA \
+  tests/test_c78_audit_independant.py      # harnais d'audit Qoder
+python -m pytest -q tests/test_decisions_20261024.py   # suite de Codex
+```
+
+**Harnais Qoder : 36 réussis / 2 échoués en 89,32 s** ; journal
+`qf_c78_preuves/audit_codex_wip_38.txt`. **Suite Codex : 23 réussis / 2
+échoués en 40,73 s** ; journal `qf_c78_preuves/codex_tests_wip.txt`. Les
+quatre échecs se répartissent en trois constats :
+
+### 6.1 Dérive du seed — `tentatives_max_connexion` (échec Qoder)
+
+`test_c201_seuil_decide_en_base` observe `(5, True)` alors que la migration 055
+a bien écrit `(5, False)`. Cause : `db/tests/00_jeu_essai.sql` vide et
+réamorce `parametres` **avant chaque test**, en réinscrivant
+`tentatives_max_connexion` à `a_decider = TRUE` — la décision de 055 est donc
+annulée dans la base de test à chaque rechargement. La migration elle-même est
+correcte (vérifiée directement en psql). **Codex doit mettre le seed en
+cohérence avec 055** (règle déjà inscrite en tête du seed : toute migration
+ajoutant un paramètre doit s'y refléter).
+
+### 6.2 Cumul de rôles et approbation D-N1 (échec Qoder)
+
+Nouveau test `test_dn1_cumul_responsable_secondaire_peut_approuver` : compte
+`magasin.compta` (rôle principal `agent_comptabilite`) auquel on ajoute
+`responsable` dans `utilisateurs_roles` (migration 035), puis vente à
+10 % + 10 %. La route l'accepte (`exiger_role` retient l'union et choisit
+`responsable`), le contrôle Python passe, puis `tracer_approbation_remise`
+refuse : `Approbation réservée au responsable authentifié` (contrôle
+`utilisateurs.role = 'responsable'`, donc rôle **principal** seulement).
+Réponse observée : **403 « Accès refusé »**, vente annulée par la transaction —
+donc **aucun contournement**, mais un responsable pourtant habilité ne peut
+pas approuver. Correctif attendu : tester l'appartenance à
+`roles_utilisateur(auteur)` / `utilisateurs_roles` (qui contient déjà le rôle
+principal depuis 035), pas la seule colonne `utilisateurs.role`.
+
+### 6.3 Deux tests de la suite Codex échouent sur des attentes à corriger
+
+1. `test_n1_approbation_authentifiee_atomique_et_immuable` attend
+   `psycopg.errors.RaiseException` ; le déclencheur
+   `interdire_suppression_journal()` lève `restrict_violation`
+   (`RestrictViolation`). L'immuabilité est bien prouvée — c'est l'attente du
+   test qui est fausse.
+2. `test_d1_api_exports_et_acces_indirects_confidentiels[True]` attend
+   `prix_vente` dans l'export `/rapports/articles?format=xlsx` d'un compte
+   cumulant `agent_stock` + `agent_comptabilite`. Or `exiger_role` retient le
+   **premier rôle déclaré par la route** (`agent_stock`, avant
+   `agent_comptabilite`, `rapports.py:110-152`) : l'export servi est le
+   catalogue stock, sans aucun prix. Comportement **préexistant** sur
+   `7bebded` (C3 / ordre de déclaration), et **restrictif** — aucune fuite de
+   prix d'achat. C'est l'attente du test qui doit être corrigée (ou la
+   précédence des rôles à l'export arbitrée séparément, hors de cette
+   mission).
+
+### 6.4 Ce que le snapshot prouve déjà
+
+Sur le périmètre exécuté : cumul de remises bloqué, bornes 10 % / 10,01 %
+exactes, pondération par quantités, fausses approbations ignorées, trace
+d'approbation liée à la vente et immuable ; fraîcheur D-N5 (bornes
+3599/3600/3601 s, complétude + vérification, preuve antérieure conservée,
+absence/corruption/dates invalides) ; D1 API/export/PDF/JSON/SQL ; C2-01
+verrou 15 min non prolongeable, expiration, série rompue, identifiant inconnu,
+concurrence SQL ×2. Limites : snapshot **non commité** (diff copié), base
+clonée, **aucune suite Playwright** rejouée sur ce snapshot, producteur D-N5
+non exécuté (quarantaine), aucune validation humaine, **aucune fusion**.
+
+## 7. Actions attendues dans #107 avant revue
+
+1. Mettre `00_jeu_essai.sql` en cohérence avec 055 (§6.1).
+2. Corriger les deux attentes de tests de la suite Codex (§6.3).
+3. Arbitrer/corriger le contrôle de rôle de `tracer_approbation_remise` pour
+   l'union des rôles (§6.2).
+4. Lire `tentatives_max_connexion` depuis `parametres` au lieu du `seuil := 5`
+   codé en dur — cohérent aujourd'hui, mais deux sources de vérité.
+5. Prouver par Playwright l'alerte visible D-N5 et son passage à 60 min.
+6. Producteur D-N5 : sans `complete`/`verifiee` et avec un horodatage sans
+   fuseau, l'état réel restera `inconnu`/alerte — conforme au contrat
+   (fail-safe), mais alerte permanente tant que le producteur n'est pas
+   enrichi : décision/chantier séparé.
+
+## 8. Conclusion du cycle
 
 - Les décisions sont **inscrites** et leur contrat est publié (PR #107).
 - Trois décisions (D-N1, D-N5, C2-01) présentent des **écarts reproduits par
   exécution réelle** sur `main` ; leurs corrections sont portées par Codex
   (migration 055), pas dupliquées par Qoder.
+- La vérification indépendante du **snapshot de travail** de Codex montre que
+  les corrections fonctionnent sur 36/38 tests d'audit et 23/25 tests Codex ;
+  aucun contournement constaté. Les quatre échecs sont des **défauts de test
+  ou de seed**, plus un cas de cumul de rôles à corriger (§6, §7).
 - D1 est **conforme sur le périmètre API/export/SQL testé** ; sa clôture exige
   encore la preuve UI et l'arbitrage des droits du comptable par le
   propriétaire.
-- Les scores C0–C14 restent **inchangés** : aucune correction n'est prouvée
-  verte sur la branche #107 à ce stade.
-- Prochaine étape : commit poussé par Codex → worktree de vérification séparé
-  → rejeu des 37 tests d'audit + suite complète + 13 suites Playwright → mise
-  à jour de ce rapport et de la PR d'audit.
+- Les scores C0–C14 restent **inchangés** : le snapshot n'est ni commité ni
+  vert, aucune correction n'est prouvée sur un SHA poussé, et la CI n'a pas
+  tourné dessus.
+- Prochaine étape : commit poussé par Codex → rejeu des 38 tests d'audit,
+  pytest complet, 13 suites Playwright et contrôles SQL sur le SHA poussé →
+  mise à jour de ce rapport et de la PR #108.
