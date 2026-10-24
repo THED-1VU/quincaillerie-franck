@@ -129,6 +129,69 @@ def test_jeton_refuse_si_sa_session_absente_de_la_base(client):
     assert client.get("/moi", headers=entetes).status_code == 401
 
 
+# C-5 : trois routes authentifiées de familles différentes (identité,
+# administration, ventes) — chaque requête doit relire la session en base,
+# pas seulement vérifier la signature du jeton.
+ROUTES_PROTEGEES = ("/moi", "/admin/comptes", "/ventes/parametres")
+
+
+def _jti(jeton: str) -> str:
+    return GestionnaireSessions("0" * 64, 480).verifier(jeton).jti
+
+
+def _refuser_sur_toutes_les_routes(client, jeton: str, motif: str) -> None:
+    for route in ROUTES_PROTEGEES:
+        reponse = client.get(route, headers=entete_autorisation(jeton))
+        assert reponse.status_code == 401, (
+            f"{route} a accepté un jeton {motif} : {reponse.status_code} {reponse.text}"
+        )
+
+
+def test_toute_requete_authentifiee_controle_la_session_en_base(client):
+    """C-5 : jeton invalide, révoqué, expiré ou absent (forme d'un dump) → 401.
+
+    Le jeton émis ici est signé avec le même secret que l'application : seule
+    la relecture de `sessions_serveur` peut le refuser. Un contrôle limité à
+    la signature laisserait donc passer les quatre cas ci-dessous.
+    """
+    session = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    jeton = session["jeton"]
+    entetes = entete_autorisation(jeton)
+    for route in ROUTES_PROTEGEES:
+        assert client.get(route, headers=entetes).status_code == 200, route
+
+    # 1. Jeton malformé : refusé avant toute lecture de base.
+    _refuser_sur_toutes_les_routes(client, "jeton-illisible", "malformé")
+
+    # 2. Jeton correctement signé mais dont le jti n'a jamais été enregistré.
+    #    C'est la forme d'un jeton recopié d'un dump dans une base où sa
+    #    session n'existe plus : la signature seule ne suffit pas.
+    gestionnaire = GestionnaireSessions("0" * 64, 480)
+    jamais_enregistre = gestionnaire.emettre(
+        utilisateur_id=session["utilisateur_id"], role="responsable", site_id=None,
+        nom_complet="Resp", doit_changer_mot_de_passe=False)
+    _refuser_sur_toutes_les_routes(client, jamais_enregistre, "non enregistré (dump)")
+
+    # 3. Session expirée EN BASE alors que le jeton n'a pas encore atteint
+    #    son `exp` : la décision doit venir de la table, pas du jeton.
+    with psycopg.connect(PG_ADMIN_DSN) as connection:
+        connection.execute("UPDATE sessions_serveur SET expire_a = clock_timestamp() - interval '1 minute' "
+                           "WHERE jti = %s", (_jti(jeton),))
+    _refuser_sur_toutes_les_routes(client, jeton, "expiré en base")
+
+    # 4. Session supprimée de la table (invalidation d'une restauration).
+    with psycopg.connect(PG_ADMIN_DSN) as connection:
+        connection.execute("DELETE FROM sessions_serveur WHERE jti = %s", (_jti(jeton),))
+    _refuser_sur_toutes_les_routes(client, jeton, "absent de la base")
+
+    # 5. Déconnexion : le jeton encore valide et enregistré devient révoqué.
+    nouveau = se_connecter(client, "resp", MOT_DE_PASSE_RESPONSABLE)
+    assert client.get("/moi", headers=entete_autorisation(nouveau["jeton"])).status_code == 200
+    assert client.post("/auth/deconnexion",
+                       headers=entete_autorisation(nouveau["jeton"])).status_code == 204
+    _refuser_sur_toutes_les_routes(client, nouveau["jeton"], "révoqué")
+
+
 def test_refus_limiteur_est_journalise(app,client):
     from app.securite import LimiteurDebit
     app.state.limiteur_connexion=LimiteurDebit(1,60)

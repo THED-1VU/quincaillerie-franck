@@ -197,6 +197,24 @@ contient l'état des sessions et des jetons révoqués à son instant). Le
 message « Sessions de la sauvegarde invalidees (N) : reconnexion
 obligatoire. » le confirme dans la sortie du script.
 
+**Base fermée pendant la restauration (revue #103)** : dès sa création, la
+base cible reçoit `CONNECTION LIMIT 0`. Elle n'est réouverte
+(`CONNECTION LIMIT -1`) qu'APRÈS l'invalidation des sessions vérifiée : il
+n'existe donc aucun instant où l'application peut se connecter à une base
+restaurée dont les anciennes sessions seraient encore acceptées. Si
+l'invalidation échoue, le script affiche l'erreur, laisse la base fermée et
+sort avec un code non nul — il n'annonce jamais « restauration réussie ».
+
+**Blocage après restauration — risque résiduel assumé (C-4, revue #103)** :
+un dump pris pendant qu'un compte était bloqué (5 échecs de connexion,
+C2-01) contient `tentatives_echouees` et son horodatage. Après restauration,
+ce compte reste donc bloqué — c'est un refus, pas une résurrection de
+session, et aucune ancienne session ne redevient valide. La parade est la
+procédure existante : le responsable se connecte et utilise
+`POST /admin/comptes/{id}/deverrouiller` (bouton de déverrouillage de
+l'écran comptes) pour remettre le compteur à zéro. Aucun changement de
+`auth.py` ni de migration n'est nécessaire pour cela.
+
 **Limite honnête de ce cycle** : la preuve de restauration de ce document
 (section 6 du rapport de cycle) a été faite sur le **même serveur
 PostgreSQL** que la base source (une seconde base, `quincaillerie_..._

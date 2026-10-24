@@ -22,6 +22,7 @@ const CAPTURES = resolve(ICI, "..", "captures") + "/";
 
 const SERVEUR_URL = process.env.SERVEUR_URL || "http://127.0.0.1:8010";
 const DB_PISTE = process.env.PGDATABASE_PISTE || "quincaillerie_test";
+const PG_PORT = process.env.PGPORT || "5433";
 let PGDEV = resolve(RACINE_DEPOT, "_pgdev");
 if (!existsSync(PGDEV)) {
   PGDEV = resolve(RACINE_DEPOT, "..", "..", "_pgdev");
@@ -38,13 +39,13 @@ const verifier = (cond, libelle) => (cond ? ok : ko).push(libelle);
 
 function psql(sql) {
   execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE, "-q", "-c", sql,
+    "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", DB_PISTE, "-q", "-c", sql,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }
 
 console.log("== Préparation de la base (jeu d'essai + comptes de test) ==");
 execFileSync(PSQL, [
-  "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
+  "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", DB_PISTE,
   "-v", "ON_ERROR_STOP=1", "-q", "-f", resolve(RACINE_DEPOT, "db", "tests", "00_jeu_essai.sql"),
 ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_AGENT_COMPTA}', gen_salt('bf', 12)) WHERE identifiant='magasin.compta';`);

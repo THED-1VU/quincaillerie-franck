@@ -56,6 +56,11 @@ def _psql_simule(motif_echec: str | None) -> str:
     return (
         "#!/usr/bin/env bash\n"
         'printf \'%s\\n\' "$*" >> "$QF_JOURNAL_PSQL"\n'
+        'if [ -n "${QF_ECHEC_DROP_SECOND:-}" ] && [[ "$*" == *"DROP DATABASE"* ]]; then\n'
+        '  n=$(cat "$QF_COMPTEUR_DROP" 2>/dev/null || echo 0)\n'
+        '  n=$((n + 1)); echo "$n" > "$QF_COMPTEUR_DROP"\n'
+        '  if [ "$n" -ge 2 ]; then echo "ECHEC_NETTOYAGE_SIMULE" >> "$QF_JOURNAL_PSQL"; exit 1; fi\n'
+        "fi\n"
         'case "$*" in\n'
         + echec
         + "esac\n"
@@ -71,6 +76,8 @@ def _bac_campagne(tmp_path: Path, motif_echec: str | None) -> tuple[Path, Path, 
     shutil.copy2(RACINE / "db/outils/campagne_exe_lotb.sh",
                  box / "db/outils/campagne_exe_lotb.sh")
     (box / "db/outils/migrer.sh").write_text("exit 0\n", encoding="utf-8", newline="\n")
+    (box / "db/outils/definir_mot_de_passe_app.sql").write_text(
+        "-- simulé\n", encoding="utf-8", newline="\n")
     (box / "db/tests/00_jeu_essai.sql").write_text("-- simulé\n", encoding="utf-8")
     (box / "QuincaillerieFranck_Test/creation_base_donnees.sql").write_text(
         "-- simulé\n", encoding="utf-8")
@@ -101,12 +108,19 @@ def _bac_campagne(tmp_path: Path, motif_echec: str | None) -> tuple[Path, Path, 
     return box, hooks, journal
 
 
+def _env_campagne(box: Path, hooks: Path, journal: Path, **extra: str) -> dict:
+    # PSQL explicite : sans lui, la campagne hérite du PSQL réel exporté par
+    # verifier_tout.sh et le bac à sable interroge la vraie instance.
+    return {"BASH_ENV": str(hooks), "QF_JOURNAL_PSQL": str(journal),
+            "PSQL": str(box / "_pgdev/pgsql/bin/psql.exe"), **extra}
+
+
 @besoin_bash
 def test_campagne_exe_preparation_en_echec_code_non_nul(tmp_path):
     """R1 : CREATE DATABASE échoue, les 13 suites simulées passent — code 0 avant."""
     box, hooks, journal = _bac_campagne(tmp_path, "CREATE DATABASE")
     resultat = _lancer(box / "db/outils/campagne_exe_lotb.sh",
-                       env={"BASH_ENV": str(hooks), "QF_JOURNAL_PSQL": str(journal)},
+                       env=_env_campagne(box, hooks, journal),
                        cwd=box)
     assert resultat.returncode != 0, resultat.stdout
     assert "ECHEC_PREPARATION_SIMULE" in resultat.stdout
@@ -121,7 +135,7 @@ def test_campagne_exe_echec_apres_creation_supprime_la_base(tmp_path):
     """R1 : le nettoyage doit couvrir les sorties anticipées, pas seulement la fin."""
     box, hooks, journal = _bac_campagne(tmp_path, "creation_base_donnees.sql")
     resultat = _lancer(box / "db/outils/campagne_exe_lotb.sh",
-                       env={"BASH_ENV": str(hooks), "QF_JOURNAL_PSQL": str(journal)},
+                       env=_env_campagne(box, hooks, journal),
                        cwd=box)
     assert resultat.returncode != 0, resultat.stdout
     lignes = journal.read_text(encoding="utf-8").splitlines()
@@ -134,8 +148,7 @@ def test_campagne_exe_lancement_muet_code_non_nul(tmp_path):
     """R1 : un EXE qui ne repond jamais doit interrompre la campagne et nettoyer."""
     box, hooks, journal = _bac_campagne(tmp_path, None)
     resultat = _lancer(box / "db/outils/campagne_exe_lotb.sh",
-                       env={"BASH_ENV": str(hooks), "QF_JOURNAL_PSQL": str(journal),
-                            "QF_CURL_ECHEC": "1"},
+                       env=_env_campagne(box, hooks, journal, QF_CURL_ECHEC="1"),
                        cwd=box)
     assert resultat.returncode != 0, resultat.stdout
     assert "n'a jamais répondu" in resultat.stdout
@@ -146,12 +159,42 @@ def test_campagne_exe_lancement_muet_code_non_nul(tmp_path):
 
 
 @besoin_bash
+def test_campagne_exe_echec_nettoyage_code_non_nul(tmp_path):
+    """Un nettoyage impossible doit faire échouer la campagne, pas seulement s'afficher."""
+    box, hooks, journal = _bac_campagne(tmp_path, None)
+    resultat = _lancer(box / "db/outils/campagne_exe_lotb.sh",
+                       env=_env_campagne(box, hooks, journal,
+                                         QF_ECHEC_DROP_SECOND="1",
+                                         QF_COMPTEUR_DROP=str(tmp_path / "compteur_drop")),
+                       cwd=box)
+    assert resultat.returncode != 0, resultat.stdout
+    assert "nettoyage : ÉCHEC" in resultat.stdout
+    assert "BILAN" in resultat.stdout
+    assert "Toutes les étapes sont passées" not in resultat.stdout
+    journal_texte = journal.read_text(encoding="utf-8")
+    assert "ECHEC_NETTOYAGE_SIMULE" in journal_texte
+    assert (tmp_path / "compteur_drop").read_text(encoding="utf-8").strip() != "1"
+
+
+@besoin_bash
+def test_campagne_exe_dependance_manquante_arret_avant_action(tmp_path):
+    """Une dépendance absente arrête la campagne avant tout DROP/CREATE."""
+    box, hooks, journal = _bac_campagne(tmp_path, None)
+    resultat = _lancer(box / "db/outils/campagne_exe_lotb.sh",
+                       env=_env_campagne(box, hooks, journal,
+                                         PSQL=str(tmp_path / "psql_absent.exe")),
+                       cwd=box)
+    assert resultat.returncode != 0, resultat.stdout
+    assert "dépendance manquante" in resultat.stdout
+    assert not journal.exists() or journal.read_text(encoding="utf-8").strip() == ""
+
+
+@besoin_bash
 def test_campagne_exe_suite_en_echec_code_non_nul(tmp_path):
     """Le code final doit aussi refléter un échec de suite, pas seulement la préparation."""
     box, hooks, journal = _bac_campagne(tmp_path, None)
     resultat = _lancer(box / "db/outils/campagne_exe_lotb.sh",
-                       env={"BASH_ENV": str(hooks), "QF_JOURNAL_PSQL": str(journal),
-                            "QF_NPM_ECHEC": "vente"},
+                       env=_env_campagne(box, hooks, journal, QF_NPM_ECHEC="vente"),
                        cwd=box)
     assert resultat.returncode != 0, resultat.stdout
     assert "suite vente" in resultat.stdout
@@ -180,9 +223,13 @@ def _bac_verifier_tout(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     _ecrire_executable(psql,
         "#!/usr/bin/env bash\n"
         'printf \'%s\\n\' "$*" >> "${QF_JOURNAL_PSQL:-/dev/null}"\n'
-        'case "$*" in\n'
-        '  *"current_database()"*) printf \'%s|127.0.0.1|%s\\n\' "$QF_STUB_DB" "$QF_STUB_PORT" ;;\n'
-        "esac\n"
+        'if [[ "$*" == *"current_database()"* ]]; then\n'
+        '  if [[ "$*" == *"-d postgres"* ]]; then\n'
+        '    printf \'%s|127.0.0.1|%s\\n\' "postgres" "${QF_STUB_SERVER_PORT:-$QF_STUB_PORT}"\n'
+        "  else\n"
+        '    printf \'%s|127.0.0.1|%s\\n\' "$QF_STUB_DB" "$QF_STUB_PORT"\n'
+        "  fi\n"
+        "fi\n"
         "exit 0\n")
     pg_dump = box / "pg_dump_simule.exe"
     _ecrire_executable(pg_dump, "#!/usr/bin/env bash\nexit 0\n")
@@ -249,11 +296,42 @@ def test_verifier_tout_refuse_un_port_effectif_different(tmp_path):
             "PGHOST": "127.0.0.1", "PGPORT": "5558", "PGUSER": "postgres",
             "PGPASSWORD": "qf_dev_local", "BASE_TEST": "quincaillerie_q103_bac",
             "QF_STUB_DB": "quincaillerie_q103_bac", "QF_STUB_PORT": "5599",
+            "QF_STUB_SERVER_PORT": "5558",
             "QF_JOURNAL_PYTEST": str(journal_pytest),
         },
         cwd=box)
     assert resultat.returncode != 0, resultat.stdout
     assert "incohérente" in resultat.stdout
+
+
+@besoin_bash
+def test_verifier_tout_instancie_incoherente_arrete_avant_destructif(tmp_path):
+    """Une instance ambiguë (port effectif différent) doit arrêter AVANT l'étape 1."""
+    box, hooks, journal_pytest, psql = _bac_verifier_tout(tmp_path)
+    journal_psql = tmp_path / "journal_psql.log"
+    journal_sql = tmp_path / "journal_sql.log"
+    resultat = _lancer(
+        box / "db/outils/verifier_tout.sh",
+        env={
+            "BASH_ENV": str(hooks), "PSQL": str(psql),
+            "PG_DUMP": str(box / "pg_dump_simule.exe"),
+            "PYTHON": str(box / "python_simule.exe"),
+            "PGHOST": "127.0.0.1", "PGPORT": "5558", "PGUSER": "postgres",
+            "PGPASSWORD": "qf_dev_local", "BASE_TEST": "quincaillerie_q103_bac",
+            "QF_STUB_DB": "quincaillerie_q103_bac", "QF_STUB_PORT": "5558",
+            "QF_STUB_SERVER_PORT": "5599",
+            "QF_JOURNAL_PSQL": str(journal_psql),
+            "QF_JOURNAL_PYTEST": str(journal_pytest),
+            "QF_JOURNAL_SQL": str(journal_sql),
+        },
+        cwd=box)
+    assert resultat.returncode != 0, resultat.stdout
+    assert "identité de l'instance incohérente" in resultat.stdout
+    assert not journal_sql.exists(), "la suite SQL destructive a été lancée"
+    contenu = journal_psql.read_text(encoding="utf-8")
+    assert "DROP DATABASE" not in contenu
+    assert "TRUNCATE" not in contenu
+    assert "CREATE DATABASE" not in contenu
 
 
 @besoin_bash

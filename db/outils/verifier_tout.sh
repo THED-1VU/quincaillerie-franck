@@ -98,7 +98,7 @@ valider_nom_base_test() {
     fi
 }
 
-verifier_identite_cible() {
+valider_parametres_cible() {
     if [[ ! "$PGPORT" =~ ^[0-9]+$ ]] || (( PGPORT < 1 || PGPORT > 65535 )); then
         echo "ERREUR : port PostgreSQL invalide : '$PGPORT'." >&2
         exit 1
@@ -111,6 +111,43 @@ verifier_identite_cible() {
             exit 1
             ;;
     esac
+}
+
+# Vérifiée AVANT l'étape 1 (destructive) : l'instance annoncée doit être
+# celle qui répond réellement, sur le bon port et en local. Une configuration
+# ambiguë (PGPORT ignoré par un service, redirection, mauvaise instance) doit
+# arrêter avant toute suppression ou recréation de base.
+verifier_identite_serveur() {
+    valider_parametres_cible
+
+    local identite
+    if ! identite="$("$PSQL" -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d postgres -tAc \
+        "SELECT current_database() || '|' || COALESCE(host(inet_server_addr()), 'local') || '|' || inet_server_port();" 2>&1)"; then
+        echo "ERREUR : instance PostgreSQL injoignable ($PGHOST:$PGPORT) :" >&2
+        echo "$identite" >&2
+        exit 1
+    fi
+
+    local base_effective hote_effectif port_effectif
+    IFS='|' read -r base_effective hote_effectif port_effectif <<< "$identite"
+    if [ "$base_effective" != "postgres" ] || [ "$port_effectif" != "$PGPORT" ]; then
+        echo "ERREUR : identité de l'instance incohérente." >&2
+        echo "         demandé : instance locale sur $PGHOST:$PGPORT" >&2
+        echo "         atteint : $base_effective sur $hote_effectif:$port_effectif" >&2
+        exit 1
+    fi
+    case "$hote_effectif" in
+        127.0.0.1|::1|local) : ;;
+        *)
+            echo "ERREUR : l'instance joignable ($hote_effectif) n'est pas locale." >&2
+            exit 1
+            ;;
+    esac
+    echo ">>> instance de test vérifiée : $hote_effectif:$port_effectif"
+}
+
+verifier_identite_cible() {
+    valider_parametres_cible
 
     local identite
     if ! identite="$("$PSQL" -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$BASE_TEST" -tAc \
@@ -140,10 +177,12 @@ verifier_identite_cible() {
 
 if [ "${1:-}" = "--verifier-cible" ]; then
     valider_nom_base_test
+    verifier_identite_serveur
     verifier_identite_cible
     exit 0
 fi
 valider_nom_base_test
+verifier_identite_serveur
 
 ETAPES_KO=0
 PID_SERVEUR=""

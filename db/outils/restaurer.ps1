@@ -13,12 +13,17 @@
     Etapes :
       1. Refuse si NomBaseCible existe deja (protection -- pas d'ecrasement
          silencieux ; -Forcer la supprime d'abord si explicitement demande).
-      2. Cree NomBaseCible.
+      2. Cree NomBaseCible et ferme ses connexions applicatives
+         (CONNECTION LIMIT 0) pendant toute la restauration : aucune
+         session ne peut s'ouvrir sur une base encore en cours de montage.
       3. Restaure le contenu (pg_restore, depuis FichierBase).
       4. Invalide TOUTES les sessions presentes dans la sauvegarde
          (sessions_serveur) : une session revoquee apres le dump ne doit
          jamais redevenir valide. Reconnexion obligatoire.
-      5. Si -FichierRoles est fourni : rejoue les CREATE ROLE (psql). Sur
+      5. Reautorise les connexions SEULEMENT apres verification de cette
+         invalidation ; un echec laisse la base fermee et le script sort
+         en erreur (jamais "restauration reussie").
+      6. Si -FichierRoles est fourni : rejoue les CREATE ROLE (psql). Sur
          le MEME serveur que celui sauvegarde, les roles existent deja --
          les erreurs "already exists" qui en resultent sont attendues et
          sans consequence (le but de ce fichier est de recreer les roles
@@ -316,6 +321,15 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+Write-Host "Verrouillage des connexions applicatives a '$NomBaseCible' pendant la restauration ..."
+& $Psql -h $PgHost -p $PgPort -U $Utilisateur -d postgres -q -v ON_ERROR_STOP=1 -c `
+    "ALTER DATABASE $NomBaseCible CONNECTION LIMIT 0;"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Echec : impossible de verrouiller les connexions a '$NomBaseCible' (code $LASTEXITCODE)." -ForegroundColor Red
+    Nettoyer-FichiersClairs
+    exit 1
+}
+
 Write-Host "Restauration du contenu depuis $FichierBase ..."
 & $PgRestore -h $PgHost -p $PgPort -U $Utilisateur -d $NomBaseCible --no-owner --role=$Utilisateur $FichierBase
 $CodeRestore = $LASTEXITCODE
@@ -368,6 +382,17 @@ if ($SessionsPresentes -eq 't') {
     Write-Host "Aucune table sessions_serveur dans cette sauvegarde (anterieure a 053) : rien a invalider." -ForegroundColor Yellow
 } else {
     Write-Host "Echec : impossible de verifier les sessions restaurees ($SessionsPresentes)." -ForegroundColor Red
+    Nettoyer-FichiersClairs
+    exit 1
+}
+
+# Le service ne reprend qu'ICI : invalidation verifiee. Si l'etape ci-dessus
+# avait echoue, le script aurait deja quitte et la base serait restee fermee.
+Write-Host "Reautorisation des connexions a '$NomBaseCible' apres invalidation ..."
+& $Psql -h $PgHost -p $PgPort -U $Utilisateur -d postgres -q -v ON_ERROR_STOP=1 -c `
+    "ALTER DATABASE $NomBaseCible CONNECTION LIMIT -1;"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Echec : impossible de reautoriser les connexions a '$NomBaseCible' (code $LASTEXITCODE)." -ForegroundColor Red
     Nettoyer-FichiersClairs
     exit 1
 }

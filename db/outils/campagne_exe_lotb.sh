@@ -23,18 +23,40 @@
 set -uo pipefail
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PSQL="$RACINE/_pgdev/pgsql/bin/psql.exe"
+PSQL="${PSQL:-$RACINE/_pgdev/pgsql/bin/psql.exe}"
 BASE_EXE="${BASE_EXE:-quincaillerie_lotbexe}"
 PORT_EXE="${PORT_EXE:-8000}"
 DELAI_SUITE_S="${DELAI_SUITE_S:-600}"
 EXE="$RACINE/server/fabrication/dist/Akuma.exe"
 export PGPASSWORD="${PGPASSWORD:-qf_dev_local}"
-export PGHOST=127.0.0.1 PGPORT=5433 PGUSER=postgres
+export PGHOST="${PGHOST:-127.0.0.1}"
+export PGPORT="${PGPORT:-5433}"
+export PGUSER="${PGUSER:-postgres}"
 
+# Toute campagne dont une dependance manque doit s'arreter AVANT la moindre
+# action destructive (revue #103, R1 complement) : sinon la suppression de la
+# base jetable et le rapport final partiraient d'un environnement incomplet.
 if [ ! -f "$EXE" ]; then
     echo "ERREUR : $EXE introuvable (construire d'abord via construire.ps1)."
     exit 1
 fi
+for dependance in \
+    "$PSQL" \
+    "$RACINE/db/outils/migrer.sh" \
+    "$RACINE/db/outils/definir_mot_de_passe_app.sql" \
+    "$RACINE/db/tests/00_jeu_essai.sql" \
+    "$RACINE/QuincaillerieFranck_Test/creation_base_donnees.sql"; do
+    if [ ! -f "$dependance" ]; then
+        echo "ERREUR : dépendance manquante : $dependance — campagne annulée avant toute action."
+        exit 1
+    fi
+done
+for outil in curl npm; do
+    if ! command -v "$outil" >/dev/null 2>&1; then
+        echo "ERREUR : dépendance manquante : $outil introuvable dans le PATH — campagne annulée avant toute action."
+        exit 1
+    fi
+done
 if netstat -ano | grep -q "LISTENING" && netstat -ano | grep ":${PORT_EXE} " | grep -q LISTENING; then
     echo "ERREUR : le port ${PORT_EXE} est déjà occupé — arrêter le processus avant la campagne."
     exit 1
@@ -48,6 +70,24 @@ titre() { echo; echo "##########################################################
 ETAPES_KO=0
 CONFIG_TEMP=""
 DB_CREEE=0
+BASE_NETTOYEE=0
+NETTOYAGE_KO=0
+
+# Le nettoyage de la base est aussi un verdict : une base jetable qui survit
+# a la campagne est un echec, jamais un detail (revue #103, R1 complement).
+nettoyer_base() {
+    if [ "$BASE_NETTOYEE" -eq 1 ] || [ "$DB_CREEE" -eq 0 ]; then
+        BASE_NETTOYEE=1
+        return 0
+    fi
+    if "$PSQL" -d postgres -c "DROP DATABASE IF EXISTS ${BASE_EXE};" >/dev/null 2>&1; then
+        DB_CREEE=0
+        BASE_NETTOYEE=1
+        return 0
+    fi
+    NETTOYAGE_KO=1
+    return 1
+}
 
 # Installe AVANT toute creation : une sortie anticipee (preparation en echec,
 # EXE muet) doit laisser le poste propre — base jetable supprimee, config
@@ -55,9 +95,7 @@ DB_CREEE=0
 nettoyer() {
     taskkill //F //IM Akuma.exe >/dev/null 2>&1
     rm -f "$CONFIG_TEMP"
-    if [ "$DB_CREEE" -eq 1 ]; then
-        "$PSQL" -d postgres -c "DROP DATABASE IF EXISTS ${BASE_EXE};" >/dev/null 2>&1
-    fi
+    nettoyer_base || true
 }
 trap nettoyer EXIT
 
@@ -86,6 +124,7 @@ verdict_preparation() {
 
 titre "1. Base jetable ${BASE_EXE} (schéma d'origine + migrations + jeu d'essai)"
 "$PSQL" -d postgres -c "DROP DATABASE IF EXISTS ${BASE_EXE};" >/dev/null 2>&1
+verdict_preparation $? "suppression base précédente"
 "$PSQL" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${BASE_EXE};"
 verdict_preparation $? "création base"
 DB_CREEE=1
@@ -104,8 +143,8 @@ titre "2. Lancement de Akuma.exe --sans-navigateur sur le port ${PORT_EXE}"
 CONFIG_TEMP="$(mktemp)" || { echo "ERREUR : création du fichier de configuration temporaire impossible."; exit 1; }
 cat > "$CONFIG_TEMP" <<EOF
 [database]
-host = 127.0.0.1
-port = 5433
+host = ${PGHOST}
+port = ${PGPORT}
 dbname = ${BASE_EXE}
 user = qf_app
 password = qf_app_dev_local
@@ -146,6 +185,14 @@ for suite in routes cablage vente stock rapports inventaire ux comptes caisse rh
     fi
     verdict "$CODE_SUITE" "  suite $suite"
 done
+
+titre "Nettoyage de la base jetable"
+if nettoyer_base; then
+    echo ">>> nettoyage : OK"
+else
+    echo ">>> nettoyage : ÉCHEC — la base ${BASE_EXE} n'a pas pu être supprimée."
+    ETAPES_KO=$((ETAPES_KO + 1))
+fi
 
 titre "BILAN"
 echo "Journal de l'exe : $JOURNAL_EXE"
