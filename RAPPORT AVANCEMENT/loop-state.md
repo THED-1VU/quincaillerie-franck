@@ -5157,5 +5157,9 @@ harnais Qoder **36/38** (89,32 s) et suite Codex **23/25** (40,73 s). Échecs :
 refusé par `tracer_approbation_remise` (403, vente annulée : aucun contournement) ;
 (iii) deux attentes de tests Codex fausses — `RestrictViolation` au lieu de
 `RaiseException`, et export cumulé `agent_stock` prioritaire sur `agent_comptabilite`
-(précédence C3 préexistante, restrictive, sans fuite). Aucun contournement D-N1/D-N5/C2-01
-constaté sur le snapshot. Scores C0–C14 **inchangés** ; aucune fusion.
+(précédence C3 préexistante, restrictive, sans fuite). Constat statique supplémentaire :
+`verifier-exploitation-reel.mjs` écrit encore une preuve au format producteur actuel
+(sans `complete`/`verifiee`, horodatage sans fuseau) et attend `etat = succes` — deux
+contrôles Playwright échoueront avec le contrat D-N5 s'ils ne sont pas adaptés.
+Aucun contournement D-N1/D-N5/C2-01 constaté sur le snapshot. Scores C0–C14
+**inchangés** ; aucune fusion.

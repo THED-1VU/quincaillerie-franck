@@ -131,7 +131,7 @@ temporaire de 15 minutes ».
 | Décision | Code concerné | Tests | Preuves | PR | Statut de clôture |
 |---|---|---|---|---|---|
 | D-N1 | `server/app/routes/ventes.py` (contrôles 313-373) ; à venir : `approbations_remises` + trace (migration 055, Codex) | 8 tests D-N1 (cumul, bornes 10 %/10,01 %, pondération, fausse approbation, trace, immuabilité, cumul de rôles) | `7bebded` : 7 rouges / 1 vert ; 201 à 17,19 % et 19 % ; `UndefinedTable` sur la trace. Snapshot WIP Codex : 7 verts / 1 rouge (cumul de rôles → 403, aucun contournement) | #107 (Codex, DRAFT) ; #108 (audit Qoder, DRAFT) | OUVERT — 3 corrections à porter dans #107 (§6) |
-| D-N5 | `server/app/routes/exploitation.py` ; `maquette/tableau-bord.html` ; producteur `db/outils/sauvegarder.ps1` (exclu/quarantaine) | 17 tests D-N5 (fraîcheur, bornes 3599/3600/3601 s, complétude/vérification, preuve antérieure, absence/corruption, dates invalides, accès) | `7bebded` : 16 rouges / 1 vert, aucune alerte ni âge. Snapshot WIP Codex : 17/17 verts sur la route ; producteur réel non qualifié (fail-safe) | #107 (Codex) ; #108 (audit Qoder) | OUVERT — consommateur vérifié sur snapshot ; producteur hors périmètre contractuel |
+| D-N5 | `server/app/routes/exploitation.py` ; `maquette/tableau-bord.html` ; `maquette/verification/verifier-exploitation-reel.mjs` ; producteur `db/outils/sauvegarder.ps1` (exclu/quarantaine) | 17 tests D-N5 (fraîcheur, bornes 3599/3600/3601 s, complétude/vérification, preuve antérieure, absence/corruption, dates invalides, accès) | `7bebded` : 16 rouges / 1 vert, aucune alerte ni âge. Snapshot WIP Codex : 17/17 verts sur la route ; producteur réel non qualifié (fail-safe) ; fixture Playwright encore au format producteur actuel → 2 contrôles à adapter | #107 (Codex) ; #108 (audit Qoder) | OUVERT — consommateur vérifié sur snapshot ; suite Playwright et producteur à traiter |
 | D1 | `demonstration.py`, `rapports.py`, `tableau_bord.py`, `inventaire.py`, GRANT 008/029/034 | 5 tests D1 (API, xlsx, PDF, JSON, 403, SQL direct, cumul) | `7bebded` : 5/5 verts. Snapshot WIP Codex : 5/5 verts ; le test d'export cumulé de Codex est rouge pour une attente contraire à la précédence C3 (§6.3), sans fuite constatée | Aucune correction nécessaire sur le périmètre audité | OUVERT — UI non rejouée, droits comptable non arbitrés, preuve humaine requise |
 | C2-01 | `db/migrations/053_sessions_serveur.sql` (`verifier_connexion`), `server/app/routes/auth.py` ; 055 (Codex) | 8 tests C2-01 (5 échecs, non-prolongation, expiration, série, seuil, identifiant inconnu, concurrence ×2) | `7bebded` : 5 rouges / 3 verts ; colonne absente ; `(5, True)`. Snapshot WIP Codex : 7 verts / 1 rouge — dérive du seed `00_jeu_essai.sql` (§6.1), migration 055 vérifiée directement en psql (`5|f`) | #107 (Codex) ; #108 (audit Qoder) | OUVERT — corriger le seed puis rejouer |
 
@@ -221,7 +221,19 @@ principal depuis 035), pas la seule colonne `utilisateurs.role`.
    précédence des rôles à l'export arbitrée séparément, hors de cette
    mission).
 
-### 6.4 Ce que le snapshot prouve déjà
+### 6.4 Suite Playwright d'exploitation : fixture périmée (constat statique)
+
+`maquette/verification/verifier-exploitation-reel.mjs` écrit un fichier d'état
+au **format producteur actuel** — `{resultat: "SUCCES", horodatage:
+"2026-09-25 12:34:56"}` (ni `complete`, ni `verifiee`, horodatage sans
+fuseau) — puis attend `etat === "succes"` et le bandeau masqué
+(lignes 80-86, 184-187). Avec le contrat D-N5, ce fichier est **non qualifié** :
+la route répondra `inconnu` avec `alerte = true`, donc deux contrôles de la
+suite échoueront. La suite n'a pas été modifiée par le diff de Codex : elle
+doit être mise à jour dans #107 (fixture qualifiée + cas 60 min), sinon le job
+Playwright de la CI échouera même si pytest est vert.
+
+### 6.5 Ce que le snapshot prouve déjà
 
 Sur le périmètre exécuté : cumul de remises bloqué, bornes 10 % / 10,01 %
 exactes, pondération par quantités, fausses approbations ignorées, trace
@@ -241,8 +253,11 @@ non exécuté (quarantaine), aucune validation humaine, **aucune fusion**.
    l'union des rôles (§6.2).
 4. Lire `tentatives_max_connexion` depuis `parametres` au lieu du `seuil := 5`
    codé en dur — cohérent aujourd'hui, mais deux sources de vérité.
-5. Prouver par Playwright l'alerte visible D-N5 et son passage à 60 min.
-6. Producteur D-N5 : sans `complete`/`verifiee` et avec un horodatage sans
+5. Mettre à jour la suite Playwright d'exploitation (fixture qualifiée
+   `complete`/`verifiee` + fuseau, cas d'alerte à 60 min) — sinon deux
+   contrôles échoueront (§6.4).
+6. Prouver par Playwright l'alerte visible D-N5 et son passage à 60 min.
+7. Producteur D-N5 : sans `complete`/`verifiee` et avec un horodatage sans
    fuseau, l'état réel restera `inconnu`/alerte — conforme au contrat
    (fail-safe), mais alerte permanente tant que le producteur n'est pas
    enrichi : décision/chantier séparé.
@@ -257,6 +272,9 @@ non exécuté (quarantaine), aucune validation humaine, **aucune fusion**.
   les corrections fonctionnent sur 36/38 tests d'audit et 23/25 tests Codex ;
   aucun contournement constaté. Les quatre échecs sont des **défauts de test
   ou de seed**, plus un cas de cumul de rôles à corriger (§6, §7).
+- La suite Playwright d'exploitation encode encore l'ancien format de preuve
+  (§6.4) : sans adaptation, le job Playwright de la CI échouera sur la branche
+  corrigée même si pytest est vert.
 - D1 est **conforme sur le périmètre API/export/SQL testé** ; sa clôture exige
   encore la preuve UI et l'arbitrage des droits du comptable par le
   propriétaire.
