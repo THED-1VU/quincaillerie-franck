@@ -5122,3 +5122,44 @@ du comptable Q1-Q6**.
     **Bloqué tant que le candidat 13 n'est pas livré** (importer dans
     l'ancien modèle doublerait le travail). (Anciennement candidat 13 du
     cycle 29.)
+
+## Cycle 78 — audit indépendant des décisions propriétaire du 24/10/2026
+
+**Date** : 2026-10-24. Socle : `origin/main` = `7bebdeddc67d00d11b750238cca42b6d7154a21d` (#103).
+Worktree isolé `QuincaillerieFranck_Test_Cycle78`, branche `cycle-78-decisions-proprietaire`,
+base `quincaillerie_c78` (000–054 + jeu d'essai). Aucune fusion, aucun push sur `main`,
+aucune migration créée : la 055 est réservée à Codex (PR #107, DRAFT).
+
+Harnais d'audit : `server/tests/test_c78_audit_independant.py` (38 tests, garde
+`QF_AUDIT_C78=1` ; sans la variable, 38 ignorés — la suite ordinaire est inchangée).
+Résultat sur `7bebded` : **10 réussis, 28 échoués** (81,44 s), journal brut hors dépôt
+`C:/Users/USER/AppData/Local/Temp/qf_c78_preuves/audit_7bebded_38.txt`.
+
+- **D-N1** : 9 % ligne + 9 % globale acceptés (remise 1117,35 FCFA = 17,19 %) ;
+  10,00015 % accepté ; 20 % ligne sur petite part bloqué à tort (3,13 % effectifs) ;
+  fausse approbation client acceptée ; table `approbations_remises` absente.
+- **D-N5** : route actuelle sans `alerte`, `age_secondes`, `seuil_secondes` ;
+  un SUCCES de 3600 s reste `succes` ; ni complétude ni vérification ni preuve
+  antérieure. Producteur `sauvegarder.ps1` non qualifiant (exclu du contrat).
+- **D1** : 5/5 verts (API, xlsx, PDF, 403, SQL direct, cumul de rôles) ; UI non
+  rejouée, droits comptable non arbitrés.
+- **C2-01** : colonne `verrouille_jusqua` absente (verrou permanent actuel) ;
+  `tentatives_max_connexion` encore `a_decider = true` ; comptage concurrent et
+  rupture de série déjà conformes.
+
+**Vérification indépendante du snapshot de travail de Codex** (worktree séparé
+`_worktrees/qoder-verif-codex-20261024`, détaché sur `46616ae` + copie en lecture
+seule de son diff non commité ; base clonée `quincaillerie_c78_verif`, 055 appliquée) :
+harnais Qoder **36/38** (89,32 s) et suite Codex **23/25** (40,73 s). Échecs :
+(i) dérive du seed — `00_jeu_essai.sql` réamorce `tentatives_max_connexion` à
+`a_decider = TRUE`, annulant 055 à chaque test (migration correcte, vérifiée en psql) ;
+(ii) cumul de rôles — un compte `responsable` secondaire est accepté par la route puis
+refusé par `tracer_approbation_remise` (403, vente annulée : aucun contournement) ;
+(iii) deux attentes de tests Codex fausses — `RestrictViolation` au lieu de
+`RaiseException`, et export cumulé `agent_stock` prioritaire sur `agent_comptabilite`
+(précédence C3 préexistante, restrictive, sans fuite). Constat statique supplémentaire :
+`verifier-exploitation-reel.mjs` écrit encore une preuve au format producteur actuel
+(sans `complete`/`verifiee`, horodatage sans fuseau) et attend `etat = succes` — deux
+contrôles Playwright échoueront avec le contrat D-N5 s'ils ne sont pas adaptés.
+Aucun contournement D-N1/D-N5/C2-01 constaté sur le snapshot. Scores C0–C14
+**inchangés** ; aucune fusion.
