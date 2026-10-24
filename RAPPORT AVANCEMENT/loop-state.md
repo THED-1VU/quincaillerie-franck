@@ -5122,3 +5122,30 @@ du comptable Q1-Q6**.
     **Bloqué tant que le candidat 13 n'est pas livré** (importer dans
     l'ancien modèle doublerait le travail). (Anciennement candidat 13 du
     cycle 29.)
+
+## Cycle 78 — audit indépendant des décisions propriétaire du 24/10/2026
+
+**Date** : 2026-10-24. Socle : `origin/main` = `7bebdeddc67d00d11b750238cca42b6d7154a21d` (#103).
+Worktree isolé `QuincaillerieFranck_Test_Cycle78`, branche `cycle-78-decisions-proprietaire`,
+base `quincaillerie_c78` (000–054 + jeu d'essai). Aucune fusion, aucun push sur `main`,
+aucune migration créée : la 055 est réservée à Codex (PR #107, DRAFT).
+
+Harnais d'audit : `server/tests/test_c78_audit_independant.py` (37 tests, garde
+`QF_AUDIT_C78=1` ; sans la variable, 37 ignorés — la suite ordinaire est inchangée).
+Résultat sur `7bebded` : **10 réussis, 27 échoués** (86,90 s), journal brut hors dépôt
+`C:/Users/USER/AppData/Local/Temp/qf_c78_preuves/audit_7bebded.txt`.
+
+- **D-N1** : 9 % ligne + 9 % globale acceptés (remise 1117,35 FCFA = 17,19 %) ;
+  10,00015 % accepté ; 20 % ligne sur petite part bloqué à tort (3,13 % effectifs) ;
+  fausse approbation client acceptée ; table `approbations_remises` absente.
+- **D-N5** : route actuelle sans `alerte`, `age_secondes`, `seuil_secondes` ;
+  un SUCCES de 3600 s reste `succes` ; ni complétude ni vérification ni preuve
+  antérieure. Producteur `sauvegarder.ps1` non qualifiant (exclu du contrat).
+- **D1** : 5/5 verts (API, xlsx, PDF, 403, SQL direct, cumul de rôles) ; UI non
+  rejouée, droits comptable non arbitrés.
+- **C2-01** : colonne `verrouille_jusqua` absente (verrou permanent actuel) ;
+  `tentatives_max_connexion` encore `a_decider = true` ; comptage concurrent et
+  rupture de série déjà conformes.
+- Scores C0–C14 **inchangés**. Détail, tableau décision → code → tests → preuves →
+  PR → statut et constats de coordination :
+  `RAPPORT AVANCEMENT/cycles/cycle-78-decisions-20261024.md`.
