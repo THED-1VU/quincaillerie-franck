@@ -556,11 +556,16 @@
     clearTimeout(minuteurAgeSauvegarde);
     const bandeau = $("bandeau-sauvegarde");
     const voyant = $("voyant-sauvegarde");
+    const pastille = document.createElement("span");
+    pastille.className = "pastille pastille--alerte";
+    voyant.replaceChildren(pastille);
+    bandeau.classList.remove("alerte-persistante--attention");
     const alerter = (message) => {
       bandeau.textContent = message;
       bandeau.hidden = false;
       bandeau.setAttribute("role", "alert");
-      voyant.textContent = message;
+      pastille.textContent = message;
+      pastille.className = "pastille pastille--alerte";
     };
     try {
       const etat = await appelApi("/exploitation/etat-sauvegarde");
@@ -570,7 +575,8 @@
       if (etat.etat === "succes" && etat.alerte === false) {
         bandeau.hidden = true;
         bandeau.removeAttribute("role");
-        voyant.textContent = "Réussie le " + new Date(etat.horodatage).toLocaleString("fr-FR");
+        pastille.className = "pastille pastille--ok";
+        pastille.textContent = "Réussie le " + new Date(etat.horodatage).toLocaleString("fr-FR");
         minuteurAgeSauvegarde = setTimeout(() => {
           alerter("La dernière sauvegarde complète et vérifiée atteint 60 minutes : les données récentes ne sont plus protégées.");
           rafraichirEtatSauvegarde();
@@ -579,8 +585,12 @@
         alerter("La dernière sauvegarde complète et vérifiée atteint 60 minutes : les données récentes ne sont plus protégées.");
       } else if (etat.etat === "echec") {
         alerter("La dernière sauvegarde a ÉCHOUÉ : " + etat.motif + ". Le délai depuis la dernière sauvegarde vérifiée continue.");
+        const date = etat.horodatage_tentative ? "le " + new Date(etat.horodatage_tentative).toLocaleString("fr-FR") : "à une date inconnue";
+        pastille.textContent = "ÉCHEC " + date + " — " + etat.motif;
       } else if (etat.etat === "absent") {
         alerter("Aucune sauvegarde n'a encore tourné sur ce poste. Faites vérifier la protection des données.");
+        pastille.className = "pastille pastille--info";
+        bandeau.classList.add("alerte-persistante--attention");
       } else {
         alerter("L'état de sauvegarde est ILLISIBLE ou non vérifié : " + (etat.detail || "preuve absente"));
       }
