@@ -5122,3 +5122,15 @@ du comptable Q1-Q6**.
     **Bloqué tant que le candidat 13 n'est pas livré** (importer dans
     l'ancien modèle doublerait le travail). (Anciennement candidat 13 du
     cycle 29.)
+
+## Décisions propriétaire du 24/10/2026 — exécution Codex
+
+Référence : instruction explicite du propriétaire du 24/10/2026. Portée et contrat : CONTRAT_DECISIONS_20261024.md. Responsable métier : propriétaire ; responsable technique : Codex, coordination Qoder pour ventes/interface/supervision.
+
+- D-N1 : plafond 10 % effectifs sur toute la vente, toutes remises confondues ; au-delà, approbation serveur du responsable et trace. VALIDÉE ; correction/tests EN_COURS.
+- D-N5 : alerte à 60 minutes depuis la dernière sauvegarde complète et vérifiée ; un essai échoué/incomplet/non vérifié ne remet pas le délai à zéro. VALIDÉE ; correction/tests EN_COURS.
+- D1 : caissier autorisé aux prix de vente TTC et montants ; achats, coûts et marges interdits, y compris indirect/API/export. Droits comptable non tranchés. VALIDÉE ; audit/tests EN_COURS.
+- C2-01 : cinq échecs consécutifs, verrouillage temporaire 15 minutes ; concurrence/comptage/contournement/DoS à vérifier. VALIDÉE ; correction/tests EN_COURS. Remplace l'ancien déverrouillage exclusivement manuel.
+- Les scores restent inchangés ; décision ≠ preuve de correction. Q1–Q6 restent au comptable.
+Réservation préalable : migration 055 réservée à Codex le 24/10/2026, branche codex/decisions-proprietaire-20261024 (verrou temporaire et audit approbations). Aucun fichier 055 créé à ce stade.
+
