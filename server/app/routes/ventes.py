@@ -141,6 +141,18 @@ def lister_vendeurs(
     return {"vendeurs": lignes}
 
 
+def _refus_saisie_ligne(exc: psycopg.errors.CheckViolation, article_id: int) -> HTTPException:
+    """Garde-fous de la base sur une ligne de vente (quantité décimale sur un
+    article en quantités entières — migration 034 — ou quantité arrondie à
+    zéro) : un refus de saisie (422), pas une panne (500). Le message écrit
+    par le projet est restitué ; celui d'une simple contrainte CHECK (nom de
+    table et de contrainte) ne l'est jamais — règle C11."""
+    message = (exc.diag.message_primary or "").strip()
+    if not message or "violates check constraint" in message:
+        message = f"Quantité ou prix invalide pour l'article {article_id}."
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, message)
+
+
 @routeur.post("", response_model=ReponseVente, status_code=status.HTTP_201_CREATED)
 def enregistrer_vente(
     demande: DemandeVente,
@@ -463,8 +475,41 @@ def enregistrer_vente(
                 ) from exc
             vente_id = cur.fetchone()["id"]
 
+            # Ordre des verrous (écart C10-02, constaté par deux clients HTTP
+            # simultanés) : le stock est décrémenté AVANT l'insertion des
+            # lignes. La clé étrangère composite de `ventes_lignes` vers
+            # `stocks_sites` prend un verrou partagé sur la ligne de stock ;
+            # insérer la ligne d'abord puis demander le verrou exclusif de
+            # `decrementer_stock_vente()` faisait attendre deux ventes du même
+            # article l'une sur l'autre (interblocage 40P01). Les lignes sont
+            # en outre décrémentées par article croissant, quel que soit
+            # l'ordre de saisie : deux ventes multi-articles en ordres
+            # opposés ne peuvent plus se croiser.
+            manquants: dict[int, Decimal] = {}
+            for index in sorted(
+                range(len(lignes_resolues)), key=lambda i: lignes_resolues[i]["article_id"]
+            ):
+                lr = lignes_resolues[index]
+                try:
+                    cur.execute(
+                        "SELECT * FROM decrementer_stock_vente(%s, %s, %s, %s, %s, %s)",
+                        (
+                            lr["article_id"], site_cible, lr["quantite"],
+                            session.utilisateur_id,
+                            vente_id, f"vente #{vente_id}",
+                        ),
+                    )
+                except psycopg.errors.ForeignKeyViolation as exc:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        f"Article introuvable sur ce site (identifiant {lr['article_id']}).",
+                    ) from exc
+                except psycopg.errors.CheckViolation as exc:
+                    raise _refus_saisie_ligne(exc, lr["article_id"]) from exc
+                manquants[index] = cur.fetchone()["quantite_manquante"]
+
             ecarts: list[LigneEcartReponse] = []
-            for lr in lignes_resolues:
+            for index, lr in enumerate(lignes_resolues):
                 try:
                     cur.execute(
                         """
@@ -487,21 +532,14 @@ def enregistrer_vente(
                         status.HTTP_422_UNPROCESSABLE_ENTITY,
                         f"Article introuvable sur ce site (identifiant {lr['article_id']}).",
                     ) from exc
+                except psycopg.errors.CheckViolation as exc:
+                    raise _refus_saisie_ligne(exc, lr["article_id"]) from exc
 
-                cur.execute(
-                    "SELECT * FROM decrementer_stock_vente(%s, %s, %s, %s, %s, %s)",
-                    (
-                        lr["article_id"], site_cible, lr["quantite"],
-                        session.utilisateur_id,
-                        vente_id, f"vente #{vente_id}",
-                    ),
-                )
-                resultat = cur.fetchone()
-                if resultat["quantite_manquante"] > 0:
+                if manquants[index] > 0:
                     ecarts.append(
                         LigneEcartReponse(
                             article_id=lr["article_id"],
-                            quantite_manquante=resultat["quantite_manquante"],
+                            quantite_manquante=manquants[index],
                         )
                     )
 
