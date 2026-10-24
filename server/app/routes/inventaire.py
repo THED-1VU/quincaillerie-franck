@@ -173,6 +173,13 @@ def enregistrer_comptage(
                     status.HTTP_422_UNPROCESSABLE_ENTITY,
                     "Article introuvable pour ce site.",
                 ) from exc
+            except psycopg.errors.CheckViolation as exc:
+                # Garde-fou de la migration 034 (verifier_decimale_comptages_stock) :
+                # une quantité décimale sur un article en quantités entières
+                # est un refus de saisie (422, message de la base, en français),
+                # pas une panne — constat C7 de l'audit indépendant du
+                # 2026-10-23 : « Erreur interne » pour un comptage de 2,5 sacs.
+                raise erreur_metier(exc) from exc
 
     # Ne renvoie QUE ce que le client a lui-même envoyé — jamais
     # quantite_attendue ni ecart (voir le docstring du module).

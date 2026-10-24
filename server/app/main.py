@@ -209,6 +209,37 @@ def creer_application(config: Config | None = None) -> FastAPI:
         )
 
     # -----------------------------------------------------------------
+    # Conflit de transaction (SQLSTATE classe 40 : interblocage 40P01,
+    # échec de sérialisation 40001) — écart C10-02. PostgreSQL a annulé CETTE
+    # transaction pour en sauver une autre : la base fonctionne, rien n'a été
+    # enregistré, il suffit de recommencer. Sans ce gestionnaire, l'erreur
+    # était une sous-classe d'OperationalError (psycopg ne regroupe pas la classe 40) et se faisait passer pour une
+    # panne de la base (« système d'enregistrement injoignable »).
+    # -----------------------------------------------------------------
+    @app.exception_handler(psycopg.errors.DeadlockDetected)
+    @app.exception_handler(psycopg.errors.SerializationFailure)
+    @app.exception_handler(psycopg.errors.TransactionRollback)
+    def _conflit_de_transaction(request: Request, exc: psycopg.Error):
+        logger.warning("Conflit de transaction sur %s : %s", request.url.path, exc)
+        return JSONResponse(
+            {
+                "detail": "Une autre saisie sur les mêmes articles était en cours au même "
+                "instant. Rien n'a été enregistré pour celle-ci : recommencez dans un instant."
+            },
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    # Montant ou quantité au-delà de la capacité de la colonne (NUMERIC) :
+    # une saisie aberrante, pas une panne — 422 au lieu de « Erreur interne ».
+    @app.exception_handler(psycopg.errors.NumericValueOutOfRange)
+    def _valeur_hors_limites(request: Request, exc: psycopg.errors.NumericValueOutOfRange):
+        logger.warning("Valeur hors limites sur %s : %s", request.url.path, exc)
+        return JSONResponse(
+            {"detail": "Un montant ou une quantité saisi dépasse la limite admise."},
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+    # -----------------------------------------------------------------
     # Base de données injoignable (chantier C12, cycle 28) — DISTINCT du
     # gestionnaire générique ci-dessous : « la base a refusé la requête »
     # (bug applicatif, contrainte violée) n'est PAS la même situation que
