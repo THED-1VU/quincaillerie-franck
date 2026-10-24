@@ -42,6 +42,10 @@ sont pas modifiées.
 Journal brut conservé hors dépôt :
 `C:/Users/USER/AppData/Local/Temp/qf_c78_preuves/audit_7bebded_38.txt`.
 
+Commits d'audit sur `cycle-78-decisions-proprietaire` (PR #108, DRAFT) :
+`7d63ed5` (harnais + rapport), `2e1db30` (vérification du snapshot Codex +
+test de cumul de rôles), `362d239` (constat Playwright).
+
 ## 3. Résultats par décision
 
 ### 3.1 D-N1 — remises cumulées : écart reproduit
@@ -142,12 +146,12 @@ temporaire de 15 minutes ».
   `main`.
 - **Aucune exécution de `sauvegarder.ps1`** (quarantaine Kaspersky) ; aucune
   restauration. Le producteur est analysé par lecture seule.
-- **PR #107** : DRAFT au moment de l'audit, tip publié `46616ae` (docs de
-  réservation seulement) ; les changements de code (`auth.py`, `ventes.py`,
-  `exploitation.py`, `tableau-bord.html`, migration 055) étaient encore non
-  commités dans son worktree. La vérification indépendante du code corrigé
-  sera faite dans un worktree séparé dès qu'un commit sera poussé, jamais dans
-  son worktree actif.
+- **PR #107** : DRAFT, tip publié `46616ae` (docs de réservation seulement) ;
+  les changements de code (`auth.py`, `ventes.py`, `exploitation.py`,
+  `tableau-bord.html`, migration 055) restent non commités dans son worktree.
+  Qoder a vérifié une **copie en lecture seule** de ce diff dans un worktree
+  séparé (§6), jamais dans son worktree actif ; la vérification finale sera
+  refaite sur le SHA poussé.
 - **PR #105** (ventes simultanées) : non fusionnée, non remplacée ; sa
   compatibilité avec D-N1/C2-01 reste à revalider avant toute fusion.
 
