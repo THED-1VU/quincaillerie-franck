@@ -35,6 +35,7 @@ const PGDEV = resolve(process.env.PGDEV_RACINE || RACINE_DEPOT, "_pgdev");
 // `_pgdev` n'existe que sur le poste Windows ; en CI, `psql` est sur le PATH.
 const PSQL = process.env.PSQL || (existsSync(resolve(PGDEV, "pgsql", "bin", "psql.exe")) ? resolve(PGDEV, "pgsql", "bin", "psql.exe") : "psql");
 const BASE_DB = process.env.PGDATABASE_PISTE || "quincaillerie_test";
+const PG_PORT = process.env.PGPORT || "5433";
 
 const MDP_RESPONSABLE = "ResponsableTest123";
 const MDP_AGENT_STOCK = "AgentStockTest123";
@@ -46,19 +47,19 @@ const verifier = (cond, libelle) => (cond ? ok : ko).push(libelle);
 
 function psql(sql) {
   execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", BASE_DB, "-q", "-c", sql,
+    "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", BASE_DB, "-q", "-c", sql,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }
 
 function psqlValeur(sql) {
   return execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", BASE_DB, "-t", "-A", "-q", "-c", sql,
+    "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", BASE_DB, "-t", "-A", "-q", "-c", sql,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" }, encoding: "utf-8" }).trim();
 }
 
 console.log("== Préparation de la base (jeu d'essai + comptes de test) ==");
 execFileSync(PSQL, [
-  "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", BASE_DB,
+  "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", BASE_DB,
   "-v", "ON_ERROR_STOP=1", "-q", "-f", resolve(RACINE_DEPOT, "db", "tests", "00_jeu_essai.sql"),
 ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_RESPONSABLE}', gen_salt('bf', 12)) WHERE identifiant='resp';`);
