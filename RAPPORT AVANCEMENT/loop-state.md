@@ -121,7 +121,7 @@ journal à reconstituer si demandé.
 Cette moyenne n'est pas un objectif : chaque chantier est mené à 100 % séparément.
 
 **Moyenne indicative après le cycle 75 (exécution des 9 décisions du
-propriétaire, PR #93→#100 en attente de fusion) : ≈ 83 %** — référence
+propriétaire, PR #93→#100 fusionnées via #100 → 335eb91) : ≈ 83 %** — référence
 cycle 73 transmise (C0 90, C1 92, C2 82, C3 77, C4 78, C5 81, C6 85, C7 67,
 C8 86, C9 60, C10 58, C11 85, C12 95, C13 100, C14 76), deltas prouvés au
 cycle 75 sur décisions du propriétaire : C1 **→ 96** (D2, écart C1-01),
@@ -130,6 +130,17 @@ clos, moitié session de C2-01 résorbée), C3 **→ 88** (D7 + D8 — C3-02,
 C3-03), C12 **→ 97** (C12-02 livré et testé). Restent ouverts : D1 (C3-01),
 D3 (C6-01), C6-02, C7-01, C1-02 (réponses comptable), C11-02/C12-03 (jour J),
 tests humains (C9-01, C10-01, C12-01, C14-02), D11 (action propriétaire).
+
+**Moyenne indicative après le cycle 76 (opération 100 % — Lot B, PR #103) :
+≈ 84 %** — deltas prouvés par exécution : C5 **→ 97** (campagne FCFA
+N1-N11 + limites L1-L11 rejouée en un seul tenant), C8 **→ 95** (505
+contrôles, 5 largeurs 360→1920, exécutable Windows reconstruit et éprouvé),
+C12 **→ 98** (chaîne de sauvegarde prouvée par doubles sûrs + vrai
+`restaurer.ps1`, hygiène des fichiers clairs corrigée). Aucun 100 %
+déclaré : restent à la main du propriétaire Kaspersky S1-S6, second PC
+P1-P9, réponses comptable Q1-Q6, campagnes humaines R1/R2/R5 + H1-H4.
+Cycle 77 : revalidation de #103 sur `main` `d745ead` — voir la section
+« Cycle 77 » du journal.
 
 ---
 
@@ -4744,6 +4755,72 @@ fusionnées** (fusion = propriétaire uniquement, dans l'ordre
 
 ---
 
+### Cycle 77 — Revalidation de #103 sur `main` `d745ead` (clôture du Lot B) — 2026-10-24
+
+- **ORDRE PROPRIÉTAIRE** : « QODER — CYCLE 77 : REVALIDATION DE #103 ET
+  CLÔTURE DU LOT B » (état de référence vérifié par Claude in Chrome ;
+  `main` = `d745ead` après #100, #101, #102). Tâches : revalider #103 sur
+  l'état combiné, corriger les docs, analyser #92/#60 séparément. Interdits
+  tenus : aucune fusion, aucun push sur `main`, `sauvegarder.ps1` jamais
+  exécuté.
+- **Fusion d'alignement** : `origin/main` (`d745ead`) fusionné dans
+  `operation-100-lot-b` par merge commit **`76f3d5e`** (« Lot B : alignement
+  sur main d745ead »), **aucun conflit** — 54 fichiers, +2 663/−31
+  (migrations 053/054 et inverses, conftest Codex, auth/sécurité,
+  `test_sessions_serveur.py`, `test_integrite_paiements_sql.py`, contrats).
+- **Passe unique locale** (base dédiée `quincaillerie_lotb`, port 8020,
+  migrations 000–054) : suite SQL complète OK (protections, habilitations,
+  concurrence, aller-retour des migrations) ; **pytest 396/396** (854 s) ;
+  **13/13 suites Playwright, 505 contrôles, 0 échec** ; jeu d'essai final
+  rechargé ; BILAN « Toutes les étapes sont passées », exit 0.
+- **Échec pytest corrigé (défaut du TEST, aucun défaut applicatif)** : au
+  run précédent (interrompu), `test_journee_boutique_fcfa` échouait
+  (`/caisse/attendu` = 0 au lieu de 21 850). Cause reproduite : le test
+  figeait `date.today()` (horloge du POSTE : 2026-10-24 00:17) alors que
+  PostgreSQL date les transactions avec SA date (base `Africa/Douala` :
+  2026-10-23 23:17) — décalage de fuseau, pas de défaut de l'application.
+  Correctif : les deux tests concernés (`test_campagne_fcfa_c5.py`,
+  `test_paiements_mixtes_d2.py`) lisent désormais le jour par
+  `SELECT current_date` sur la base (source de vérité). Aucune contrainte
+  SQL touchée, aucun code applicatif modifié. Rejeu ciblé dans la fenêtre
+  de divergence : 12/12, puis passe complète verte.
+- **CI** : run **40035602067** sur **`835e0fb`** — jobs `pytest` et
+  `playwright` **succès** (détail dans `RAPPORT AVANCEMENT/CYCLE_77_REVALIDATION.md` §5).
+- **Échec CI du run 40037134895 (`51035b8`, docs seuls) — défaut du TEST,
+  corrigé** : job `pytest` succès, job `playwright` en échec sur la seule
+  suite `caisse` (« espèces attendues = 0 », vente réelle 6500). Même
+  famille que l'échec pytest : l'aperçu capturé partait avec la date du
+  NAVIGATEUR (UTC, 23/10) au lieu du jour en base (Africa/Douala, 24/10)
+  — course entre deux `GET /caisse/attendu` (changement de site puis de
+  date). **Première correction (`816538b`) insuffisante** : le run
+  **40039156099** sur `816538b` a de nouveau échoué sur `caisse`
+  (`waitForFunction` timeout — la réponse exacte était reçue mais l'écran
+  restait à 0, l'aperçu le plus lent écrasant le plus récent). **Correctif
+  final (test seul)** : site ET date posés ensemble, UN seul `change` —
+  un seul aperçu, celui du jour lu en base ; trace des requêtes sous
+  divergence : avant `["1|2026-10-23","1|2026-10-24","2|2026-10-24",
+  "2|2026-10-24"]`, après `["1|2026-10-24","2|2026-10-24"]` ; 24/24.
+  Aucun code applicatif ni SQL modifiés (détail :
+  `CYCLE_77_REVALIDATION.md` §5).
+- **Docs** : `LOTB_RAPPORT_FINAL.md` et ce journal corrigés (#100/#101/#102
+  fusionnées ; `main` = `d745ead` ; chaîne « #92 → #100 » retirée).
+- **Analyse #92/#60 (aucune décision)** : #92 = 3 docs cycle 74 uniques
+  (calendrier des campagnes, procédure D11, pilotage) + une section
+  « Cycle 74 » de `loop-state.md` en doublon de celle déjà sur `main` →
+  CONFLICTING/DIRTY, à rafraîchir (garder les 3 docs, retirer le doublon)
+  ou à fermer si le propriétaire juge la doc déjà couverte ; #60 =
+  addendum point a + bloc « Livré (cycles 34-35) », absent de `main`,
+  MERGEABLE/CLEAN, fusionnable tel quel. Décision = propriétaire.
+- **Écart signalé, non corrigé** : le REGISTRE (source officielle des
+  intitulés C0–C14) affiche encore les scores du cycle 75 (C5 88, C8 86,
+  C12 97) alors que le rapport Lot B revendique C5 97/C8 95/C12 98
+  (cycle 76) — à arbitrer par le propriétaire ; aucun score inventé.
+- **Reste humain/propriétaire** : fusion de #103 (Claude in Chrome),
+  Kaspersky S1-S6, second PC P1-P9, Q1-Q6 comptable, campagnes R1/R2/R5 +
+  H1-H4 ; sort des PR #92 et #60.
+
+---
+
 ## Tableau de pilotage — reprise du 2026-10-20 (après cycle 73)
 
 | Cycle | Chantier | Tâche | Responsable | Statut | Tests | Dépendance | Prochaine action |
@@ -4775,7 +4852,9 @@ fusionnées** (fusion = propriétaire uniquement, dans l'ordre
 | 73 | C0/C13/C14 | **Missions 1-5** : intégration des 12 PR #78→#89 dans `main` (ordre des dépendances, CI verte, aucun conflit masqué, aucun force-push ; incident #89 corrigé par #90 → `main` = d0fa264) + régression complète fraîche sur le nouveau main + relecture des 31 écarts du registre + tableau D1–D13 + 5 fiches de recette humaine + registre mis à jour (C0-01, C13-01, C13-02, C14-01 → CLOS ; 27 ouverts) | QODER | READY_FOR_REVIEW | SQL complet OK (000→050 aller-retour) ; pytest 334/334 ; régression Playwright relancée après incident d'invocation (PSQL relatif) — voir journal ; exe reconstruit et exécuté ; CI distante verte sur les 13 fusions | — | **fusion de la PR du cycle 73 par le propriétaire** ; puis décisions D1–D12 + campagnes (fiches R1-R5) + sort de la PR #60 |
 | — | C13/C14 | Régression complète : toutes les suites Playwright sur base isolée + rafraîchissement des captures obsolètes (tableau-bord/inventaire) | QODER | DONE | exécutée aux cycles 73 (main) et 75 (branche C75-H) | — | — |
 | 74 | C0-C14 | Arbitrage des 27 écarts + 16 décisions présentées + calendrier 9 campagnes + pilotage 99-100 % + D11 empreintes/procédure Kaspersky ; PR #91 fusionnée par le propriétaire (main = 37b7b79) | QODER | READY_FOR_REVIEW | PR #92 ouverte (doc seule) | — | fusion PR #92 + sort PR #60 par le propriétaire |
-| 75 | C1/C2/C3/C5/C12 | **Exécution des 9 décisions validées** : D9 (#93), D4 (#94), D2 (#95), D7+D8 (#96), D6+D10 (#97), C12-02 (#98), D5 audit (#99), correctifs régression D7/D4 (#100) | QODER | READY_FOR_REVIEW | audit d'impact préalable ; pytest 354/354 ; suites ciblées vertes ; régression complète sur C75-H (voir rapport consolidé) ; registre 20 CLOS / 20 ouverts / 0 P3 | #92 (pile) | **fusions #93→#100 dans l'ordre par le propriétaire** ; restent D1, D3, C6-02, C7-01, D11, D12, Q1-Q6 comptable |
+| 75 | C1/C2/C3/C5/C12 | **Exécution des 9 décisions validées** : D9 (#93), D4 (#94), D2 (#95), D7+D8 (#96), D6+D10 (#97), C12-02 (#98), D5 audit (#99), correctifs régression D7/D4 (#100) | QODER | READY_FOR_REVIEW | audit d'impact préalable ; pytest 354/354 ; suites ciblées vertes ; régression complète sur C75-H (voir rapport consolidé) ; registre 20 CLOS / 20 ouverts / 0 P3 | #100 → 335eb91 (fusionnée le 2026-10-23) | **#93→#100 fusionnées via #100 → 335eb91** ; restent D1, D3, C6-02, C7-01, D11, D12, Q1-Q6 comptable |
+| 76 | **C5/C8/C12 — OPÉRATION 100 % LOT B** | Mission propriétaire (en parallèle de Codex C1/C2/C3, worktree `operation-100-lot-b` base `2dae406`, base dédiée `quincaillerie_lotb`, port 8020) : correctif d'isolation `verifier_tout.sh` (QF_TEST_DBNAME + QF_CONFIG éphémère — 2 trous d'isolation avec Codex trouvés par exécution) ; correctif hygiène `restaurer.ps1` (fichiers clairs nettoyés sur TOUS les chemins de refus) ; double de chiffrement C12 11/11 + restauration réelle 38 tables par le VRAI restaurer.ps1 + reprise applicative cloisonnée ; campagne métier FCFA C5 (journée N1-N11 + limites L1-L11) ; exe reconstruit sur le code Lot B (SHA-256 df936f62…8597) + campagne 13 suites CONTRE l'exe sur base jetable ; rapports LOTB_* (final, C5, C8, C12) + note coordination Codex + procédure S1-S6 + fiche P1-P9 | QODER | READY_FOR_REVIEW | run 4 : SQL OK, 13/13 suites / **505 contrôles / 0 échec** ; pytest **371/371** (campagne C5 incluse) ; exe : **13/13 suites / 505 contrôles**, journal 0 erreur, base jetable supprimée ; aucun 100 % déclaré (maillons humains/propriétaire listés) | #100 fusionnée (335eb91) avant #101/#102 | **PR #103** : CI verte run 39973236711 sur la base `2dae406` ; **alignée sur main `d745ead` et revalidée au cycle 77** ; fusion par le propriétaire (Claude in Chrome) ; décisions bloquantes : Kaspersky S1-S6, second PC P1-P9, Q1-Q6 comptable, campagnes humaines R1/R2/R5 + H1-H4 |
+| 77 | C0/C13 (+C5) | **Revalidation de #103 sur `main` `d745ead`** : fusion d'alignement `76f3d5e` (aucun conflit), passe unique sur base isolée 000–054, correctif des tests d'horloge poste/base (campagne FCFA, paiements mixtes) | QODER | READY_FOR_REVIEW | SQL OK ; pytest **396/396** ; **13/13 suites / 505 contrôles / 0 échec** ; correctif de test prouvé (12/12 ciblé puis passe complète) | #100/#101/#102 fusionnées | **fusion de #103 par le propriétaire après CI verte sur l'état combiné** ; analyse #92/#60 livrée (aucune décision) |
 | — | C9/C10 | 2ᵉ campagne UX humaine (3 testeurs, téléphone réel) | PROPRIÉTAIRE | BLOCKED_HUMAN_TEST | — | testeurs + appareil | organiser la campagne |
 | — | C5/C6 | Décisions métier restantes (D1, D3, C6-02, C7-01) + réponses comptable Q1-Q6 (D5) | PROPRIÉTAIRE | BLOCKED_OWNER | — | — | réponse du propriétaire / du comptable |
 
