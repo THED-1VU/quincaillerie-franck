@@ -1,0 +1,67 @@
+﻿Preuves locales du 23/10/2026 — revue #103 sur main d745ead
+pytest : 27 passed, 5 warnings in 62.23s ; deux scénarios FCFA #103 + intégrité paiements SQL + sessions serveur.
+Première préparation restauration : erreur de SQL du harnais, corrigée (liste des colonnes jetons_revoques). Tests non modifiés.
+Restauration synthétique : code 0, 40 tables ; PostgreSQL privé 5558 arrêté.
+
+--- Catalogue restauré ---
+--- catalogue_restaure.log ---
+053|sessions_serveur
+054|integrite_paiements
+contexte_session|{"search_path=public, pg_temp"}
+controler_paiements_complets|{"search_path=public, pg_temp"}
+enregistrer_session|{"search_path=public, pg_temp"}
+verifier_integrite_paiements|{"search_path=public, pg_temp"}
+verrouiller_vente_paiement|{"search_path=public, pg_temp"}
+t|f
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+trg_journal_non_supprimable|O
+trg_paiements_depuis_vente|O
+trg_somme_paiements_vente|O
+trg_statut_vente|O
+trg_verrou_vente_paiement|O
+--- sonde_ports.log ---
+PGPORT=5558
+QF_TEST_PGPORT_effectif=5433
+--- sonde_faux_vert.log ---
+
+############################################################
+# 1. Base jetable quincaillerie_lotbexe (schéma d'origine + migrations + jeu d'essai)
+############################################################
+ECHEC_PREPARATION_SIMULE
+>>> création base : ÉCHEC (code 1)
+>>> schéma d'origine : OK
+>>> migrations : OK
+>>> jeu d'essai : OK
+>>> mot de passe qf_app : OK
+
+############################################################
+# 2. Lancement de Akuma.exe --sans-navigateur sur le port 8000
+############################################################
+>>> Akuma.exe répond sur :8000/sante
+
+############################################################
+# 3. Les 13 suites Playwright contre l'exe
+############################################################
+>>>   suite routes : OK
+>>>   suite cablage : OK
+>>>   suite vente : OK
+>>>   suite stock : OK
+>>>   suite rapports : OK
+>>>   suite inventaire : OK
+>>>   suite ux : OK
+>>>   suite comptes : OK
+>>>   suite caisse : OK
+>>>   suite rh : OK
+>>>   suite exploitation : OK
+>>>   suite echappement : OK
+>>>   suite roles : OK
+
+############################################################
+# BILAN
+############################################################
+1 étape(s) en échec — voir le détail ci-dessus.
+Journal de l'exe : /c/Users/USER/Documents/MES DOCUMENTS/PROFESSEIONNELS/THED CONNECT/QuincaillerieFranck_Test/_preuves_simulation_integration/revue103_20261023T213722Z/bac_a_sable/server/fabrication/dist/campagne_lotb_exe.log
+
+CODE_SORTIE=0
