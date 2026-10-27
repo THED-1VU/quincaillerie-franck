@@ -189,7 +189,7 @@ async function seConnecter(page, identifiant, motDePasse) {
 // 1 bis. Comptable : remises (cycle 59) — par ligne et globale
 // ============================================================================
 {
-  const contexte = await navigateur.newContext({ viewport: { width: 1366, height: 900 } });
+  const contexte = await navigateur.newContext({ viewport: { width: 1366, height: 600 } });
   const page = await contexte.newPage();
   await seConnecter(page, "magasin.compta", MDP_AGENT_COMPTA);
 
@@ -212,17 +212,17 @@ async function seConnecter(page, identifiant, motDePasse) {
   await page.fill("#numero-facturier", "MAG-REMISE01");
   await page.selectOption("#vendeur", "1");
 
-  // Remise GLOBALE : 600 FCFA (9,7 % du total — sous le seuil D4 de 10 %,
+  // Remise GLOBALE : 300 FCFA (600 FCFA cumulés sur 6500, sous les 10 % D-N1,
   // migration 051) -> lignes d'aperçu et total réduit, avant toute
   // validation (même formule que le serveur, TVA extraite du total).
-  await page.fill("#remise-globale", "600");
+  await page.fill("#remise-globale", "300");
   verifier(await page.isVisible("#ligne-remise-globale"), "remise globale : ligne « Remise sur la vente » visible");
   const texteRemiseGlobale = await page.textContent("#ligne-remise-globale");
-  verifier(/600 FCFA/.test(texteRemiseGlobale), `remise globale : montant affiché ("${texteRemiseGlobale.trim()}")`);
+  verifier(/300 FCFA/.test(texteRemiseGlobale), `remise globale : montant affiché ("${texteRemiseGlobale.trim()}")`);
   verifier(await page.isVisible("#ligne-total-articles"), "remise globale : total articles TTC affiché avant remise");
   const apercuTotalRemise = await page.textContent("#total-ttc");
   const apercuTvaRemise = await page.textContent("#montant-tva");
-  verifier(apercuTotalRemise === fcfaAttendu(5600),
+  verifier(apercuTotalRemise === fcfaAttendu(5900),
     `remise globale : total réduit avant validation (${apercuTotalRemise})`);
 
   // Remise atteignant le total : refusée AVANT tout envoi — même règle que
@@ -245,7 +245,8 @@ async function seConnecter(page, identifiant, motDePasse) {
   // agent est refusé PAR LE SERVEUR (403) — l'écran affiche le motif et
   // aucune vente n'est créée (aucun garde-fou équivalent côté client :
   // l'écran ne peut pas contourner la règle, elle est vérifiée en base).
-  await page.fill("#remise-globale", "1000");
+  // D-N1 : chaque remise est sous 10 %, mais leur cumul vaut 900/6500 >10 %.
+  await page.fill("#remise-globale", "600");
   await page.keyboard.press("F9");
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
   const [reponseRefusee] = await Promise.all([
@@ -253,7 +254,7 @@ async function seConnecter(page, identifiant, motDePasse) {
     page.keyboard.press("F9"),
   ]);
   verifier(reponseRefusee.status() === 403,
-    `D4 : remise globale > 10 % par un agent -> 403 (${reponseRefusee.status()})`);
+    `D-N1 : remise effective cumulée > 10 % par un agent -> 403 (${reponseRefusee.status()})`);
   await page.waitForFunction(
     () => /responsable/i.test(document.getElementById("zone-confirmation").textContent),
     { timeout: 5000 }
@@ -264,12 +265,12 @@ async function seConnecter(page, identifiant, motDePasse) {
   verifier(nbVentesRefusee === "0",
     `D4 : au-delà du seuil, aucune vente enregistrée (count = ${nbVentesRefusee})`);
 
-  // Remise valide : 600 FCFA -> double F9, vente réelle.
-  await page.fill("#remise-globale", "600");
+  // Remise valide : 300 FCFA -> double F9, vente réelle.
+  await page.fill("#remise-globale", "300");
   await page.keyboard.press("F9");
   await page.waitForFunction(() => !document.getElementById("zone-confirmation").hidden, { timeout: 5000 });
   const messageConfirmation = await page.textContent("#zone-confirmation");
-  verifier(/après remise de 600 FCFA/.test(messageConfirmation),
+  verifier(/après remise de 300 FCFA/.test(messageConfirmation),
     `remise globale : confirmation avec le montant ("${messageConfirmation}")`);
   const [reponseRemise] = await Promise.all([
     page.waitForResponse((r) => r.url().endsWith("/ventes") && r.request().method() === "POST", { timeout: 10000 }),
@@ -277,8 +278,8 @@ async function seConnecter(page, identifiant, motDePasse) {
   ]);
   verifier(reponseRemise.ok(), "vente avec remises : POST /ventes -> 201");
   const corpsRemise = await reponseRemise.json();
-  verifier(corpsRemise.remise_totale === 900,
-    `vente avec remises : remise totale serveur = 900 FCFA (300 ligne + 600 globale) (${corpsRemise.remise_totale})`);
+  verifier(corpsRemise.remise_totale === 600,
+    `vente avec remises : remise totale serveur = 600 FCFA (300 ligne + 300 globale) (${corpsRemise.remise_totale})`);
   verifier(
     apercuTotalRemise === fcfaAttendu(corpsRemise.total_ttc) && apercuTvaRemise === fcfaAttendu(corpsRemise.montant_tva),
     `vente avec remises : aperçu avant validation = confirmation serveur `
@@ -286,15 +287,15 @@ async function seConnecter(page, identifiant, motDePasse) {
   );
   await page.waitForFunction(() => !document.getElementById("zone-succes").hidden, { timeout: 10000 });
   const messageSuccesRemise = await page.textContent("#zone-succes");
-  verifier(/Remise totale : 900 FCFA/.test(messageSuccesRemise),
+  verifier(/Remise totale : 600 FCFA/.test(messageSuccesRemise),
     `vente avec remises : message de succès avec la remise ("${messageSuccesRemise}")`);
 
   // Base réelle : les deux mécanismes sont bien distincts et persistés.
   const remiseGlobaleDb = psqlValeur(
     "SELECT remise_globale_montant FROM ventes WHERE numero_facturier = 'MAG-REMISE01'"
   );
-  verifier(parseFloat(remiseGlobaleDb) === 600,
-    `base réelle : ventes.remise_globale_montant = 600 (${remiseGlobaleDb})`);
+  verifier(parseFloat(remiseGlobaleDb) === 300,
+    `base réelle : ventes.remise_globale_montant = 300 (${remiseGlobaleDb})`);
   const ligneDb = psqlValeur(
     "SELECT prix_catalogue || '|' || remise_montant || '|' || prix_unitaire "
     + "FROM ventes_lignes vl JOIN ventes v ON v.id = vl.vente_id "

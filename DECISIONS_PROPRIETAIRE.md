@@ -325,3 +325,13 @@ la qualification 99-100 % d'un chantier ; **Qualité** = amélioration sans bloc
   relance la CI (pytest + Playwright) avant la suivante — ne pas fusionner une
   PR dont les contrôles obligatoires échouent.
 - **Statut** : OUVERT — fusion propriétaire uniquement.
+
+## Décisions propriétaire du 24/10/2026 — exécution Codex
+
+Référence : instruction explicite du propriétaire du 24/10/2026. Portée et contrat : CONTRAT_DECISIONS_20261024.md. Responsable métier : propriétaire ; responsable technique : Codex, coordination Qoder pour ventes/interface/supervision.
+
+- D-N1 : plafond 10 % effectifs sur toute la vente, toutes remises confondues ; au-delà, approbation serveur du responsable et trace. VALIDÉE ; correction/tests EN_COURS.
+- D-N5 : alerte à 60 minutes depuis la dernière sauvegarde complète et vérifiée ; un essai échoué/incomplet/non vérifié ne remet pas le délai à zéro. VALIDÉE ; correction/tests EN_COURS.
+- D1 : caissier autorisé aux prix de vente TTC et montants ; achats, coûts et marges interdits, y compris indirect/API/export. Droits comptable non tranchés. VALIDÉE ; audit/tests EN_COURS.
+- C2-01 : cinq échecs consécutifs, verrouillage temporaire 15 minutes ; concurrence/comptage/contournement/DoS à vérifier. VALIDÉE ; correction/tests EN_COURS. Remplace l'ancien déverrouillage exclusivement manuel.
+- Les scores restent inchangés ; décision ≠ preuve de correction. Q1–Q6 restent au comptable.
