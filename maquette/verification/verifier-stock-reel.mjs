@@ -43,6 +43,7 @@ const CAPTURES = resolve(ICI, "..", "captures") + "/";
 
 const SERVEUR_URL = process.env.SERVEUR_URL || "http://127.0.0.1:8010";
 const DB_PISTE = process.env.PGDATABASE_PISTE || "quincaillerie_test";
+const PG_PORT = process.env.PGPORT || "5433";
 let PGDEV = resolve(RACINE_DEPOT, "_pgdev");
 if (!existsSync(PGDEV)) {
   // _pgdev/ n'existe que dans le dépôt principal, pas dans un worktree Git
@@ -61,13 +62,13 @@ const verifier = (cond, libelle) => (cond ? ok : ko).push(libelle);
 
 function psql(sql) {
   execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE, "-q", "-c", sql,
+    "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", DB_PISTE, "-q", "-c", sql,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }
 
 function psqlValeur(sql) {
   return execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
+    "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", DB_PISTE,
     "-t", "-A", "-c", sql,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } }).toString().trim();
 }
@@ -84,7 +85,7 @@ function nbEnAttente(table) {
 
 console.log("== Préparation de la base (jeu d'essai + comptes de test) ==");
 execFileSync(PSQL, [
-  "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
+  "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", DB_PISTE,
   "-v", "ON_ERROR_STOP=1", "-q", "-f", resolve(RACINE_DEPOT, "db", "tests", "00_jeu_essai.sql"),
 ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_AGENT_STOCK}', gen_salt('bf', 12)) WHERE identifiant='magasin.stock';`);
@@ -380,9 +381,21 @@ const LARGEURS = [360, 390, 768, 1366, 1920];
     "responsable : désactivation acceptée après correction en entiers"
   );
   await page.click("#panneau-fermer");
-  const itemCable = page.locator("#liste-articles li", { hasText: "Câble électrique" }).first();
   await page.fill("#recherche", "Câble électrique");
+  const itemCable = page.locator("#liste-articles li", { hasText: "Câble électrique" }).first();
   await itemCable.waitFor({ timeout: 5000 });
+  // stock.html affiche le succès AVANT de recharger la liste : sans attendre
+  // le texte rafraîchi, ce contrôle lit parfois l'ancienne ligne (flake vu
+  // en campagne complète, jamais en exécution isolée).
+  try {
+    await page.waitForFunction(() => {
+      const ligne = [...document.querySelectorAll("#liste-articles li")]
+        .find((element) => element.textContent.includes("Câble électrique"));
+      return ligne && !ligne.textContent.includes("quantités décimales");
+    }, null, { timeout: 5000 });
+  } catch {
+    // Le verifier ci-dessous enregistre l'échec avec son libellé.
+  }
   verifier(
     !(await itemCable.innerText()).includes("quantités décimales"),
     "responsable : la mention « quantités décimales » a disparu de la liste"

@@ -24,6 +24,7 @@ const RACINE_DEPOT = resolve(ICI, "..", "..");
 
 const SERVEUR_URL = process.env.SERVEUR_URL || "http://127.0.0.1:8010";
 const DB_PISTE = process.env.PGDATABASE_PISTE || "quincaillerie_test";
+const PG_PORT = process.env.PGPORT || "5433";
 let PGDEV = resolve(RACINE_DEPOT, "_pgdev");
 if (!existsSync(PGDEV)) {
   // _pgdev/ n'existe que dans le dépôt principal, pas dans un worktree Git
@@ -56,14 +57,14 @@ function psql(sql) {
   const fichier = join(DOSSIER_TEMP, `essai-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`);
   writeFileSync(fichier, sql, { encoding: "utf8" });
   execFileSync(PSQL, [
-    "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
+    "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", DB_PISTE,
     "-v", "ON_ERROR_STOP=1", "-q", "-f", fichier,
   ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 }
 
 console.log("== Préparation de la base (jeu d'essai + article malveillant) ==");
 execFileSync(PSQL, [
-  "-h", "127.0.0.1", "-p", "5433", "-U", "postgres", "-d", DB_PISTE,
+  "-h", "127.0.0.1", "-p", PG_PORT, "-U", "postgres", "-d", DB_PISTE,
   "-v", "ON_ERROR_STOP=1", "-q", "-f", resolve(RACINE_DEPOT, "db", "tests", "00_jeu_essai.sql"),
 ], { env: { ...process.env, PGPASSWORD: "qf_dev_local" } });
 psql(`UPDATE utilisateurs SET tentatives_echouees=0, mot_de_passe_hash = crypt('${MDP_AGENT_STOCK}', gen_salt('bf', 12)) WHERE identifiant='magasin.stock';`);

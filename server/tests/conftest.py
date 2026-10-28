@@ -11,6 +11,7 @@ d'administration de test, jamais un chemin emprunté par l'application.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -55,9 +56,40 @@ if str(RACINE_SERVEUR) not in sys.path:
 # (RAPPORT AVANCEMENT/TRAVAIL_PARALLELE.md) : elle n'a pas le droit de
 # toucher quincaillerie_test et doit pouvoir rejouer cette suite sur
 # quincaillerie_ux. Défaut identique pour toute autre invocation.
-PG_HOST = "127.0.0.1"
-PG_PORT = int(os.environ.get("QF_TEST_PGPORT", "5433"))
+#
+# Hôte et port surchargeables par QF_TEST_PGHOST/QF_TEST_PGPORT (revue #103,
+# R2) : verifier_tout.sh transmet explicitement SON instance PostgreSQL.
+# Sans QF_TEST_PGPORT, PGPORT=5558 restait ignoré et pytest visait 5433 —
+# le serveur applicatif et les réinitialisations ne parlaient pas à la même
+# base. Aucune valeur de port n'est codée en dur ici hormis le défaut local.
+PG_HOST = os.environ.get("QF_TEST_PGHOST", "127.0.0.1")
+try:
+    PG_PORT = int(os.environ.get("QF_TEST_PGPORT", "5433"))
+except ValueError as exc:
+    raise RuntimeError(
+        "QF_TEST_PGPORT doit être un entier (port PostgreSQL), reçu : "
+        f"{os.environ.get('QF_TEST_PGPORT')!r}."
+    ) from exc
 PG_TEST_DBNAME = os.environ.get("QF_TEST_DBNAME", "quincaillerie_test")
+
+# Refus d'une base qui n'est pas une base de test (revue #103, R2) : la
+# fixture recharge 00_jeu_essai.sql (TRUNCATE ... CASCADE) et la suite SQL
+# inverse supprime/recrée des rôles GLOBAUX au serveur. La base de
+# production documentée s'appelle « quincaillerie » ; toute base de test ou
+# de piste suit « quincaillerie_<suffixe> ». Ce garde-fou s'applique même
+# quand pytest est lancé directement, sans verifier_tout.sh.
+if not re.fullmatch(r"quincaillerie_[a-z0-9][a-z0-9_]*", PG_TEST_DBNAME):
+    raise RuntimeError(
+        f"QF_TEST_DBNAME={PG_TEST_DBNAME!r} n'est pas une base de test "
+        "(attendu : quincaillerie_<suffixe>, jamais la base de production "
+        "'quincaillerie')."
+    )
+if PG_HOST not in ("127.0.0.1", "localhost", "::1"):
+    raise RuntimeError(
+        f"QF_TEST_PGHOST={PG_HOST!r} refusé : les tests destructifs ne "
+        "s'exécutent que sur une instance PostgreSQL locale."
+    )
+
 PG_ADMIN_DSN = f"host={PG_HOST} port={PG_PORT} dbname={PG_TEST_DBNAME} user=postgres password=qf_dev_local"
 
 # Mots de passe de test, en clair, UNIQUEMENT valables sur la base de test
